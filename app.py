@@ -1,7 +1,9 @@
 import os, re, time, sqlite3, threading
 from datetime import datetime, timezone
 from urllib.parse import urljoin
-import requests
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
 from bs4 import BeautifulSoup
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -84,17 +86,25 @@ def crawl():
                      started_at=datetime.now(timezone.utc).isoformat())
     seen_this_run = set()
     try:
-        session = requests.Session()
-        session.headers.update({"User-Agent":"HuevoGiftAnalytics/1.0 (polite public catalog monitor)"})
+        options = Options()
+        options.add_argument("--headless=new")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--window-size=1440,1000")
+        browser = webdriver.Chrome(options=options)
         empty_streak = 0
-        for page in range(1, MAX_PAGES + 1):
-            with lock: state.update(page=page, message=f"Проверяется страница {page}")
-            url = f"{BASE_URL}/market/gifts?page={page}"
-            response = session.get(url, timeout=25)
-            if response.status_code in (403, 418, 429):
-                raise RuntimeError(f"Huevo ограничил запросы (HTTP {response.status_code}). Пауза; попробуйте позже.")
-            response.raise_for_status()
-            rows, card_count = parse_cards(response.text)
+        try:
+            for page in range(1, MAX_PAGES + 1):
+                with lock: state.update(page=page, message=f"Открывается страница {page} через Selenium")
+                url = f"{BASE_URL}/market/gifts?page={page}"
+                browser.get(url)
+                WebDriverWait(browser, 20).until(lambda d: d.execute_script("return document.readyState") == "complete")
+                time.sleep(1.5)
+                page_text = (browser.title + " " + browser.find_element("tag name", "body").text[:1500]).lower()
+                if any(term in page_text for term in ("http error 418", "too many requests", "access denied", "verify you are human")):
+                    raise RuntimeError("Huevo показал страницу ограничения доступа/проверки браузера. Selenium не обходит эту защиту; сбор остановлен.")
+                rows, card_count = parse_cards(browser.page_source)
             if not rows:
                 empty_streak += 1
                 if page == 1:
@@ -116,8 +126,10 @@ def crawl():
                     if not old or old["price"] != row["price"] or old["status"] != row["status"]:
                         c.execute("INSERT INTO price_history(lot_id,price,status,observed_at) VALUES(?,?,?,?)",
                                   (row["lot_id"],row["price"],row["status"],row["observed_at"]))
-            with lock: state["found"] = len(seen_this_run)
-            time.sleep(DELAY)
+                with lock: state["found"] = len(seen_this_run)
+                time.sleep(DELAY)
+        finally:
+            browser.quit()
         # Do not mark unseen lots inactive on partial/blocked runs.
         with lock: state["message"] = f"Готово. Уникальных лотов просмотрено: {len(seen_this_run)}"
     except Exception as e:
