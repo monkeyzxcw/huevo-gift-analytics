@@ -12,17 +12,26 @@
   const text = (root, selector) => root.querySelector(selector)?.textContent?.trim() || '';
   const parse = html => {
     const doc = new DOMParser().parseFromString(html, 'text/html');
-    return [...doc.querySelectorAll('a.mk-gcard[href*="/market/lot/"]')].map(card => {
+    return [...doc.querySelectorAll('a[href*="/market/lot/"]')].map(card => {
       const href = card.getAttribute('href') || '';
       const match = href.match(/\/market\/lot\/(\d+)/);
       if (!match) return null;
-      const priceText = text(card, '.mk-price');
+      const pick = (...selectors) => {
+        for (const selector of selectors) {
+          const value = text(card, selector);
+          if (value) return value;
+        }
+        return '';
+      };
+      const priceText = pick('.mk-price', '.mk-gprice', '[class*="price"]', '[data-price]');
       const digits = priceText.replace(/[^0-9]/g, '');
       const img = card.querySelector('img');
+      const title = pick('.mk-gtitle', '[class*="title"]', '[class*="name"]', 'h2', 'h3');
+      const serial = pick('.mk-gserial', '[class*="serial"]', '[class*="number"]');
+      const rarity = pick('.mk-gsub', '[class*="rarity"]', '[class*="collection"]');
       return {
-        lot_id: match[1], title: text(card, '.mk-gtitle'), serial: text(card, '.mk-gserial'),
-        rarity: text(card, '.mk-gsub'), price: digits ? Number(digits) : null,
-        status: text(card, '.mk-status') || 'Неизвестно',
+        lot_id: match[1], title, serial, rarity, price: digits ? Number(digits) : null,
+        status: pick('.mk-status', '[class*="status"]') || 'Неизвестно',
         image_url: img?.getAttribute('src') ? new URL(img.getAttribute('src'), location.origin).href : '',
         lot_url: new URL(href, location.origin).href
       };
