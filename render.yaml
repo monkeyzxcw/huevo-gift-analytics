@@ -8,11 +8,9 @@ services:
     envVars:
       - key: HUEVO_DB
         value: huevo.db
+      - key: INGEST_TOKEN
+        generateValue: true
       - key: CRAWL_DELAY
-        value: "2.0"
+        value: "2.2"
       - key: MAX_PAGES
         value: "500"
-      - key: AUTO_CRAWL
-        value: "true"
-      - key: AUTO_CRAWL_MINUTES
-        value: "60"

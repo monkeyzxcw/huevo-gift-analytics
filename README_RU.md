@@ -1,13 +1,57 @@
-# HUEVO TERMINAL — GitHub + Render
+# Huevo Gift Analytics — готовый проект
 
-## Deploy
-1. Upload all files in this folder to the root of your GitHub repository. Ensure `app.py`, `Dockerfile`, `requirements.txt`, `render.yaml` and `static/index.html` are at the root/expected locations.
-2. Render will redeploy from the connected GitHub repository.
-3. Environment variables: `AUTO_CRAWL=true`, `AUTO_CRAWL_MINUTES=60`, `CRAWL_DELAY=3.0`, `MAX_PAGES=500`.
-4. Open the service URL. The server starts an automatic scan after startup and repeats at the configured interval. You can also click “Обновить данные”.
+Панель аналитики рынка подарков с FastAPI, SQLite, историей изменения цены и браузерным сборщиком. Проект не использует выдуманные котировки в основной таблице: до первого импорта база будет пустой.
 
-## Important limitations
-- The crawler uses ordinary HTTP requests with standard browser headers and a conservative delay. It does not bypass CAPTCHA, authentication, anti-bot controls, or access restrictions. If Huevo returns HTTP 403/418/429, the run stops and the status shows the error. A server-side 418 must be resolved by confirming an allowed API/data source with Huevo; a better UI cannot make blocked data available.
-- Render Free may sleep, and its ephemeral filesystem can lose the SQLite database on redeploy/restart. Therefore this free deployment cannot guarantee continuous 24/7 collection or durable history. Use a persistent database/disk and always-on host if you need those guarantees.
-- Average prices are averages of observed asking prices, not confirmed sale prices.
-- No automatic purchasing is performed; lot links open Huevo.
+## Состав проекта
+
+- `app.py` — API, база данных, история цен и безопасная диагностика.
+- `static/index.html` — панель статистики, поиск, сортировка и история лотов.
+- `static/browser_collector.js` — сбор карточек из открытой страницы Huevo и отправка в API.
+- `requirements.txt` — зависимости Python.
+- `Dockerfile` — запуск сервера в контейнере.
+- `render.yaml` — настройки автоматического деплоя на Render и генерация `INGEST_TOKEN`.
+- `.env.example` — пример переменных окружения для локального запуска.
+
+## Развёртывание на Render
+
+1. Распакуйте архив и загрузите **содержимое** папки `huevo_gift_analytics` в корень GitHub-репозитория `huevo-gift-analytics`.
+2. Сделайте commit в ветку `main`. На Render создайте/обновите сервис через Blueprint по `render.yaml` либо оставьте существующий Docker-сервис подключённым к репозиторию.
+3. В Render → Environment убедитесь, что задан `INGEST_TOKEN`. Blueprint создаёт случайное значение автоматически. Если переменная отсутствует в существующем сервисе, создайте длинный случайный токен вручную. Не используйте пароль Huevo и не публикуйте токен в GitHub.
+4. После деплоя проверьте `https://ВАШ-СЕРВИС.onrender.com/health` и `https://ВАШ-СЕРВИС.onrender.com/api/diagnostics`. Диагностика показывает только наличие настройки, никогда не раскрывая секрет.
+5. Откройте панель, скачайте `browser_collector.js`, затем откройте `https://huevo.su/market/gifts` в том же браузере и войдите в аккаунт, если нужно.
+6. Нажмите F12 → Console, откройте скачанный JS-файл в редакторе, проверьте код, скопируйте его целиком в консоль и выполните. Если браузер предупреждает о вставке кода, внимательно следуйте его защите и не запускайте код, который не проверили.
+7. Введите HTTPS-адрес панели и значение `INGEST_TOKEN` из Environment на Render. Сборщик отправит распознанные лоты, после чего обновите панель.
+
+## Локальный запуск
+
+Требуется Python 3.11+. В терминале из папки проекта выполните:
+
+```bash
+python -m venv .venv
+# Windows PowerShell: .venv\Scripts\Activate.ps1
+# macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt
+# PowerShell: $env:INGEST_TOKEN = "ваш-длинный-секрет"
+# macOS/Linux: export INGEST_TOKEN="ваш-длинный-секрет"
+uvicorn app:app --host 127.0.0.1 --port 8000
+```
+
+Затем откройте `http://127.0.0.1:8000`.
+
+## API
+
+- `GET /health` — проверка работоспособности.
+- `GET /api/diagnostics` — безопасная диагностика конфигурации и числа записей.
+- `GET /api/status` — состояние фонового сборщика (серверный обход выключен).
+- `GET /api/stats` — число лотов и статистика цен.
+- `GET /api/lots?q=&sort=price&limit=500` — поиск и сортировка.
+- `GET /api/history/{lot_id}` — история изменения цены и статуса лота.
+- `POST /api/ingest?token=...` — защищённый импорт данных от браузерного сборщика.
+
+## Важные ограничения
+
+- Серверный запрос к маркету ранее получал HTTP 418, поэтому автоматический серверный обход выключен. Браузерный сборщик не обходит CAPTCHA, авторизацию или ограничения; при HTTP 403/418/429 он прекращает работу.
+- Разметка парсера ориентирована на классы `.mk-gcard`, `.mk-gtitle`, `.mk-gserial`, `.mk-gsub`, `.mk-price` / `.mk-gprice` и `.mk-status`. Если Huevo изменит разметку, парсер потребуется обновить.
+- Сбор работает, пока вкладка браузера открыта. Запросы выполняются с паузой.
+- Бесплатный тариф Render обычно не предоставляет постоянный диск. Если для сервиса не подключён persistent disk, SQLite-файл может потеряться при перезапуске или новом деплое. Для долговременной истории нужен постоянный диск или внешняя база данных.
+- `client_id` / `client_secret` Huevo не нужны этому способу сбора. Не добавляйте их, cookies или пароль в репозиторий. Не подтверждено, что официальный Huevo API предоставляет каталог маркет-лотов.

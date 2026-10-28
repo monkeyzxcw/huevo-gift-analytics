@@ -9,10 +9,10 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 BASE_URL = "https://huevo.su"
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.getenv("HUEVO_DB", "huevo.db")
 os.makedirs(os.path.dirname(os.path.abspath(DB_PATH)), exist_ok=True)
-DELAY = max(3.0, float(os.getenv("CRAWL_DELAY", "3.0")))
-AUTO_CRAWL_MINUTES = max(15, int(os.getenv("AUTO_CRAWL_MINUTES", "60")))
+DELAY = float(os.getenv("CRAWL_DELAY", "2.0"))
 MAX_PAGES = int(os.getenv("MAX_PAGES", "500"))
 app = FastAPI(title="Huevo Gift Analytics")
 app.add_middleware(
@@ -27,12 +27,14 @@ lock = threading.Lock()
 state = {"running": False, "page": 0, "found": 0, "message": "Ожидает запуска", "started_at": None}
 
 def db():
-    con = sqlite3.connect(DB_PATH)
+    con = sqlite3.connect(DB_PATH, timeout=20)
     con.row_factory = sqlite3.Row
+    con.execute("PRAGMA busy_timeout=20000")
     return con
 
 def init_db():
     with db() as c:
+        c.execute("PRAGMA journal_mode=WAL")
         c.execute("""CREATE TABLE IF NOT EXISTS lots(
             lot_id TEXT PRIMARY KEY, title TEXT, serial TEXT, rarity TEXT,
             price INTEGER, status TEXT, image_url TEXT, lot_url TEXT,
@@ -63,7 +65,7 @@ def parse_cards(html):
                   if card.select_one(".mk-gserial") else "")
         rarity = (card.select_one(".mk-gsub").get_text(" ", strip=True)
                   if card.select_one(".mk-gsub") else "")
-        price_el = card.select_one(".mk-price")
+        price_el = card.select_one(".mk-price, .mk-gprice")
         price = money(price_el.get_text(" ", strip=True) if price_el else "")
         status_el = card.select_one(".mk-status")
         status = status_el.get_text(" ", strip=True) if status_el else "Неизвестно"
@@ -83,20 +85,14 @@ def crawl():
     seen_this_run = set()
     try:
         session = requests.Session()
-        session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-            "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Referer": "https://huevo.su/market/gifts",
-            "Cache-Control": "no-cache",
-        })
+        session.headers.update({"User-Agent":"HuevoGiftAnalytics/1.0 (polite public catalog monitor)"})
         empty_streak = 0
         for page in range(1, MAX_PAGES + 1):
             with lock: state.update(page=page, message=f"Проверяется страница {page}")
             url = f"{BASE_URL}/market/gifts?page={page}"
             response = session.get(url, timeout=25)
             if response.status_code in (403, 418, 429):
-                raise RuntimeError(f"Huevo отклонил серверный запрос (HTTP {response.status_code}). Автосбор остановлен до следующего цикла; защита сайта не обходится.")
+                raise RuntimeError(f"Huevo ограничил запросы (HTTP {response.status_code}). Пауза; попробуйте позже.")
             response.raise_for_status()
             rows, card_count = parse_cards(response.text)
             if not rows:
@@ -133,9 +129,27 @@ def crawl():
 def health():
     return {"ok": True, "service": "Huevo Gift Analytics"}
 
+@app.get("/api/diagnostics")
+def diagnostics():
+    """Safe configuration check: reports presence flags, never secret values."""
+    with db() as c:
+        lots_count = c.execute("SELECT COUNT(*) FROM lots").fetchone()[0]
+        history_count = c.execute("SELECT COUNT(*) FROM price_history").fetchone()[0]
+    with lock:
+        crawl_state = dict(state)
+    return {
+        "ok": True,
+        "database_configured": bool(DB_PATH),
+        "ingest_token_configured": bool(INGEST_TOKEN),
+        "lots_in_database": lots_count,
+        "price_history_rows": history_count,
+        "collector": crawl_state,
+    }
+
 @app.get("/", response_class=HTMLResponse)
 def home():
-    with open("static/index.html", encoding="utf-8") as f: return f.read()
+    with open(os.path.join(APP_DIR, "static", "index.html"), encoding="utf-8") as f:
+        return f.read()
 
 @app.post("/api/ingest")
 async def ingest_browser_data(request: Request, token: str = ""):
@@ -187,17 +201,18 @@ async def ingest_browser_data(request: Request, token: str = ""):
 
 @app.post("/api/crawl")
 def start_crawl(background: BackgroundTasks):
-    if state["running"]:
-        return {"ok": True, "message": "Сбор уже выполняется"}
+    # Avoid server-side requests that Huevo currently rejects with HTTP 418.
+    raise HTTPException(status_code=410, detail="Сбор теперь выполняется из авторизованного браузера. Используйте browser_collector.js.")
+
+# Legacy crawler retained temporarily but no longer exposed as an active job.
+def _legacy_start_crawl(background: BackgroundTasks):
+    if state["running"]: return {"ok": True, "message": "Сбор уже выполняется"}
     background.add_task(crawl)
     return {"ok": True, "message": "Сбор поставлен в очередь"}
 
 @app.get("/api/status")
 def get_status():
-    with lock:
-        result = dict(state)
-        result["auto_crawl_minutes"] = AUTO_CRAWL_MINUTES
-        return result
+    with lock: return dict(state)
 
 @app.get("/api/stats")
 def stats():
@@ -206,14 +221,6 @@ def stats():
         MIN(price) minp, MAX(price) maxp, AVG(price) avgp, SUM(price) total
         FROM lots WHERE active=1 AND price IS NOT NULL""").fetchone()
         return dict(row)
-
-@app.get("/api/market-history")
-def market_history():
-    with db() as c:
-        rows = c.execute("""SELECT substr(observed_at,1,13) hour, AVG(price) avgp
-        FROM price_history WHERE price IS NOT NULL GROUP BY substr(observed_at,1,13)
-        ORDER BY hour DESC LIMIT 48""").fetchall()
-        return [dict(r) for r in reversed(rows)]
 
 @app.get("/api/lots")
 def lots(q: str = "", sort: str = "price", limit: int = 500):
@@ -230,23 +237,4 @@ def history(lot_id: str):
     with db() as c:
         return [dict(r) for r in c.execute("SELECT price,status,observed_at FROM price_history WHERE lot_id=? ORDER BY observed_at", (lot_id,))]
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-
-def _auto_crawl_loop():
-    # Server-side polling. It uses ordinary HTTP requests and stops when the site denies access.
-    import random
-    time.sleep(45)
-    while True:
-        try:
-            if not state.get("running"):
-                crawl()
-        except Exception:
-            pass
-        # avoid tight retries after an error; interval is configurable, minimum 15 minutes
-        time.sleep(AUTO_CRAWL_MINUTES * 60)
-
-@app.on_event("startup")
-def start_auto_crawler():
-    if os.getenv("AUTO_CRAWL", "true").lower() in ("1", "true", "yes", "on"):
-        threading.Thread(target=_auto_crawl_loop, daemon=True, name="huevo-auto-crawler").start()
+app.mount("/static", StaticFiles(directory=os.path.join(APP_DIR, "static")), name="static")
