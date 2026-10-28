@@ -1,4 +1,4 @@
-import os, re, time, sqlite3, threading
+import os, re, time, sqlite3, threading, json
 from datetime import datetime, timezone
 from urllib.parse import urljoin
 from selenium import webdriver
@@ -25,6 +25,8 @@ app.add_middleware(
     allow_headers=["Content-Type"],
 )
 INGEST_TOKEN = os.getenv("INGEST_TOKEN", "")
+# JSON array of cookies exported from an already authenticated huevo.su browser.
+HUEVO_COOKIES_JSON = os.getenv("HUEVO_COOKIES_JSON", "").strip()
 lock = threading.Lock()
 state = {"running": False, "page": 0, "found": 0, "message": "Ожидает запуска", "started_at": None}
 
@@ -93,6 +95,49 @@ def crawl():
         options.add_argument("--disable-gpu")
         options.add_argument("--window-size=1440,1000")
         browser = webdriver.Chrome(options=options)
+        try:
+            if not HUEVO_COOKIES_JSON:
+                raise RuntimeError("Не задан HUEVO_COOKIES_JSON в Render Environment. Экспортируй cookies авторизованного huevo.su в JSON и добавь их как секрет.")
+            try:
+                cookies = json.loads(HUEVO_COOKIES_JSON)
+            except json.JSONDecodeError as exc:
+                raise RuntimeError("HUEVO_COOKIES_JSON должен содержать JSON-массив cookies.") from exc
+            if not isinstance(cookies, list) or not cookies:
+                raise RuntimeError("HUEVO_COOKIES_JSON должен быть непустым JSON-массивом cookies.")
+            # Selenium accepts cookies only after visiting the matching domain.
+            browser.get(BASE_URL)
+            accepted = 0
+            allowed_keys = {"name", "value", "path", "domain", "secure", "httpOnly", "expiry", "sameSite"}
+            for raw_cookie in cookies:
+                if not isinstance(raw_cookie, dict) or not raw_cookie.get("name") or "value" not in raw_cookie:
+                    continue
+                domain = str(raw_cookie.get("domain", "huevo.su")).lstrip(".").lower()
+                if domain != "huevo.su" and not domain.endswith(".huevo.su"):
+                    continue
+                cookie = {k: v for k, v in raw_cookie.items() if k in allowed_keys}
+                if "expiry" in cookie:
+                    try:
+                        cookie["expiry"] = int(cookie["expiry"])
+                    except (TypeError, ValueError):
+                        cookie.pop("expiry", None)
+                if cookie.get("sameSite") not in ("Strict", "Lax", "None"):
+                    cookie.pop("sameSite", None)
+                try:
+                    browser.add_cookie(cookie)
+                    accepted += 1
+                except Exception:
+                    # Ignore cookies Chrome refuses (e.g. expired or incompatible).
+                    continue
+            if not accepted:
+                raise RuntimeError("Не удалось применить cookies для huevo.su. Проверь JSON и срок действия сессии.")
+            browser.get(f"{BASE_URL}/market/gifts?page=1")
+            time.sleep(2)
+            auth_text = (browser.title + " " + browser.find_element("tag name", "body").text[:1000]).lower()
+            if any(term in auth_text for term in ("войти", "sign in", "log in", "авторизац")):
+                raise RuntimeError("Похоже, cookies не авторизовали браузер. Обнови экспорт cookies из Huevo.")
+        except Exception:
+            browser.quit()
+            raise
         empty_streak = 0
         try:
             for page in range(1, MAX_PAGES + 1):
@@ -152,6 +197,7 @@ def diagnostics():
         "ok": True,
         "database_configured": bool(DB_PATH),
         "ingest_token_configured": bool(INGEST_TOKEN),
+        "huevo_cookies_configured": bool(HUEVO_COOKIES_JSON),
         "lots_in_database": lots_count,
         "price_history_rows": history_count,
         "collector": crawl_state,
