@@ -7,12 +7,14 @@ services:
     autoDeploy: true
     envVars:
       - key: HUEVO_DB
-        value: huevo.db
+        value: /var/data/huevo.db
       - key: INGEST_TOKEN
         generateValue: true
       - key: CRAWL_DELAY
-        value: "2.2"
+        value: "0.2"
       - key: MAX_PAGES
         value: "500"
       - key: AUTO_REFRESH_HOURS
-        value: "6"
+        value: "2"
+      - key: PAGE_ONE_REFRESH_SECONDS
+        value: "5"
