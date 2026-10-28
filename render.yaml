@@ -7,7 +7,7 @@ services:
     autoDeploy: true
     envVars:
       - key: HUEVO_DB
-        value: /var/data/huevo.db
+        value: huevo.db
       - key: INGEST_TOKEN
         generateValue: true
       - key: CRAWL_DELAY
