@@ -3,7 +3,8 @@ from datetime import datetime, timezone
 from urllib.parse import urljoin
 import requests
 from bs4 import BeautifulSoup
-from fastapi import FastAPI, BackgroundTasks, HTTPException
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -13,6 +14,14 @@ os.makedirs(os.path.dirname(os.path.abspath(DB_PATH)), exist_ok=True)
 DELAY = float(os.getenv("CRAWL_DELAY", "2.0"))
 MAX_PAGES = int(os.getenv("MAX_PAGES", "500"))
 app = FastAPI(title="Huevo Gift Analytics")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://huevo.su"],
+    allow_credentials=False,
+    allow_methods=["POST", "OPTIONS"],
+    allow_headers=["Content-Type"],
+)
+INGEST_TOKEN = os.getenv("INGEST_TOKEN", "")
 lock = threading.Lock()
 state = {"running": False, "page": 0, "found": 0, "message": "Ожидает запуска", "started_at": None}
 
@@ -121,8 +130,61 @@ def health():
 def home():
     with open("static/index.html", encoding="utf-8") as f: return f.read()
 
+@app.post("/api/ingest")
+async def ingest_browser_data(request: Request, token: str = ""):
+    """Accept gift lots parsed by the user's logged-in browser on huevo.su."""
+    if not INGEST_TOKEN:
+        raise HTTPException(status_code=503, detail="На Render не задан INGEST_TOKEN")
+    if not token or token != INGEST_TOKEN:
+        raise HTTPException(status_code=403, detail="Неверный токен сбора")
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Ожидается JSON")
+    rows = payload.get("lots") if isinstance(payload, dict) else None
+    if not isinstance(rows, list) or len(rows) > 1000:
+        raise HTTPException(status_code=400, detail="Поле lots должно быть списком до 1000 записей")
+    now = datetime.now(timezone.utc).isoformat()
+    saved = 0
+    with db() as c:
+        for item in rows:
+            if not isinstance(item, dict):
+                continue
+            lot_id = str(item.get("lot_id", "")).strip()
+            if not re.fullmatch(r"\d{1,20}", lot_id):
+                continue
+            title = str(item.get("title", ""))[:500]
+            serial = str(item.get("serial", ""))[:200]
+            rarity = str(item.get("rarity", ""))[:100]
+            status = str(item.get("status", "Неизвестно"))[:100]
+            image_url = str(item.get("image_url", ""))[:2000]
+            lot_url = str(item.get("lot_url", f"https://huevo.su/market/lot/{lot_id}"))[:2000]
+            raw_price = item.get("price")
+            try:
+                price = int(raw_price) if raw_price is not None else None
+                if price is not None and price < 0: price = None
+            except (TypeError, ValueError):
+                price = None
+            old = c.execute("SELECT price,status,first_seen FROM lots WHERE lot_id=?", (lot_id,)).fetchone()
+            first = old["first_seen"] if old else now
+            c.execute("""INSERT INTO lots(lot_id,title,serial,rarity,price,status,image_url,lot_url,first_seen,last_seen,active)
+                VALUES(?,?,?,?,?,?,?,?,?,?,1)
+                ON CONFLICT(lot_id) DO UPDATE SET title=excluded.title,serial=excluded.serial,rarity=excluded.rarity,
+                price=excluded.price,status=excluded.status,image_url=excluded.image_url,lot_url=excluded.lot_url,
+                last_seen=excluded.last_seen,active=1""",
+                (lot_id,title,serial,rarity,price,status,image_url,lot_url,first,now))
+            if not old or old["price"] != price or old["status"] != status:
+                c.execute("INSERT INTO price_history(lot_id,price,status,observed_at) VALUES(?,?,?,?)", (lot_id,price,status,now))
+            saved += 1
+    return {"ok": True, "saved": saved}
+
 @app.post("/api/crawl")
 def start_crawl(background: BackgroundTasks):
+    # Avoid server-side requests that Huevo currently rejects with HTTP 418.
+    raise HTTPException(status_code=410, detail="Сбор теперь выполняется из авторизованного браузера. Используйте browser_collector.js.")
+
+# Legacy crawler retained temporarily but no longer exposed as an active job.
+def _legacy_start_crawl(background: BackgroundTasks):
     if state["running"]: return {"ok": True, "message": "Сбор уже выполняется"}
     background.add_task(crawl)
     return {"ok": True, "message": "Сбор поставлен в очередь"}
