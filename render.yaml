@@ -2,17 +2,13 @@ services:
   - type: web
     name: huevo-gift-analytics
     runtime: docker
-    plan: starter
+    plan: free
     healthCheckPath: /health
     autoDeploy: true
     envVars:
       - key: HUEVO_DB
-        value: /var/data/huevo.db
+        value: huevo.db
       - key: CRAWL_DELAY
         value: "2.0"
       - key: MAX_PAGES
         value: "500"
-    disk:
-      name: huevo-data
-      mountPath: /var/data
-      sizeGB: 1
