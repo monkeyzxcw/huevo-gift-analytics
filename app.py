@@ -11,7 +11,8 @@ from fastapi.staticfiles import StaticFiles
 BASE_URL = "https://huevo.su"
 DB_PATH = os.getenv("HUEVO_DB", "huevo.db")
 os.makedirs(os.path.dirname(os.path.abspath(DB_PATH)), exist_ok=True)
-DELAY = float(os.getenv("CRAWL_DELAY", "2.0"))
+DELAY = max(3.0, float(os.getenv("CRAWL_DELAY", "3.0")))
+AUTO_CRAWL_MINUTES = max(15, int(os.getenv("AUTO_CRAWL_MINUTES", "60")))
 MAX_PAGES = int(os.getenv("MAX_PAGES", "500"))
 app = FastAPI(title="Huevo Gift Analytics")
 app.add_middleware(
@@ -82,14 +83,20 @@ def crawl():
     seen_this_run = set()
     try:
         session = requests.Session()
-        session.headers.update({"User-Agent":"HuevoGiftAnalytics/1.0 (polite public catalog monitor)"})
+        session.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Referer": "https://huevo.su/market/gifts",
+            "Cache-Control": "no-cache",
+        })
         empty_streak = 0
         for page in range(1, MAX_PAGES + 1):
             with lock: state.update(page=page, message=f"Проверяется страница {page}")
             url = f"{BASE_URL}/market/gifts?page={page}"
             response = session.get(url, timeout=25)
             if response.status_code in (403, 418, 429):
-                raise RuntimeError(f"Huevo ограничил запросы (HTTP {response.status_code}). Пауза; попробуйте позже.")
+                raise RuntimeError(f"Huevo отклонил серверный запрос (HTTP {response.status_code}). Автосбор остановлен до следующего цикла; защита сайта не обходится.")
             response.raise_for_status()
             rows, card_count = parse_cards(response.text)
             if not rows:
@@ -180,18 +187,17 @@ async def ingest_browser_data(request: Request, token: str = ""):
 
 @app.post("/api/crawl")
 def start_crawl(background: BackgroundTasks):
-    # Avoid server-side requests that Huevo currently rejects with HTTP 418.
-    raise HTTPException(status_code=410, detail="Сбор теперь выполняется из авторизованного браузера. Используйте browser_collector.js.")
-
-# Legacy crawler retained temporarily but no longer exposed as an active job.
-def _legacy_start_crawl(background: BackgroundTasks):
-    if state["running"]: return {"ok": True, "message": "Сбор уже выполняется"}
+    if state["running"]:
+        return {"ok": True, "message": "Сбор уже выполняется"}
     background.add_task(crawl)
     return {"ok": True, "message": "Сбор поставлен в очередь"}
 
 @app.get("/api/status")
 def get_status():
-    with lock: return dict(state)
+    with lock:
+        result = dict(state)
+        result["auto_crawl_minutes"] = AUTO_CRAWL_MINUTES
+        return result
 
 @app.get("/api/stats")
 def stats():
@@ -200,6 +206,14 @@ def stats():
         MIN(price) minp, MAX(price) maxp, AVG(price) avgp, SUM(price) total
         FROM lots WHERE active=1 AND price IS NOT NULL""").fetchone()
         return dict(row)
+
+@app.get("/api/market-history")
+def market_history():
+    with db() as c:
+        rows = c.execute("""SELECT substr(observed_at,1,13) hour, AVG(price) avgp
+        FROM price_history WHERE price IS NOT NULL GROUP BY substr(observed_at,1,13)
+        ORDER BY hour DESC LIMIT 48""").fetchall()
+        return [dict(r) for r in reversed(rows)]
 
 @app.get("/api/lots")
 def lots(q: str = "", sort: str = "price", limit: int = 500):
@@ -217,3 +231,22 @@ def history(lot_id: str):
         return [dict(r) for r in c.execute("SELECT price,status,observed_at FROM price_history WHERE lot_id=? ORDER BY observed_at", (lot_id,))]
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+def _auto_crawl_loop():
+    # Server-side polling. It uses ordinary HTTP requests and stops when the site denies access.
+    import random
+    time.sleep(45)
+    while True:
+        try:
+            if not state.get("running"):
+                crawl()
+        except Exception:
+            pass
+        # avoid tight retries after an error; interval is configurable, minimum 15 minutes
+        time.sleep(AUTO_CRAWL_MINUTES * 60)
+
+@app.on_event("startup")
+def start_auto_crawler():
+    if os.getenv("AUTO_CRAWL", "true").lower() in ("1", "true", "yes", "on"):
+        threading.Thread(target=_auto_crawl_loop, daemon=True, name="huevo-auto-crawler").start()

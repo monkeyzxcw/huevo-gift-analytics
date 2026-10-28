@@ -1,28 +1,13 @@
-# Huevo Gift Analytics — сбор из авторизованного браузера
+# HUEVO TERMINAL — GitHub + Render
 
-## Почему сбор изменён
-Huevo возвращает HTTP 418 при запросах с Render. Поэтому сервер больше не сканирует маркет напрямую. Сборщик запускается в браузере, где пользователь уже вошёл на Huevo, и передаёт распознанные карточки в приложение Render. Сборщик не обходит CAPTCHA/ограничения и прекращает работу при HTTP 403/418/429.
+## Deploy
+1. Upload all files in this folder to the root of your GitHub repository. Ensure `app.py`, `Dockerfile`, `requirements.txt`, `render.yaml` and `static/index.html` are at the root/expected locations.
+2. Render will redeploy from the connected GitHub repository.
+3. Environment variables: `AUTO_CRAWL=true`, `AUTO_CRAWL_MINUTES=60`, `CRAWL_DELAY=3.0`, `MAX_PAGES=500`.
+4. Open the service URL. The server starts an automatic scan after startup and repeats at the configured interval. You can also click “Обновить данные”.
 
-## Обновление GitHub
-1. Распакуйте архив.
-2. Загрузите содержимое в корень репозитория `huevo-gift-analytics`, заменив существующие файлы. Важно сохранить `static/index.html` и `static/browser_collector.js`.
-3. Сделайте commit в ветку `main`; Render должен автоматически запустить deploy.
-
-## Обязательная настройка Render
-1. Откройте сервис → Environment → Add Environment Variable.
-2. Key: `INGEST_TOKEN`.
-3. Value: придумайте длинный случайный секрет (не используйте пароль Huevo и не публикуйте его в GitHub).
-4. Сохраните изменения и дождитесь перезапуска сервиса. Этот же токен вводится в браузерный сборщик.
-
-## Запуск сбора
-1. Откройте приложение Render, скачайте `browser_collector.js` кнопкой «Скачать сборщик браузера».
-2. В том же браузере откройте `https://huevo.su/market/gifts` и войдите в свой аккаунт, если потребуется.
-3. Нажмите F12 → Console. Откройте скачанный JS-файл в текстовом редакторе, скопируйте всё содержимое и вставьте в Console. Если Chrome попросит разрешить вставку, следуйте предупреждению браузера; не вставляйте код, если не проверили его содержимое.
-4. Выполните код. Введите HTTPS URL своего приложения Render и значение `INGEST_TOKEN`.
-5. На странице появится статус сборщика. Он обходит страницы с паузой около 2,2 секунды, отправляет лоты в Render и останавливается при блокировке. После завершения обновите страницу аналитики.
-
-## Ограничения
-- Сборщик использует HTML карточек `.mk-gcard` и связанные классы; если Huevo изменит разметку, понадобится обновление парсера.
-- Сбор происходит только пока вкладка браузера открыта.
-- Бесплатный Render может засыпать; локальная SQLite-база на бесплатном тарифе может теряться при перезапуске/redeploy. Для постоянной истории потребуется устойчивое хранилище.
-- Не добавляйте `client_secret`, cookie или пароль Huevo в репозиторий. API-ключи не используются этим способом.
+## Important limitations
+- The crawler uses ordinary HTTP requests with standard browser headers and a conservative delay. It does not bypass CAPTCHA, authentication, anti-bot controls, or access restrictions. If Huevo returns HTTP 403/418/429, the run stops and the status shows the error. A server-side 418 must be resolved by confirming an allowed API/data source with Huevo; a better UI cannot make blocked data available.
+- Render Free may sleep, and its ephemeral filesystem can lose the SQLite database on redeploy/restart. Therefore this free deployment cannot guarantee continuous 24/7 collection or durable history. Use a persistent database/disk and always-on host if you need those guarantees.
+- Average prices are averages of observed asking prices, not confirmed sale prices.
+- No automatic purchasing is performed; lot links open Huevo.

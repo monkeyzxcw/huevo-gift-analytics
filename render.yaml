@@ -12,3 +12,7 @@ services:
         value: "2.0"
       - key: MAX_PAGES
         value: "500"
+      - key: AUTO_CRAWL
+        value: "true"
+      - key: AUTO_CRAWL_MINUTES
+        value: "60"
