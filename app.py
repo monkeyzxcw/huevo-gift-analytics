@@ -105,27 +105,26 @@ def crawl():
                 if any(term in page_text for term in ("http error 418", "too many requests", "access denied", "verify you are human")):
                     raise RuntimeError("Huevo показал страницу ограничения доступа/проверки браузера. Selenium не обходит эту защиту; сбор остановлен.")
                 rows, card_count = parse_cards(browser.page_source)
-            if not rows:
-                empty_streak += 1
-                if page == 1:
-                    raise RuntimeError("На первой странице не найдено карточек .mk-gcard. Возможно, изменилась разметка или требуется доступ.")
-                # Stop after the first empty page; pagination may change during crawling.
-                break
-            empty_streak = 0
-            with db() as c:
-                for row in rows:
-                    seen_this_run.add(row["lot_id"])
-                    old = c.execute("SELECT price,status,first_seen FROM lots WHERE lot_id=?", (row["lot_id"],)).fetchone()
-                    first = old["first_seen"] if old else row["observed_at"]
-                    c.execute("""INSERT INTO lots(lot_id,title,serial,rarity,price,status,image_url,lot_url,first_seen,last_seen,active)
-                    VALUES(?,?,?,?,?,?,?,?,?,?,1)
-                    ON CONFLICT(lot_id) DO UPDATE SET title=excluded.title,serial=excluded.serial,
-                    rarity=excluded.rarity,price=excluded.price,status=excluded.status,image_url=excluded.image_url,
-                    lot_url=excluded.lot_url,last_seen=excluded.last_seen,active=1""",
-                    (row["lot_id"],row["title"],row["serial"],row["rarity"],row["price"],row["status"],row["image_url"],row["lot_url"],first,row["observed_at"]))
-                    if not old or old["price"] != row["price"] or old["status"] != row["status"]:
-                        c.execute("INSERT INTO price_history(lot_id,price,status,observed_at) VALUES(?,?,?,?)",
-                                  (row["lot_id"],row["price"],row["status"],row["observed_at"]))
+                if not rows:
+                    empty_streak += 1
+                    if page == 1:
+                        raise RuntimeError("На первой странице не найдено карточек .mk-gcard. Возможно, изменилась разметка или требуется доступ.")
+                    break
+                empty_streak = 0
+                with db() as c:
+                    for row in rows:
+                        seen_this_run.add(row["lot_id"])
+                        old = c.execute("SELECT price,status,first_seen FROM lots WHERE lot_id=?", (row["lot_id"],)).fetchone()
+                        first = old["first_seen"] if old else row["observed_at"]
+                        c.execute("""INSERT INTO lots(lot_id,title,serial,rarity,price,status,image_url,lot_url,first_seen,last_seen,active)
+                        VALUES(?,?,?,?,?,?,?,?,?,?,1)
+                        ON CONFLICT(lot_id) DO UPDATE SET title=excluded.title,serial=excluded.serial,
+                        rarity=excluded.rarity,price=excluded.price,status=excluded.status,image_url=excluded.image_url,
+                        lot_url=excluded.lot_url,last_seen=excluded.last_seen,active=1""",
+                        (row["lot_id"],row["title"],row["serial"],row["rarity"],row["price"],row["status"],row["image_url"],row["lot_url"],first,row["observed_at"]))
+                        if not old or old["price"] != row["price"] or old["status"] != row["status"]:
+                            c.execute("INSERT INTO price_history(lot_id,price,status,observed_at) VALUES(?,?,?,?)",
+                                      (row["lot_id"],row["price"],row["status"],row["observed_at"]))
                 with lock: state["found"] = len(seen_this_run)
                 time.sleep(DELAY)
         finally:
