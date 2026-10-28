@@ -201,14 +201,31 @@ async def ingest_browser_data(request: Request, token: str = ""):
 
 @app.post("/api/crawl")
 def start_crawl(background: BackgroundTasks):
-    # Avoid server-side requests that Huevo currently rejects with HTTP 418.
-    raise HTTPException(status_code=410, detail="Сбор теперь выполняется из авторизованного браузера. Используйте browser_collector.js.")
-
-# Legacy crawler retained temporarily but no longer exposed as an active job.
-def _legacy_start_crawl(background: BackgroundTasks):
-    if state["running"]: return {"ok": True, "message": "Сбор уже выполняется"}
+    with lock:
+        if state["running"]:
+            return {"ok": True, "message": "Сбор уже выполняется"}
     background.add_task(crawl)
-    return {"ok": True, "message": "Сбор поставлен в очередь"}
+    return {"ok": True, "message": "Сбор запущен"}
+
+AUTO_REFRESH_HOURS = max(1, int(os.getenv("AUTO_REFRESH_HOURS", "6")))
+
+def scheduled_crawler():
+    # Retry public catalog on startup and at a conservative interval.
+    # If Huevo rejects server-side traffic, report the actual status and stop.
+    time.sleep(20)
+    while True:
+        try:
+            if not state["running"]:
+                crawl()
+        except Exception as exc:
+            with lock:
+                state["message"] = f"Ошибка планового обновления: {exc}"
+                state["running"] = False
+        time.sleep(AUTO_REFRESH_HOURS * 3600)
+
+@app.on_event("startup")
+def start_scheduler():
+    threading.Thread(target=scheduled_crawler, name="huevo-auto-refresh", daemon=True).start()
 
 @app.get("/api/status")
 def get_status():
