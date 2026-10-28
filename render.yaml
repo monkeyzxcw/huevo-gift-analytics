@@ -14,3 +14,5 @@ services:
         value: "2.2"
       - key: MAX_PAGES
         value: "500"
+      - key: AUTO_REFRESH_HOURS
+        value: "6"
