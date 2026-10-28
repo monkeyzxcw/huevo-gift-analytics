@@ -264,12 +264,13 @@ def start_crawl(background: BackgroundTasks):
     background.add_task(crawl)
     return {"ok": True, "message": "Сбор запущен"}
 
-AUTO_REFRESH_HOURS = max(1, int(os.getenv("AUTO_REFRESH_HOURS", "6")))
+AUTO_REFRESH_HOURS = max(1, int(os.getenv("AUTO_REFRESH_HOURS", "2")))
+PAGE_ONE_REFRESH_SECONDS = max(5, int(os.getenv("PAGE_ONE_REFRESH_SECONDS", "5")))
 
 def scheduled_crawler():
-    # Retry public catalog on startup and at a conservative interval.
-    # If Huevo rejects server-side traffic, report the actual status and stop.
-    time.sleep(20)
+    # Full market scan at startup, then scan every two hours.
+    # Page-one refresh is scheduled separately below to keep the cadence explicit.
+    time.sleep(5)
     while True:
         try:
             if not state["running"]:
