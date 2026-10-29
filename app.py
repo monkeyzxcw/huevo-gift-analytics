@@ -1,6 +1,6 @@
-import os, re, time, sqlite3, threading, json
+import os, re, time, sqlite3, threading, json, hmac
 from datetime import datetime, timezone
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
@@ -28,7 +28,7 @@ INGEST_TOKEN = os.getenv("INGEST_TOKEN", "")
 # JSON array of cookies exported from an already authenticated huevo.su browser.
 HUEVO_COOKIES_JSON = os.getenv("HUEVO_COOKIES_JSON", "").strip()
 lock = threading.Lock()
-state = {"running": False, "page": 0, "found": 0, "message": "Ожидает запуска", "started_at": None}
+state = {"running": False, "page": 0, "found": 0, "message": "Ожидает запуска", "started_at": None, "last_ingest_at": None}
 
 def db():
     con = sqlite3.connect(DB_PATH, timeout=20)
@@ -217,12 +217,18 @@ async def ingest_browser_data(request: Request, token: str = ""):
     authorization = request.headers.get("authorization", "")
     header_token = authorization[7:].strip() if authorization.lower().startswith("bearer ") else ""
     supplied_token = header_token or token
-    if not supplied_token or supplied_token != INGEST_TOKEN:
+    if not supplied_token or not hmac.compare_digest(supplied_token, INGEST_TOKEN):
         raise HTTPException(status_code=403, detail="Неверный токен сбора")
+    # Read with a hard cap so a misconfigured or abused collector cannot post an unbounded body.
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > 2_000_000:
+            raise HTTPException(status_code=413, detail="Слишком большой пакет. Передавайте не более 1000 лотов за раз.")
     try:
-        payload = await request.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Ожидается JSON")
+        payload = json.loads(body)
+    except (json.JSONDecodeError, UnicodeDecodeError, TypeError):
+        raise HTTPException(status_code=400, detail="Ожидается корректный JSON")
     rows = payload.get("lots") if isinstance(payload, dict) else None
     if not isinstance(rows, list) or len(rows) > 1000:
         raise HTTPException(status_code=400, detail="Поле lots должно быть списком до 1000 записей")
@@ -239,8 +245,19 @@ async def ingest_browser_data(request: Request, token: str = ""):
             serial = str(item.get("serial", ""))[:200]
             rarity = str(item.get("rarity", ""))[:100]
             status = str(item.get("status", "Неизвестно"))[:100]
-            image_url = str(item.get("image_url", ""))[:2000]
-            lot_url = str(item.get("lot_url", f"https://huevo.su/market/lot/{lot_id}"))[:2000]
+            image_url = str(item.get("image_url", ""))[:2000].strip()
+            # Images may live on Huevo's CDN, but only HTTPS URLs are rendered by the dashboard.
+            image_parts = urlsplit(image_url)
+            if image_parts.scheme != "https" or not image_parts.netloc or image_parts.username or image_parts.password:
+                image_url = ""
+            default_lot_url = f"{BASE_URL}/market/lot/{lot_id}"
+            candidate_url = str(item.get("lot_url", default_lot_url))[:2000].strip()
+            lot_parts = urlsplit(candidate_url)
+            host = (lot_parts.hostname or "").lower()
+            if lot_parts.scheme == "https" and (host == "huevo.su" or host.endswith(".huevo.su")) and not lot_parts.username and not lot_parts.password:
+                lot_url = candidate_url
+            else:
+                lot_url = default_lot_url
             raw_price = item.get("price")
             try:
                 price = int(raw_price) if raw_price is not None else None
@@ -258,7 +275,11 @@ async def ingest_browser_data(request: Request, token: str = ""):
             if not old or old["price"] != price or old["status"] != status:
                 c.execute("INSERT INTO price_history(lot_id,price,status,observed_at) VALUES(?,?,?,?)", (lot_id,price,status,now))
             saved += 1
-    return {"ok": True, "saved": saved}
+    with lock:
+        state["message"] = f"Браузерный импорт завершён: сохранено {saved} лотов"
+        state["found"] = saved
+        state["last_ingest_at"] = now
+    return {"ok": True, "saved": saved, "received": len(rows), "observed_at": now}
 
 @app.post("/api/crawl")
 def start_crawl(background: BackgroundTasks):
