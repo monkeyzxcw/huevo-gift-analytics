@@ -80,7 +80,7 @@ def parse_cards(html):
     now = datetime.now(timezone.utc).isoformat()
     for card in cards:
         href = str(card.get("href", "")).strip()
-        match = re.search(r"/market/lot/(\\d+)", href)
+        match = re.search(r"/market/lot/(\d+)", href)
         if not match:
             continue
         lot_id = match.group(1)
@@ -88,7 +88,7 @@ def parse_cards(html):
         serial = field(card, [".mk-gserial", "[class*='serial']", "[class*='number']"])
         rarity = field(card, [".mk-gsub", "[class*='rarity']", "[class*='collection']"])
         price = money(field(card, [".mk-price", ".mk-gprice", "[class*='price']", "[data-price]"]))
-        status = field(card, [".mk-status", "[class*='status']") or "Неизвестно"
+        status = field(card, [".mk-status", "[class*='status']"]) or "Неизвестно"
         image = card.select_one("img")
         image_src = ""
         if image:
