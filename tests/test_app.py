@@ -9,6 +9,7 @@ os.environ["INGEST_TOKEN"] = "test-token-not-for-production"
 os.environ["HUEVO_COOKIES_JSON"] = ""
 
 from fastapi.testclient import TestClient
+from vless_proxy import parse_vless_url
 import app as app_module
 
 
@@ -84,6 +85,41 @@ class IngestApiTests(unittest.TestCase):
         self.assertEqual(cookies[0]["domain"], ".huevo.departament.site")
         self.assertTrue(cookies[0]["httpOnly"])
         self.assertEqual(cookies[0]["value"], "example-only")
+
+    def test_vless_url_builds_local_socks_and_websocket_tls_config(self):
+        config = parse_vless_url(
+            "vless://11111111-1111-4111-8111-111111111111@proxy.example.invalid:443"
+            "?type=ws&security=tls&sni=proxy.example.invalid&fp=chrome"
+            "&path=%2Fgateway&host=proxy.example.invalid#test"
+        )
+        self.assertEqual(config["inbounds"][0]["protocol"], "socks")
+        self.assertEqual(config["inbounds"][0]["listen"], "127.0.0.1")
+        outbound = config["outbounds"][0]
+        self.assertEqual(outbound["protocol"], "vless")
+        self.assertEqual(outbound["streamSettings"]["network"], "ws")
+        self.assertEqual(outbound["streamSettings"]["security"], "tls")
+        self.assertEqual(outbound["streamSettings"]["wsSettings"]["path"], "/gateway")
+        self.assertEqual(outbound["streamSettings"]["tlsSettings"]["fingerprint"], "chrome")
+
+    def test_vless_url_builds_reality_config(self):
+        config = parse_vless_url(
+            "vless://11111111-1111-4111-8111-111111111111@proxy.example.invalid:443"
+            "?type=tcp&security=reality&sni=www.example.invalid&fp=chrome"
+            "&pbk=example-public-key&sid=abcd&flow=xtls-rprx-vision#test"
+        )
+        outbound = config["outbounds"][0]
+        self.assertEqual(outbound["streamSettings"]["security"], "reality")
+        self.assertEqual(outbound["streamSettings"]["realitySettings"]["publicKey"], "example-public-key")
+        self.assertEqual(outbound["settings"]["vnext"][0]["users"][0]["flow"], "xtls-rprx-vision")
+
+    def test_vless_url_rejects_invalid_schemes_and_missing_reality_key(self):
+        with self.assertRaises(ValueError):
+            parse_vless_url("https://proxy.example.invalid")
+        with self.assertRaises(ValueError):
+            parse_vless_url(
+                "vless://11111111-1111-4111-8111-111111111111@proxy.example.invalid:443"
+                "?security=reality&sni=www.example.invalid"
+            )
 
     def test_alternate_huevo_host_is_allowed_but_unrelated_host_is_not(self):
         self.assertTrue(app_module.is_huevo_host("huevo.su"))
