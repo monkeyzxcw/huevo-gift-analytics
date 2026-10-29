@@ -3,6 +3,7 @@
 Cookie values are read only from the environment and are never printed. A partial crawl or
 Huevo access block fails closed: it does not replace the last good lot snapshot.
 """
+import argparse
 import json
 import logging
 import os
@@ -53,14 +54,22 @@ def write_action_output(name, value):
             handle.write(f"{name}={value}\n")
 
 
-def make_browser():
+def make_browser(local_login=False):
     from selenium import webdriver
     from selenium.webdriver.chrome.options import Options
 
     options = Options()
-    for arg in ("--headless=new", "--no-sandbox", "--disable-dev-shm-usage",
-                "--disable-gpu", "--window-size=1440,1000"):
-        options.add_argument(arg)
+    if not local_login:
+        for arg in ("--headless=new", "--no-sandbox", "--disable-dev-shm-usage",
+                    "--disable-gpu"):
+            options.add_argument(arg)
+    options.add_argument("--window-size=1440,1000")
+    if local_login:
+        # Dedicated local-only Chrome profile: the Huevo session stays on this PC.
+        # This directory is gitignored and is never uploaded or committed.
+        profile = ROOT / ".local-huevo-chrome-profile"
+        profile.mkdir(parents=True, exist_ok=True)
+        options.add_argument(f"--user-data-dir={profile}")
     options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
     options.add_experimental_option("perfLoggingPrefs", {"enableNetwork": True})
     binary = os.getenv("CHROME_BIN")
@@ -97,16 +106,26 @@ def snapshot_lot(row, old_by_id, observed_at):
     return item
 
 
-def main():
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Collect Huevo market data into the public static snapshot.")
+    parser.add_argument(
+        "--local-login", action="store_true",
+        help="Open visible Chrome on this PC and let the operator sign in manually; no cookie export required.",
+    )
+    args = parser.parse_args(argv)
+    local_login = args.local_login
+
     previous = load_previous()
-    cookies = (os.getenv("HUEVO_COOKIES_JSON", "").strip()
-               or os.getenv("HUEVO_COOKIES", "").strip())
-    if not cookies:
-        print("Missing GitHub secret HUEVO_COOKIES_JSON (or HUEVO_COOKIES).", file=sys.stderr)
+    cookies = "" if local_login else (
+        os.getenv("HUEVO_COOKIES_JSON", "").strip()
+        or os.getenv("HUEVO_COOKIES", "").strip()
+    )
+    if not local_login and not cookies:
+        print("Missing GitHub secret HUEVO_COOKIES_JSON (or HUEVO_COOKIES). Use --local-login on your own PC instead.", file=sys.stderr)
         return 2
 
     old_collector = previous.get("collector") or {}
-    if old_collector.get("status") == "blocked" and old_collector.get("blocked_until"):
+    if not local_login and old_collector.get("status") == "blocked" and old_collector.get("blocked_until"):
         try:
             until = datetime.fromisoformat(old_collector["blocked_until"].replace("Z", "+00:00"))
             if until > now_utc():
@@ -132,7 +151,17 @@ def main():
         store.migrate()
         browser = None
         try:
-            browser = make_browser()
+            browser = make_browser(local_login=local_login)
+            if local_login:
+                print(f"Открываю отдельный Chrome-профиль на этом ПК: {base_url}")
+                browser.get(base_url + "/")
+                print("\nВ окне Chrome вручную войдите в Huevo. Не отправляйте cookies никому.")
+                input("Когда каталог Huevo доступен в этом окне, вернитесь сюда и нажмите Enter для запуска сбора...")
+                from urllib.parse import urlsplit
+                current_host = (urlsplit(browser.current_url).hostname or "").lower()
+                if current_host not in set(ALLOWED_HUEVO_HOSTS) | {"www." + h for h in ALLOWED_HUEVO_HOSTS}:
+                    print("Chrome сейчас не на разрешённом домене Huevo; сбор отменён.", file=sys.stderr)
+                    return 2
             config = CrawlConfig(
                 base_url=base_url, allowed_hosts=ALLOWED_HUEVO_HOSTS,
                 delay=delay, max_pages=max_pages, cookies_raw=cookies,
