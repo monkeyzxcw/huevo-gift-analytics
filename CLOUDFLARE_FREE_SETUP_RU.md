@@ -25,17 +25,35 @@
 
 В Cloudflare API Token создай токен с минимальными необходимыми правами на деплой Workers. Не используй Global API Key.
 
-## 2. Сверить имя Worker
+## 2. Перенести старую историю из Render (необязательно)
+
+Если хочешь сохранить существующую историю из `huevo.db`, скачай бэкап с работающего Render-сервиса до отключения:
+
+```powershell
+curl.exe -H "Authorization: Bearer YOUR_INGEST_TOKEN" -o huevo.db https://huevo-gift-analytics.onrender.com/api/backup
+```
+
+Замени `YOUR_INGEST_TOKEN` локально на значение `INGEST_TOKEN` из **Render → Environment**. Не отправляй токен в чат. Если старая история не нужна, пропусти этот шаг — она начнётся с первого успешного снимка на GitHub Actions.
+
+Из корня репозитория запусти импортёр:
+
+```powershell
+python scripts/import_sqlite_snapshot.py "C:\path\to\huevo.db"
+```
+
+Импортёр обновит `cloudflare-site/data.json`: перенесёт только каталог, историю цен и снимки рынка. Он намеренно не читает таблицу `support_payments` и другие внутренние таблицы. Проверь размер и содержимое созданного JSON и включи его в PR до первого запуска workflow. **Не коммить и не загружай в публичный репозиторий сам файл `huevo.db`** — он может содержать внутренние записи.
+
+## 3. Сверить имя Worker
 
 Открой `wrangler.jsonc`. Сейчас имя задано как `huevo-gift-analytics`. Оно должно в точности совпадать с именем Worker, который уже создан в Cloudflare. Если твой Worker называется иначе, измени поле `name` и закоммить изменение.
 
 Этот Worker обслуживает только статические файлы, поэтому Cookies и Huevo-переменные в Runtime variables and secrets Cloudflare добавлять не нужно. Секрет cookies доступен только сборщику внутри GitHub Actions.
 
-## 3. Разрешить обновление снимка в репозитории
+## 4. Разрешить обновление снимка в репозитории
 
 Открой **Settings → Actions → General → Workflow permissions** и разреши **Read and write permissions**. Workflow сохраняет новый публичный снимок в `cloudflare-site/data.json`, чтобы история цен сохранялась между запусками.
 
-## 4. Первый запуск
+## 5. Первый запуск
 
 Открой вкладку **Actions → Cloudflare static market dashboard → Run workflow** и запусти workflow вручную. Затем проверь шаги в логе:
 
