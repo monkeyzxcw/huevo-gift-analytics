@@ -57,8 +57,11 @@ def _wait_ready(browser, timeout, sleep):
     return False
 
 
-def observe(browser, cfg, path):
-    """Load `path`, return (probe dict, rows, link_count, network_failures)."""
+def observe(browser, cfg, path, parser=None):
+    """Load `path`, return (probe dict, rows, link_count, network_failures).
+
+    `parser(html) -> (rows, count)` defaults to the catalog card parser.
+    """
     try:
         browser.get(cfg.base_url + path)
     except Exception as exc:
@@ -73,7 +76,7 @@ def observe(browser, cfg, path):
             state = browser.execute_script("return document.readyState")
         except Exception:
             return {"verdict": "network_error", "cause": "timeout"}, [], 0, []
-        if state not in ("interactive", "complete") and not _wait_ready(browser, 5, cfg.sleep):
+        if state not in ("interactive", "complete") and not _wait_ready(browser, min(5, cfg.ready_timeout), cfg.sleep):
             return {"verdict": "network_error", "cause": "timeout"}, [], 0, []
     if not _wait_ready(browser, cfg.ready_timeout, cfg.sleep):
         return {"verdict": "network_error", "cause": "timeout"}, [], 0, []
@@ -85,7 +88,10 @@ def observe(browser, cfg, path):
         pass     # performance log not enabled -> status stays "inferred"
     resp = main_response(parsed, path)
     body = browser.find_element("tag name", "body").text[:2000]
-    rows, links = parse_cards(browser.page_source, cfg.base_url, cfg.allowed_hosts)
+    if parser is None:
+        rows, links = parse_cards(browser.page_source, cfg.base_url, cfg.allowed_hosts)
+    else:
+        rows, links = parser(browser.page_source)
     password = any(e.is_displayed() for e in browser.find_elements("css selector", "input[type='password']"))
     probe = classify_page(browser.current_url, browser.title, body, links, expected_hosts=_hosts(cfg),
                           password_visible=password,
@@ -178,3 +184,50 @@ def _finish(pages, seen, new, changed, reached_end, reason):
     if not seen:
         return CrawlResult("no_cards", "Сбор завершился без единого лота; данные не сохранены.", stop_reason=reason)
     return CrawlResult("ok", f"Готово: {len(seen)} уникальных лотов, страниц {pages} ({reason})", pages, len(seen), new, changed, reached_end, stop_reason=reason)
+
+
+def run_history_crawl(browser, store, cfg, log, max_pages=5, should_stop=lambda: False):
+    """Collect confirmed sales from /market/history into `store.sales`.
+
+    Deliberately shallow by default (max_pages=5 of ~650): the same stop rules as the catalog crawl
+    apply (block / login / 5xx / network error end the run with no retry). `reached_end` is True only
+    when the pager says the last page was read or a later page has an empty table.
+    """
+    from history_parser import parse_history
+    meta = {}
+
+    def parser(html):
+        meta.update(parse_history(html))
+        return meta["rows"], len(meta["rows"])
+
+    pages = saved = new_total = 0
+    for page in range(1, max(1, max_pages) + 1):
+        if should_stop():
+            return CrawlResult("error", "Остановлено оператором", pages, saved, new_total, stop_reason="остановка")
+        meta.clear()
+        path = "/market/history" if page == 1 else f"/market/history?page={page}"
+        probe, rows, _, _ = observe(browser, cfg, path, parser=parser)
+        verdict = probe["verdict"]
+        log.info("history page=%d verdict=%s http=%s(%s) rows=%d table=%s total_pages=%s", page, verdict, probe.get("http_status"),
+                 probe.get("status_source"), len(rows), meta.get("table_found"), meta.get("total_pages"))
+        common = dict(pages=pages, unique_lots=saved, new_lots=new_total, http_status=probe.get("http_status") or probe.get("status_class_inferred"),
+                      status_source=probe.get("status_source"), retry_after=probe.get("retry_after"))
+        if verdict == "blocked":
+            return CrawlResult("blocked", f"Huevo ограничил доступ к истории (HTTP {common['http_status']}). Остановлено без повторов.", stop_reason="блокировка", **common)
+        if verdict == "network_error":
+            return CrawlResult("network_error", f"Сетевая ошибка ({probe.get('cause')}).", cause=probe.get("cause"), stop_reason="сеть", **common)
+        if verdict == "server_error":
+            return CrawlResult("server_error", VERDICT_HINTS["server_error"], stop_reason="ошибка источника", **common)
+        if not rows:
+            if page > 1 and meta.get("table_found"):
+                return CrawlResult("ok", f"История: страница {page} пуста (конец).", pages, saved, new_total, reached_end=True, stop_reason="конец истории")
+            kind = "login" if verdict == "login" else "no_cards"
+            return CrawlResult(kind, "Таблица истории не найдена или пуста на первой странице: вход, разметка или пустая история. Данные не сохранены.", stop_reason=verdict, **common)
+        new_total += store.upsert_sales(rows, now=utcnow())
+        saved += len(rows)
+        pages = page
+        total = meta.get("total_pages")
+        if total and page >= total:
+            return CrawlResult("ok", f"История прочитана целиком: страниц {pages}.", pages, saved, new_total, reached_end=True, stop_reason="последняя страница")
+        cfg.sleep(cfg.delay)
+    return CrawlResult("ok", f"История: прочитано страниц {pages} (лимит {max_pages}), новых сделок {new_total}.", pages, saved, new_total, reached_end=False, stop_reason="лимит страниц")

@@ -23,7 +23,8 @@ class FakeElement:
 
 
 class FakeBrowser:
-    """Serves scripted pages: {page_number: (status, html, retry_after)} for /market/gifts?page=N."""
+    """Serves scripted pages: {page_number: (status, html, retry_after)}.
+    Page 1 is the canonical /market/gifts (no query); later pages are /market/gifts?page=N."""
     def __init__(self, pages, base="https://huevo.su", fail_on=None):
         self.pages, self.base, self.fail_on = pages, base, fail_on
         self.current_url, self.title, self.page_source, self._log, self.gets = base, "", "", [], []
@@ -32,11 +33,12 @@ class FakeBrowser:
         self.gets.append(url)
         if self.fail_on and self.fail_on(url):
             raise RuntimeError("net::ERR_NAME_NOT_RESOLVED")
-        n = int(url.split("page=")[1]) if "page=" in url else 0
+        n = int(url.split("page=")[1]) if "page=" in url else 1
         status, html, ra = self.pages.get(n, (200, page_html([]), None))
         self.current_url, self.page_source, self.title = url, html, "Маркет"
         self._log = [perf(url, status, ra)]
-    def execute_script(self, _): return "complete"
+    ready_state = "complete"
+    def execute_script(self, _): return self.ready_state
     def get_log(self, _):
         out, self._log = self._log, []
         return out
@@ -95,6 +97,38 @@ class CrawlerTests(unittest.TestCase):
         res = run_crawl(FakeBrowser({1: (200, page_html([]), None)}), self.store, cfg(), log)
         self.assertIn(res.status, ("no_cards", "error"))
         self.assertEqual(self.store.counts()["active_total"], 0)
+
+    def test_first_page_uses_canonical_catalog_url(self):
+        b = FakeBrowser({1: (200, page_html([1]), None), 2: (200, page_html([]), None)})
+        run_crawl(b, self.store, cfg(), log)
+        self.assertEqual(b.gets[0], "https://huevo.su/market/gifts")
+        self.assertEqual(b.gets[1], "https://huevo.su/market/gifts?page=2")
+
+    def test_page_load_timeout_with_parsed_dom_is_still_classified(self):
+        class SlowBrowser(FakeBrowser):
+            ready_state = "interactive"
+            def get(self, url):
+                super().get(url)
+                raise RuntimeError("timeout: Timed out receiving message from renderer")
+        res = run_crawl(SlowBrowser({1: (418, "<html><body>HTTP ERROR 418</body></html>", "60")}), self.store, cfg(), log)
+        self.assertEqual((res.status, res.http_status), ("blocked", 418), "a block must not be hidden behind a timeout")
+
+    def test_timeout_without_a_document_is_a_network_error(self):
+        class DeadBrowser(FakeBrowser):
+            ready_state = "loading"
+            def get(self, url): raise RuntimeError("timeout: Timed out receiving message from renderer")
+        res = run_crawl(DeadBrowser({}), self.store, cfg(ready_timeout=0.05), log)
+        self.assertEqual((res.status, res.cause), ("network_error", "timeout"))
+        self.assertEqual(self.store.counts()["active_total"], 0)
+
+    def test_blocked_pass_does_not_touch_existing_lots_or_snapshots(self):
+        self.store.upsert_many([{"lot_id": "9", "title": "Старый", "price": 5, "status": "x"}])
+        before = self.store.counts()
+        b = FakeBrowser({1: (200, page_html([1]), None), 2: (429, "<html><body>Too Many Requests</body></html>", None)})
+        res = run_crawl(b, self.store, cfg(), log)
+        after = self.store.counts()
+        self.assertEqual(res.status, "blocked")
+        self.assertEqual((after["inactive"], after["snapshots"]), (before["inactive"], before["snapshots"]))
 
     def test_max_pages_does_not_claim_end(self):
         pages = {n: (200, page_html([n * 10, n * 10 + 1]), None) for n in range(1, 10)}

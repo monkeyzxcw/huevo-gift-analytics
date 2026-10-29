@@ -8,7 +8,7 @@ import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 SORTS = {
     "price": "price IS NULL ASC, price ASC, lot_id ASC",
@@ -77,6 +77,15 @@ class Store:
                 CREATE INDEX IF NOT EXISTS idx_lots_first_seen ON lots(active, first_seen);
                 CREATE INDEX IF NOT EXISTS idx_lots_title ON lots(title COLLATE NOCASE);
                 CREATE INDEX IF NOT EXISTS idx_history_date ON price_history(observed_at);
+                """)
+            if version < 3:
+                # Confirmed sales from /market/history. No seller/buyer names are stored.
+                c.executescript("""
+                CREATE TABLE IF NOT EXISTS sales(
+                    sale_key TEXT PRIMARY KEY, lot_id TEXT NOT NULL, title TEXT, price INTEGER,
+                    time_raw TEXT, sold_at TEXT, first_observed TEXT NOT NULL);
+                CREATE INDEX IF NOT EXISTS idx_sales_lot ON sales(lot_id);
+                CREATE INDEX IF NOT EXISTS idx_sales_observed ON sales(first_observed);
                 """)
             c.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
 
@@ -174,6 +183,23 @@ class Store:
         with self.connect() as c:
             marks = ",".join("?" * len(ids))
             return [dict(r) for r in c.execute(f"SELECT * FROM lots WHERE lot_id IN ({marks})", ids)]
+
+    # ---- confirmed sales (history page)
+    def upsert_sales(self, rows, now=None):
+        """Idempotent: a sale_key already stored is left untouched. Returns number of NEW rows."""
+        now = now or utcnow()
+        with self.connect() as c:
+            before = c.total_changes
+            for r in rows:
+                c.execute("INSERT OR IGNORE INTO sales(sale_key,lot_id,title,price,time_raw,sold_at,first_observed) VALUES(?,?,?,?,?,?,?)",
+                          (r["sale_key"], r["lot_id"], r.get("title", ""), r.get("price"), r.get("time_raw", ""), r.get("sold_at"), now))
+            return c.total_changes - before
+
+    def sales(self, limit=5000):
+        with self.connect() as c:
+            return [dict(r) for r in c.execute(
+                "SELECT lot_id,title,price,time_raw,sold_at,first_observed FROM sales ORDER BY first_observed DESC, rowid DESC LIMIT ?",
+                (max(1, min(int(limit), 50000)),))]
 
     def facets(self):
         with self.connect() as c:

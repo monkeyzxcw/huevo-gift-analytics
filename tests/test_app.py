@@ -31,7 +31,7 @@ class ApiTests(unittest.TestCase):
 
     def setUp(self):
         with app_module.store.connect() as c:
-            for table in ("lots", "price_history", "market_snapshots", "support_payments", "kv"):
+            for table in ("lots", "price_history", "market_snapshots", "support_payments", "kv", "sales"):
                 c.execute(f"DELETE FROM {table}")
         app_module._fails.clear()
         app_module._diag_last["at"] = 0.0
@@ -119,6 +119,17 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(self.client.get("/api/catalog?limit=100000").status_code, 200)
         self.assertEqual(self.client.get("/api/catalog?limit=abc").status_code, 422)
         self.assertIn("Мифический", self.client.get("/api/facets").json()["rarities"])
+
+    def test_sales_summary_uses_only_confirmed_sales_and_hides_people(self):
+        empty = self.client.get("/api/sales/summary").json()
+        self.assertEqual((empty["summary"]["count"], empty["summary"]["median"]), (0, None))
+        app_module.store.upsert_sales([{"sale_key": f"k{i}", "lot_id": str(i), "title": "Звезда #%d" % i, "price": p, "time_raw": "01:00", "sold_at": None}
+                                       for i, p in enumerate([10, 20, 30, None, 0])])
+        r = self.client.get("/api/sales/summary").json()
+        self.assertEqual((r["summary"]["count"], r["summary"]["median"], r["summary"]["unknown"]), (3, 20, 2))
+        self.assertEqual(r["by_title"][0]["title"], "звезда")
+        self.assertEqual(r["with_confirmed_date"], 0)
+        self.assertNotIn("seller", json.dumps(r))
 
     def test_lots_by_ids_validates_input(self):
         self.ingest([lot(5, 50)])
