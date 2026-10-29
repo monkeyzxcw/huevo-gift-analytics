@@ -363,23 +363,64 @@
     const uniq = (key) => Array.from(new Set(state.lots.map((l) => l[key]).filter(Boolean))).sort((a, b) => String(a).localeCompare(String(b), "ru"));
     fill("rarity", uniq("rarity"), "Все"); fill("status", uniq("status"), "Все");
   }
+  function parseSmartQuery(value) {
+    let rest = String(value || "").trim();
+    const rules = { terms: [], min: null, max: null, rarity: "", status: "", id: "" };
+    rest = rest.replace(/\bprice\s*(<=|>=|<|>)\s*([\d\s.,]+)/gi, (_, op, raw) => {
+      const amount = Number(String(raw).replace(/[\s,]/g, ""));
+      if (Number.isFinite(amount)) {
+        if (op === "<") rules.max = Math.min(rules.max == null ? Infinity : rules.max, amount - Number.EPSILON);
+        if (op === "<=") rules.max = Math.min(rules.max == null ? Infinity : rules.max, amount);
+        if (op === ">") rules.min = Math.max(rules.min == null ? -Infinity : rules.min, amount + Number.EPSILON);
+        if (op === ">=") rules.min = Math.max(rules.min == null ? -Infinity : rules.min, amount);
+      }
+      return " ";
+    });
+    rest = rest.replace(/\b(?:id:|#)([A-Za-z0-9_-]+)/gi, (_, id) => { rules.id = id; return " "; });
+    rest = rest.replace(/\b(rarity|status)\s*:\s*("[^"]+"|'[^']+'|.+?)(?=\s+(?:rarity|status)\s*:|\s+price\s*(?:<=|>=|<|>)|\s+(?:id:|#)[A-Za-z0-9_-]+|$)/gi,
+      (_, key, raw) => {
+        const val = String(raw).replace(/^["']|["']$/g, "").trim();
+        if (key.toLowerCase() === "rarity") rules.rarity = val;
+        else rules.status = val;
+        return " ";
+      });
+    rules.terms = rest.toLocaleLowerCase("ru").split(/\s+/).filter(Boolean);
+    return rules;
+  }
+
   function applyFilters() {
-    const q = $("search").value.trim().toLocaleLowerCase("ru"), rar = $("rarity").value, st = $("status").value;
-    const pmin = $("pmin").value === "" ? null : Number($("pmin").value), pmax = $("pmax").value === "" ? null : Number($("pmax").value);
+    const rawQuery = $("search").value.trim();
+    const q = parseSmartQuery(rawQuery);
+    const raritySelect = $("rarity").value, statusSelect = $("status").value;
+    const inputMin = $("pmin").value === "" ? null : Number($("pmin").value);
+    const inputMax = $("pmax").value === "" ? null : Number($("pmax").value);
+    const lower = Math.max(inputMin == null || !Number.isFinite(inputMin) ? -Infinity : inputMin, q.min == null ? -Infinity : q.min);
+    const upper = Math.min(inputMax == null || !Number.isFinite(inputMax) ? Infinity : inputMax, q.max == null ? Infinity : q.max);
+    const wantedRarity = raritySelect || q.rarity;
+    const wantedStatus = statusSelect || q.status;
     const { key, dir } = state.sort;
-    let rows = state.lots.filter((l) => (!q || l._text.includes(q)) && (!rar || l.rarity === rar) && (!st || l.status === st)
-      && (pmin == null || (l.price != null && l.price >= pmin)) && (pmax == null || (l.price != null && l.price <= pmax)));
+    let rows = state.lots.filter((l) => {
+      const id = String(l.lot_id);
+      const textMatch = q.terms.every((term) => l._text.includes(term));
+      const idMatch = !q.id || id.toLowerCase().includes(q.id.toLowerCase());
+      const rarityMatch = !wantedRarity || String(l.rarity || "").toLocaleLowerCase("ru").includes(wantedRarity.toLocaleLowerCase("ru"));
+      const statusMatch = !wantedStatus || String(l.status || "").toLocaleLowerCase("ru").includes(wantedStatus.toLocaleLowerCase("ru"));
+      return textMatch && idMatch && rarityMatch && statusMatch
+        && (lower === -Infinity || (l.price != null && l.price >= lower))
+        && (upper === Infinity || (l.price != null && l.price <= upper));
+    });
     const val = (l) => key === "price" ? l.price : key === "delta" ? l._delta : key === "first_seen" ? (l.first_seen ? Date.parse(l.first_seen) : null) : String(l[key] || "").toLocaleLowerCase("ru");
     rows.sort((a, b) => {
       const x = val(a), y = val(b);
       if (x == null && y == null) return 0;
-      if (x == null) return 1;                    // missing values always last
+      if (x == null) return 1;
       if (y == null) return -1;
       return (typeof x === "string" ? x.localeCompare(y, "ru") : x - y) * dir;
     });
     state.view = rows;
     state.page = Math.min(state.page, Math.max(0, Math.ceil(rows.length / PAGE) - 1));
     renderRows();
+    updateViewCounts();
   }
   function renderRows() {
     const body = clear($("rows")), total = state.view.length, pages = Math.max(1, Math.ceil(total / PAGE));
