@@ -28,7 +28,12 @@ function responseHeaders(request, env, extra = {}) {
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("Referrer-Policy", "no-referrer");
   headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-  headers.set("Content-Security-Policy", `default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors ${FRAME_ANCESTORS}`);
+  const pagePath = new URL(request.url).pathname;
+  const supportsHuEvoSdk = pagePath === "/" || pagePath === "/index.html";
+  const csp = supportsHuEvoSdk
+    ? `default-src 'none'; script-src 'self' https://huevo.su; style-src 'self'; img-src 'self' https://huevo.su https://*.huevo.su https://huevo.departament.site data:; connect-src 'self' https://huevo.su https://*.huevo.su; base-uri 'none'; form-action 'none'; frame-ancestors ${FRAME_ANCESTORS}`
+    : `default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors ${FRAME_ANCESTORS}`;
+  headers.set("Content-Security-Policy", csp);
   const origin = corsOrigin(request, env);
   if (origin) {
     headers.set("Access-Control-Allow-Origin", origin);
@@ -651,7 +656,7 @@ async function fetchHandler(request, env, ctx) {
   if (request.method === "GET" && path === "/api/support/stats") return supportStats(request, env);
   if (request.method === "POST" && path === "/api/support/intent") return createSupportIntent(request, env);
   if (request.method === "POST" && path === "/api/support/callback") return supportCallback(request, env);
-  const supportStatusMatch = path.match(/^\\/api\\/support\\/status\\/(pi_[A-Za-z0-9_-]{1,80})$/);
+  const supportStatusMatch = path.match(new RegExp("^/api/support/status/(pi_[A-Za-z0-9_-]{1,80})$"));
   if (request.method === "GET" && supportStatusMatch) return getSupportPaymentStatus(request, env, supportStatusMatch[1]);
   if (request.method === "GET" && path === "/api/live/status") return liveStatus(request, env);
   if (request.method === "POST" && path === "/api/live/page") return ingestLivePage(request, env);
