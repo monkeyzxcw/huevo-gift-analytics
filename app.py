@@ -118,8 +118,7 @@ def persistence_info():
     ephemeral = False
     return {"db_path_kind": "persistent-disk" if os.path.abspath(DB_PATH).startswith("/var/data") else "local",
             "ephemeral_warning": ephemeral,
-            "message": ("База лежит вне подключённого диска: на бесплатном плане Render данные пропадут при перезапуске/деплое. "
-                        "Подключите persistent disk и задайте HUEVO_DB=/var/data/huevo.db (платная опция, автоматически не включается).") if ephemeral else ""}
+            "message": ""}
 
 
 # ------------------------------------------------------------------ auth + limits
