@@ -27,6 +27,7 @@ jobs:
       - name: Check JavaScript syntax
         run: |
           node --check static/browser_collector.js
+          node --check static/obsidian.js
           python - <<'PY'
           from html.parser import HTMLParser
           from pathlib import Path
