@@ -16,5 +16,3 @@ services:
         value: "500"
       - key: AUTO_REFRESH_HOURS
         value: "2"
-      - key: PAGE_ONE_REFRESH_SECONDS
-        value: "5"
