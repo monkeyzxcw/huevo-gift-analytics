@@ -1,5 +1,5 @@
 fastapi>=0.110
 uvicorn[standard]>=0.27
-requests>=2.31
+requests[socks]>=2.31
 beautifulsoup4>=4.12
 selenium>=4.25
