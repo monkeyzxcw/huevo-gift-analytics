@@ -64,6 +64,10 @@ class IngestApiTests(unittest.TestCase):
         history = self.client.get("/api/history/900001").json()
         self.assertEqual(len(history), 1)
         self.assertEqual(history[0]["price"], 12345)
+        daily = self.client.get("/api/analytics/price-history?days=7&lot_id=900001")
+        self.assertEqual(daily.status_code, 200, daily.text)
+        self.assertEqual(len(daily.json()["points"]), 1)
+        self.assertEqual(daily.json()["points"][0]["avg_price"], 12345)
 
     def test_crawl_returns_actionable_error_without_server_session(self):
         response = self.client.post("/api/crawl")
