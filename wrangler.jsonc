@@ -1,8 +1,19 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "huevo-gift-analytics",
+  "main": "./src/worker.js",
   "compatibility_date": "2026-10-29",
   "assets": {
-    "directory": "./cloudflare-site"
+    "directory": "./cloudflare-site",
+    "binding": "ASSETS",
+    "run_worker_first": [
+      "/data.json",
+      "/api/*"
+    ]
+  },
+  "triggers": {
+    "crons": [
+      "0 * * * *"
+    ]
   }
 }
