@@ -2,110 +2,128 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0f0a1f">
 <title>Huevo Gift Analytics</title>
-<meta name="description" content="Аналитика рынка подарков Huevo: лоты, цены, история и выгодные предложения.">
 <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
+<a class="skip" href="#main">К содержимому</a>
 <div class="shell">
-  <aside class="side" aria-label="Разделы">
-    <div class="brand"><div class="logo" aria-hidden="true">✦</div><div><b>Huevo Gift</b><small>Analytics</small></div></div>
-    <nav class="tabs" role="tablist" id="tabs">
-      <button role="tab" data-tab="overview" class="on"><i>◈</i><span>Обзор</span></button>
-      <button role="tab" data-tab="catalog"><i>▦</i><span>Каталог</span></button>
-      <button role="tab" data-tab="deals"><i>％</i><span>Выгодные</span></button>
-      <button role="tab" data-tab="analytics"><i>▲</i><span>Аналитика</span></button>
-      <button role="tab" data-tab="favorites"><i>★</i><span>Избранное</span></button>
-      <button role="tab" data-tab="collector"><i>⇅</i><span>Сборщик</span></button>
-      <button role="tab" data-tab="support"><i>♥</i><span>Поддержать</span></button>
-    </nav>
-    <div class="side-foot"><span class="dot" id="dot"></span><span id="statusText">Проверяем…</span><small id="freshness"></small></div>
-  </aside>
+  <header class="topbar">
+    <div class="brand"><span class="logo" aria-hidden="true">◈</span><div><b>Huevo Gift Analytics</b><small>Аналитика предложений маркета подарков</small></div></div>
+    <div class="status" id="statusPill" role="status" aria-live="polite"><span class="dot" id="dot"></span><span id="statusText">Подключаемся…</span><span class="muted" id="freshness"></span></div>
+    <button class="btn primary" id="refreshBtn" type="button">↻ Обновить рынок</button>
+  </header>
 
-  <main>
-    <div id="banner" class="banner" role="status" aria-live="polite">Подключаемся к API…</div>
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Разделы">
+    <button role="tab" id="t-overview" data-tab="overview" aria-controls="tab-overview"><i aria-hidden="true">⌂</i><span>Обзор</span></button>
+    <button role="tab" id="t-catalog" data-tab="catalog" aria-controls="tab-catalog"><i aria-hidden="true">▦</i><span>Каталог</span></button>
+    <button role="tab" id="t-deals" data-tab="deals" aria-controls="tab-deals"><i aria-hidden="true">%</i><span>Выгодные</span></button>
+    <button role="tab" id="t-analytics" data-tab="analytics" aria-controls="tab-analytics"><i aria-hidden="true">▲</i><span>Аналитика</span></button>
+    <button role="tab" id="t-favorites" data-tab="favorites" aria-controls="tab-favorites"><i aria-hidden="true">★</i><span>Избранное</span></button>
+    <button role="tab" id="t-collector" data-tab="collector" aria-controls="tab-collector"><i aria-hidden="true">⚙</i><span>Сборщик</span></button>
+    <button role="tab" id="t-support" data-tab="support" aria-controls="tab-support"><i aria-hidden="true">♥</i><span>Поддержать</span></button>
+  </nav>
 
-    <!-- OVERVIEW -->
-    <section class="panel on" id="tab-overview" role="tabpanel">
-      <header class="head"><div><div class="eyebrow">Главная</div><h1>Рынок подарков сейчас</h1><p class="sub">Реальные данные из сборщика, без выдуманных цифр. Цены — это текущие предложения, а не завершённые сделки.</p></div><button class="btn primary" id="refreshBtn">↻ Обновить рынок</button></header>
-      <div class="hero2">
-        <article class="spot" id="spotLatest" aria-labelledby="h-latest"><div class="spot-tag">Новинка</div><h2 id="h-latest">Последний выставленный лот</h2><div class="spot-body"><div class="empty">Загрузка…</div></div><p class="foot" id="latestNote"></p></article>
-        <article class="spot gold" id="spotBest" aria-labelledby="h-best"><div class="spot-tag">Лучшее соотношение</div><h2 id="h-best">Лучший лот к рынку</h2><div class="spot-body"><div class="empty">Загрузка…</div></div><p class="foot" id="bestNote"></p></article>
+  <main id="main" tabindex="-1">
+    <div id="banner" class="banner" role="status" hidden></div>
+
+    <section id="tab-overview" role="tabpanel" aria-labelledby="t-overview">
+      <div class="grid two">
+        <article class="card spot" id="spotLatest" aria-labelledby="hLatest">
+          <header><span class="eyebrow">Новое</span><h2 id="hLatest">Последний замеченный лот</h2></header>
+          <div class="spot-body" data-state="loading"><div class="skeleton"></div></div>
+          <p class="note" id="latestNote"></p>
+        </article>
+        <article class="card spot best" id="spotBest" aria-labelledby="hBest">
+          <header><span class="eyebrow">Выгода</span><h2 id="hBest">Лучший лот относительно рынка</h2></header>
+          <div class="spot-body" data-state="loading"><div class="skeleton"></div></div>
+          <p class="note" id="bestNote"></p>
+        </article>
       </div>
-      <div class="kpis">
-        <div class="kpi"><span>Лотов с ценой</span><b id="kCount">—</b></div>
-        <div class="kpi"><span>Медиана</span><b id="kMedian">—</b></div>
-        <div class="kpi"><span>Минимум</span><b id="kMin">—</b></div>
-        <div class="kpi"><span>Максимум</span><b id="kMax">—</b></div>
+      <div class="kpis" id="kpis">
+        <div class="kpi"><span>Активных лотов</span><b id="kCount">—</b><small id="kCountSub"></small></div>
+        <div class="kpi"><span>Медиана цены</span><b id="kMedian">—</b><small id="kMedianSub"></small></div>
+        <div class="kpi"><span>Минимум</span><b id="kMin">—</b><small>среди предложений с ценой</small></div>
+        <div class="kpi"><span>Максимум</span><b id="kMax">—</b><small>среди предложений с ценой</small></div>
       </div>
-      <div class="two">
-        <div class="card"><div class="card-head"><h3>Динамика рынка</h3><select id="trendDays" aria-label="Период"><option value="7">7 дней</option><option value="30" selected>30 дней</option><option value="90">90 дней</option></select></div><svg id="trend" class="chart" viewBox="0 0 700 200" preserveAspectRatio="none" role="img" aria-label="Динамика цен"></svg><p class="foot" id="trendNote"></p></div>
-        <div class="card"><div class="card-head"><h3>Подешевели недавно</h3><span class="muted">по сохранённой истории</span></div><div id="drops" class="list"></div></div>
-      </div>
-    </section>
-
-    <!-- CATALOG -->
-    <section class="panel" id="tab-catalog" role="tabpanel" hidden>
-      <header class="head"><div><div class="eyebrow">Каталог</div><h1>Все лоты</h1></div><div class="row"><button class="btn" id="exportCsv">Экспорт CSV</button></div></header>
-      <div class="filters">
-        <input id="q" type="search" placeholder="Поиск по названию или ID  (нажмите /)" aria-label="Поиск">
-        <select id="sort" aria-label="Сортировка"><option value="price">Сначала дешевле</option><option value="price_desc">Сначала дороже</option><option value="title">По названию</option><option value="recent">Недавно обновлённые</option><option value="new">Новые сверху</option></select>
-        <select id="statusFilter" aria-label="Статус"><option value="">Все статусы</option></select>
-        <select id="rarityFilter" aria-label="Редкость"><option value="">Любая редкость</option></select>
-        <input id="minPrice" type="number" min="0" placeholder="Цена от" aria-label="Цена от"><input id="maxPrice" type="number" min="0" placeholder="до" aria-label="Цена до">
-        <button class="btn" id="resetFilters">Сбросить</button>
-      </div>
-      <div class="muted" id="rowsCount" style="margin:8px 2px"></div>
-      <div class="tablewrap"><table><thead><tr><th></th><th>Подарок</th><th>Цена</th><th>Статус</th><th>Проверен</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
-      <div class="row center"><button class="btn hidden" id="moreRows">Показать ещё 200</button></div>
-    </section>
-
-    <!-- DEALS -->
-    <section class="panel" id="tab-deals" role="tabpanel" hidden>
-      <header class="head"><div><div class="eyebrow">Выгодные</div><h1>Потенциально выгодные лоты</h1><p class="sub">Цена ≥15% ниже медианы не менее трёх предложений с тем же названием. Это подсказка, а не оценка стоимости.</p></div></header>
-      <div id="deals" class="cards"></div>
-    </section>
-
-    <!-- ANALYTICS -->
-    <section class="panel" id="tab-analytics" role="tabpanel" hidden>
-      <header class="head"><div><div class="eyebrow">Аналитика</div><h1>Структура рынка</h1></div></header>
-      <div class="three">
-        <div class="card"><h3>Покрытие ценами</h3><div class="donutrow"><div class="donut" id="donut"><b id="donutNum">—</b></div><div class="muted" id="donutText"></div></div></div>
-        <div class="card"><h3>Распределение цен</h3><div id="bins" class="bars"></div></div>
-        <div class="card"><h3>Редкость</h3><div id="rarity" class="bars"></div></div>
-      </div>
-      <div class="card" style="margin-top:14px"><div class="card-head"><h3>Снимки рынка</h3><span class="muted">медиана и диапазон активных предложений</span></div><svg id="trend2" class="chart" viewBox="0 0 700 200" preserveAspectRatio="none" role="img" aria-label="Снимки рынка"></svg><p class="foot" id="trend2Note"></p></div>
-    </section>
-
-    <!-- FAVORITES -->
-    <section class="panel" id="tab-favorites" role="tabpanel" hidden>
-      <header class="head"><div><div class="eyebrow">Избранное</div><h1>Ваши лоты</h1><p class="sub">Отмечайте лоты звёздочкой в каталоге. Список хранится только в этом браузере.</p></div></header>
-      <div id="favs" class="cards"></div>
-    </section>
-
-    <!-- COLLECTOR -->
-    <section class="panel" id="tab-collector" role="tabpanel" hidden>
-      <header class="head"><div><div class="eyebrow">Сборщик</div><h1>Сбор данных</h1></div></header>
-      <div class="two">
-        <div class="card"><h3>Состояние</h3><pre id="statusBox" class="pre">Загрузка…</pre><div class="row"><button class="btn" id="diagnostics">Проверить сервис</button><button class="btn" id="probeHuevo" title="Один безопасный запрос: вердикт без cookies и содержимого страницы">Проверить доступ к Huevo</button></div><pre id="diagBox" class="pre hidden" aria-live="polite"></pre></div>
-        <div class="card"><h3>Как загрузить данные</h3><ol class="steps"><li>Скачайте сборщик.</li><li>Откройте маркет подарков Huevo в браузере, где вы вошли в аккаунт.</li><li>DevTools → Console: вставьте проверенный код, укажите адрес панели и <code>INGEST_TOKEN</code>.</li><li>Скрипт передаёт лоты порциями и останавливается при HTTP 418/403/429. Cookies на сервер не уходят.</li></ol><div class="row"><a class="btn primary" href="/static/browser_collector.js" download="huevo-browser-collector.js">Скачать сборщик</a><a class="btn" href="https://huevo.su/market/gifts" target="_blank" rel="noopener noreferrer">Открыть Huevo ↗</a></div></div>
+      <div class="grid two">
+        <article class="card"><header><h2>Динамика медианы</h2><label class="sel">Период
+          <select id="trendDays"><option value="7">7 дней</option><option value="30" selected>30 дней</option><option value="90">90 дней</option></select></label></header>
+          <svg id="trend" class="chart" viewBox="0 0 700 200" role="img" aria-label="График медианы цены"></svg><p class="note" id="trendNote"></p></article>
+        <article class="card"><header><h2>Недавние снижения цен</h2></header><div id="drops" class="list"></div></article>
       </div>
     </section>
 
-    <!-- SUPPORT -->
-    <section class="panel" id="tab-support" role="tabpanel" hidden>
-      <header class="head"><div><div class="eyebrow">Поддержка</div><h1>Поддержать автора</h1><p class="sub">Платёж в монетках huEVO по официальному протоколу: сервер создаёт платёж, вы подтверждаете его в окне huEVO, сервер проверяет итог.</p></div></header>
-      <div class="two">
-        <div class="card"><h3>Выберите сумму</h3><div class="amounts" id="amounts"></div><div id="supportMsg" class="banner" hidden role="status" aria-live="polite"></div><p class="foot" id="supportHint"></p></div>
-        <div class="card"><h3>Спасибо</h3><div class="thanks"><b id="supCount">—</b><span>поддержали</span><b id="supTotal">—</b><span>монеток всего</span></div><p class="foot">Считаются только реальные подтверждённые платежи. Личные данные не публикуются.</p></div>
+    <section id="tab-catalog" role="tabpanel" aria-labelledby="t-catalog" hidden>
+      <form class="filters card" id="filters" autocomplete="off" role="search">
+        <label class="wide">Поиск<input id="q" type="search" placeholder="Название, ID или серия (нажмите /)" maxlength="100"></label>
+        <label>Сортировка<select id="sort"><option value="new">Сначала новые</option><option value="price">Дешевле</option><option value="price_desc">Дороже</option><option value="title">По названию</option><option value="recent">Недавно виден</option></select></label>
+        <label>Статус<select id="statusFilter"><option value="">Все статусы</option></select></label>
+        <label>Редкость<select id="rarityFilter"><option value="">Любая редкость</option></select></label>
+        <label>Цена от<input id="minPrice" type="number" min="0" inputmode="numeric" placeholder="0"></label>
+        <label>Цена до<input id="maxPrice" type="number" min="0" inputmode="numeric" placeholder="∞"></label>
+        <div class="actions"><button class="btn" id="resetFilters" type="button">Сбросить</button><button class="btn" id="exportCsv" type="button">CSV</button></div>
+      </form>
+      <div class="meta-row"><span id="rowsCount" aria-live="polite">—</span><div class="pager"><button class="btn mini" id="prevPage" type="button">← Назад</button><span id="pageInfo"></span><button class="btn mini" id="nextPage" type="button">Вперёд →</button></div></div>
+      <div id="lots" class="lots" aria-busy="true"></div>
+    </section>
+
+    <section id="tab-deals" role="tabpanel" aria-labelledby="t-deals" hidden>
+      <article class="card"><header><h2>Предложения ниже рынка</h2></header>
+        <p class="note" id="dealsNote">Сравнение внутри группы «название + редкость», минимум 3 предложения. Это текущие цены в объявлениях, а не завершённые сделки.</p>
+        <div id="deals" class="grid cards"></div></article>
+    </section>
+
+    <section id="tab-analytics" role="tabpanel" aria-labelledby="t-analytics" hidden>
+      <div class="kpis" id="aKpis"></div>
+      <div class="grid two">
+        <article class="card"><header><h2>Распределение цен</h2></header><div id="bins" class="bars"></div><p class="note" id="binsNote"></p></article>
+        <article class="card"><header><h2>Редкость активных лотов</h2></header><div id="rarity" class="bars"></div></article>
       </div>
+      <div class="grid two">
+        <article class="card"><header><h2>Изменение медианы</h2></header><div id="changes" class="list"></div></article>
+        <article class="card"><header><h2>Динамика медианы</h2></header><svg id="trend2" class="chart" viewBox="0 0 700 200" role="img" aria-label="График медианы цены"></svg><p class="note" id="trend2Note"></p></article>
+      </div>
+      <article class="card"><header><h2>Как это считается</h2></header><p class="note" id="method"></p></article>
+    </section>
+
+    <section id="tab-favorites" role="tabpanel" aria-labelledby="t-favorites" hidden>
+      <article class="card"><header><h2>Избранное</h2></header><p class="note">Список хранится только в этом браузере.</p><div id="favs" class="grid cards"></div></article>
+    </section>
+
+    <section id="tab-collector" role="tabpanel" aria-labelledby="t-collector" hidden>
+      <div class="grid two">
+        <article class="card"><header><h2>Состояние данных</h2></header><pre id="statusBox" class="pre">Загрузка…</pre>
+          <div class="row"><button class="btn" id="diagnostics" type="button">Обновить статус</button><button class="btn" id="probeHuevo" type="button">Проверить доступ к Huevo</button></div>
+          <pre id="diagBox" class="pre" hidden></pre></article>
+        <article class="card"><header><h2>Браузерный сбор</h2></header>
+          <ol class="steps"><li>Скачайте сборщик.</li><li>Откройте маркет подарков Huevo в браузере, где вы вошли в аккаунт.</li><li>DevTools → Console: вставьте код и введите <code>INGEST_TOKEN</code> в окне запроса.</li><li>Скрипт передаёт лоты порциями и останавливается при HTTP 403/418/429, учитывая <code>Retry-After</code>. Cookies на сервер не уходят.</li></ol>
+          <div class="row"><a class="btn primary" href="/static/browser_collector.js" download="huevo-browser-collector.js">Скачать сборщик</a><a class="btn" href="https://huevo.su/market/gifts" target="_blank" rel="noopener noreferrer">Открыть Huevo ↗</a></div>
+          <p class="note">Защита Huevo не обходится: нет прокси, смены IP и массовых повторов.</p></article>
+      </div>
+    </section>
+
+    <section id="tab-support" role="tabpanel" aria-labelledby="t-support" hidden>
+      <article class="card support"><header><h2>Поддержать автора</h2></header>
+        <p>Оплата идёт монетками huEVO через официальное окно подтверждения. Приложение никогда не видит ваш пароль.</p>
+        <div id="amounts" class="amounts"></div>
+        <div id="supportMsg" class="banner" role="status" hidden></div>
+        <p class="note" id="supportHint"></p>
+        <p class="note">Поддержали: <b id="supCount">0</b> · собрано <b id="supTotal">0</b> ◉ (без тестовых платежей)</p></article>
     </section>
   </main>
+  <footer class="foot">Все цены — текущие предложения. Данные о завершённых продажах Huevo не публикует.</footer>
 </div>
 
-<dialog id="tokenDialog"><form method="dialog"><h3>Токен доступа</h3><p class="muted">Нужен для запуска сбора и проверки. Хранится только в памяти вкладки.</p><input type="password" id="tokenInput" autocomplete="off" placeholder="INGEST_TOKEN" required><div class="row" style="margin-top:12px"><button class="btn primary" value="ok">Продолжить</button><button class="btn" value="cancel" formnovalidate>Отмена</button></div></form></dialog>
-<dialog id="histDialog"><div class="card-head"><h3 id="histTitle">История цены</h3><button class="btn" id="histClose" aria-label="Закрыть">✕</button></div><svg id="histChart" class="chart" viewBox="0 0 700 200" preserveAspectRatio="none" role="img" aria-label="История цены лота"></svg><p class="foot" id="histNote"></p></dialog>
+<dialog id="tokenDialog"><form method="dialog"><h3>Токен администратора</h3>
+  <p class="note">Нужен только для запуска сбора и проверки. Хранится в памяти вкладки и не сохраняется.</p>
+  <input id="tokenInput" type="password" autocomplete="off" placeholder="INGEST_TOKEN" aria-label="INGEST_TOKEN">
+  <div class="row end"><button class="btn" value="cancel">Отмена</button><button class="btn primary" value="ok">Продолжить</button></div></form></dialog>
+<dialog id="histDialog"><h3 id="histTitle"></h3><svg id="histChart" class="chart" viewBox="0 0 700 200" role="img" aria-label="История цены"></svg><p class="note" id="histNote"></p>
+  <div class="row end"><button class="btn" id="histClose" type="button">Закрыть</button></div></dialog>
 <script src="/static/app.js" defer></script>
 </body>
 </html>

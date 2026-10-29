@@ -6,6 +6,10 @@ services:
     healthCheckPath: /health
     autoDeploy: true
     envVars:
+      # Free plan: the disk is EPHEMERAL, huevo.db is lost on every deploy/restart.
+      # For durable history attach a persistent disk (paid; NOT enabled automatically):
+      #   disk: {name: data, mountPath: /var/data, sizeGB: 1}   (service-level key)
+      # and then set HUEVO_DB to /var/data/huevo.db.
       - key: HUEVO_DB
         value: huevo.db
       - key: HUEVO_BASE_URL

@@ -68,3 +68,37 @@ class BestValueTests(unittest.TestCase):
         res = best_value(active, gone)
         self.assertEqual(res[0]["lot_id"], "1")
         self.assertEqual(res[0]["basis"], "gone")
+
+
+class RobustnessTests(unittest.TestCase):
+    def test_rarity_separates_groups(self):
+        from analytics import find_deals
+        lots = [{"lot_id": str(i), "title": "Rose", "rarity": "Редкий", "price": 100} for i in range(3)]
+        lots += [{"lot_id": "9", "title": "Rose", "rarity": "Обычный", "price": 10}]
+        self.assertEqual(find_deals(lots), [])   # the cheap "Обычный" one has no comparable group
+
+    def test_suspicious_flag_and_ordering(self):
+        from analytics import find_deals
+        lots = [lot(1, "A", 1), lot(2, "A", 100), lot(3, "A", 100), lot(4, "A", 110),
+                lot(5, "B", 70), lot(6, "B", 100), lot(7, "B", 100)]
+        deals = find_deals(lots)
+        self.assertEqual([d["lot_id"] for d in deals], ["5", "1"])
+        self.assertTrue(deals[1]["suspicious"] and not deals[0]["suspicious"])
+
+    def test_bbooleans_zero_and_strings_ignored(self):
+        from analytics import market_summary, find_deals
+        self.assertEqual(market_summary([True, "5", None, 0, 10])["priced"], 2)
+        self.assertEqual(find_deals([lot(1, "A", 0), lot(2, "A", True), lot(3, "A", "9")]), [])
+
+    def test_price_bins_outlier_resistant(self):
+        from analytics import price_bins
+        bins = price_bins([10] * 20 + [11, 12, 13, 14, 15, 16, 17, 18, 100000])
+        self.assertEqual(sum(b["count"] for b in bins), 29)
+        self.assertTrue(bins[0]["label"].startswith("≤") and bins[-1]["label"].startswith(">"))
+        self.assertEqual(price_bins([]), [])
+        self.assertEqual(len(price_bins([5, 5, 5])), 1)
+
+    def test_percentiles(self):
+        from analytics import market_summary
+        s = market_summary([1, 2, 3, 4, 5])
+        self.assertEqual((s["median"], s["p25"], s["p75"]), (3, 2, 4))
