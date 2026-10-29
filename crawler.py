@@ -125,14 +125,20 @@ def install_session(browser, cfg, log):
     browser.get(cfg.base_url + "/")        # cookies can only be set once a page of the domain is open
     now = int(time.time())
     input_domains = sorted({str(c.get("domain", host)).strip().lower().lstrip(".") for c in cookies if isinstance(c, dict)})
+    # Cookie names and flags are metadata, not credentials; values are never logged.
+    cookie_metadata = sorted({
+        f"{str(c.get('name', '?'))}[secure={bool(c.get('secure', False))},httponly={bool(c.get('httpOnly', False))},samesite={str(c.get('sameSite', 'unset'))}]"
+        for c in cookies if isinstance(c, dict) and c.get("name")
+    })
     expired = sum(
         1 for c in cookies if isinstance(c, dict)
         and c.get("expiry") not in (None, "")
         and _cookie_expiry(c.get("expiry")) is not None
         and _cookie_expiry(c.get("expiry")) <= now
     )
-    log.info("cookie export summary: count=%d domains=%s expired=%d (values never logged)",
-             len(cookies), ",".join(input_domains) if input_domains else "none", expired)
+    log.info("cookie export summary: count=%d domains=%s expired=%d names_and_flags=%s (values never logged)",
+             len(cookies), ",".join(input_domains) if input_domains else "none", expired,
+             ",".join(cookie_metadata) if cookie_metadata else "none")
     accepted = rejected = 0
     for raw in cookies:
         if not isinstance(raw, dict):
@@ -210,8 +216,8 @@ def run_crawl(browser, store, cfg, log, progress=lambda page, found: None, shoul
         t0 = time.monotonic()
         probe, rows, links, _ = observe_with_retry(browser, cfg, path, log)
         verdict = probe["verdict"]
-        log.info("crawl page=%d verdict=%s http=%s(%s) host=%s title=%r body_len=%s cards=%s parsed=%d %.1fs", page, verdict,
-                 probe.get("http_status"), probe.get("status_source"), probe.get("final_host"), probe.get("title"),
+        log.info("crawl page=%d verdict=%s http=%s(%s) host=%s path=%s title=%r body_len=%s cards=%s parsed=%d %.1fs", page, verdict,
+                 probe.get("http_status"), probe.get("status_source"), probe.get("final_host"), probe.get("final_path"), probe.get("title"),
                  probe.get("body_length"), links, len(rows), time.monotonic() - t0)
         common = dict(pages=pages, unique_lots=len(seen), new_lots=new_total, changed_lots=changed_total,
                       http_status=probe.get("http_status") or probe.get("status_class_inferred"),
