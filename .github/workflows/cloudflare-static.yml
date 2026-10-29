@@ -28,12 +28,12 @@ jobs:
       - name: Collect a complete market snapshot
         id: collect
         env:
-          HUEVO_COOKIES_JSON: \${{ secrets.HUEVO_COOKIES_JSON }}
-          HUEVO_COOKIES: \${{ secrets.HUEVO_COOKIES }}
-          HUEVO_BASE_URL: \${{ vars.HUEVO_BASE_URL }}
-          CRAWL_DELAY: \${{ vars.CRAWL_DELAY }}
-          MAX_PAGES: \${{ vars.MAX_PAGES }}
-          CRAWL_BLOCK_COOLDOWN_HOURS: \${{ vars.CRAWL_BLOCK_COOLDOWN_HOURS }}
+          HUEVO_COOKIES_JSON: ${{ secrets.HUEVO_COOKIES_JSON }}
+          HUEVO_COOKIES: ${{ secrets.HUEVO_COOKIES }}
+          HUEVO_BASE_URL: ${{ vars.HUEVO_BASE_URL || 'https://huevo.su' }}
+          CRAWL_DELAY: ${{ vars.CRAWL_DELAY || '2.0' }}
+          MAX_PAGES: ${{ vars.MAX_PAGES || '500' }}
+          CRAWL_BLOCK_COOLDOWN_HOURS: ${{ vars.CRAWL_BLOCK_COOLDOWN_HOURS || '6' }}
           LOG_LEVEL: INFO
         run: |
           docker run --rm --shm-size=2g \
@@ -63,6 +63,6 @@ jobs:
       - name: Deploy static assets to Cloudflare
         if: success()
         env:
-          CLOUDFLARE_API_TOKEN: \${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: \${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx --yes wrangler@4 deploy --config wrangler.jsonc
