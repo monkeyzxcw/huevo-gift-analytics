@@ -22,7 +22,7 @@ app.add_middleware(
     allow_origins=["https://huevo.su"],
     allow_credentials=False,
     allow_methods=["POST", "OPTIONS"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 INGEST_TOKEN = os.getenv("INGEST_TOKEN", "")
 # JSON array of cookies exported from an already authenticated huevo.su browser.
@@ -213,7 +213,11 @@ async def ingest_browser_data(request: Request, token: str = ""):
     """Accept gift lots parsed by the user's logged-in browser on huevo.su."""
     if not INGEST_TOKEN:
         raise HTTPException(status_code=503, detail="На Render не задан INGEST_TOKEN")
-    if not token or token != INGEST_TOKEN:
+    # Prefer Authorization so the secret is not copied into query-string access logs.
+    authorization = request.headers.get("authorization", "")
+    header_token = authorization[7:].strip() if authorization.lower().startswith("bearer ") else ""
+    supplied_token = header_token or token
+    if not supplied_token or supplied_token != INGEST_TOKEN:
         raise HTTPException(status_code=403, detail="Неверный токен сбора")
     try:
         payload = await request.json()
@@ -258,6 +262,11 @@ async def ingest_browser_data(request: Request, token: str = ""):
 
 @app.post("/api/crawl")
 def start_crawl(background: BackgroundTasks):
+    if not HUEVO_COOKIES_JSON:
+        raise HTTPException(
+            status_code=503,
+            detail="Серверная сессия Huevo не настроена. Откройте Huevo в авторизованном браузере и используйте browser collector из панели; cookies вручную передавать не нужно.",
+        )
     with lock:
         if state["running"]:
             return {"ok": True, "message": "Сбор уже выполняется"}
@@ -283,7 +292,12 @@ def scheduled_crawler():
 
 @app.on_event("startup")
 def start_scheduler():
-    threading.Thread(target=scheduled_crawler, name="huevo-auto-refresh", daemon=True).start()
+    # Do not start a crawler that is guaranteed to fail without an authenticated session.
+    if HUEVO_COOKIES_JSON:
+        threading.Thread(target=scheduled_crawler, name="huevo-auto-refresh", daemon=True).start()
+    else:
+        with lock:
+            state["message"] = "Ожидает браузерного сбора: серверная сессия Huevo не настроена"
 
 @app.get("/api/status")
 def get_status():
