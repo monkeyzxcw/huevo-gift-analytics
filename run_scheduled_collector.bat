@@ -23,12 +23,17 @@ git restore -- cloudflare-site/data.json
 if errorlevel 1 goto failed
 
 REM Sync source and any previous local commit before collecting.
-git pull --rebase origin main
+git pull --rebase --autostash origin main
 if errorlevel 1 goto failed
 
 REM Reuse the dedicated local Chrome profile; cookies never leave this PC.
 ".venv\Scripts\python.exe" scripts\collect_snapshot.py --local-profile
-if errorlevel 1 goto failed
+set COLLECT_RC=%ERRORLEVEL%
+if "%COLLECT_RC%"=="3" (
+  echo Collection skipped: Huevo access is paused after an earlier limit. No request was sent.
+  goto failed
+)
+if not "%COLLECT_RC%"=="0" goto failed
 
 git add cloudflare-site/data.json
 if errorlevel 1 goto failed

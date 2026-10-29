@@ -121,6 +121,41 @@ class CrawlerTests(unittest.TestCase):
         self.assertEqual((res.status, res.cause), ("network_error", "timeout"))
         self.assertEqual(self.store.counts()["active_total"], 0)
 
+    def test_transient_timeout_is_retried_a_bounded_number_of_times(self):
+        class Flaky(FakeBrowser):
+            def get(self, url):
+                if len(self.gets) < 2 and "page=" not in url:
+                    self.gets.append(url)
+                    self.ready_state = "loading"
+                    raise RuntimeError("timeout: Timed out receiving message from renderer")
+                self.ready_state = "complete"
+                super().get(url)
+        waits = []
+        c = CrawlConfig(delay=0, settle=0, retry_backoff=3, ready_timeout=0.01, sleep=waits.append)
+        b = Flaky({1: (200, page_html([1, 2]), None), 2: (200, page_html([]), None)})
+        res = run_crawl(b, self.store, c, log)
+        self.assertEqual(res.status, "ok")
+        self.assertIn(3, waits); self.assertIn(6, waits)       # backoff grows 1x, 2x
+
+    def test_persistent_timeout_gives_up_after_configured_retries(self):
+        class Dead(FakeBrowser):
+            ready_state = "loading"
+            def get(self, url):
+                self.gets.append(url)
+                raise RuntimeError("timeout: Timed out receiving message from renderer")
+        b = Dead({})
+        res = run_crawl(b, self.store, cfg(ready_timeout=0.05, network_retries=2), log)
+        self.assertEqual((res.status, res.cause), ("network_error", "timeout"))
+        self.assertEqual(len(b.gets), 3)
+
+    def test_block_and_dns_are_never_retried(self):
+        b = FakeBrowser({1: (429, "<html><body>too many</body></html>", "30")})
+        run_crawl(b, self.store, cfg(network_retries=5), log)
+        self.assertEqual(len(b.gets), 1)
+        b = FakeBrowser({}, fail_on=lambda u: True)
+        run_crawl(b, self.store, cfg(network_retries=5), log)
+        self.assertEqual(len(b.gets), 1)
+
     def test_blocked_pass_does_not_touch_existing_lots_or_snapshots(self):
         self.store.upsert_many([{"lot_id": "9", "title": "Старый", "price": 5, "status": "x"}])
         before = self.store.counts()
