@@ -149,7 +149,11 @@ jobs:
           PY
           )"
           if [ "$HAS_D1" = "yes" ]; then
-            npx --yes wrangler@4 d1 migrations apply huevo-live-data --remote --config wrangler.jsonc
+            if npx --yes wrangler@4 d1 migrations apply huevo-live-data --remote --config wrangler.jsonc; then
+              echo "D1 migrations applied."
+            else
+              echo "::warning title=D1 migration::Cloudflare API refused the D1 migration. Deployment will continue; the Worker bootstraps the optional support table from its D1 binding. Restore D1 Write permission on CLOUDFLARE_API_TOKEN to keep Wrangler migrations recorded."
+            fi
           else
             echo "D1 is not bound yet; deploying with the static snapshot fallback."
           fi
