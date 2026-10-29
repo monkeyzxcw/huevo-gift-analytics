@@ -21,8 +21,6 @@ concurrency:
 
 jobs:
   deploy:
-    # The scheduled/manual run already deploys its snapshot. Avoid a second deploy
-    # when that run pushes its generated data.json commit back to main.
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -32,23 +30,23 @@ jobs:
           ref: main
           fetch-depth: 0
 
-        if: github.event_name != 'push'
       - name: Set up Python
+        if: ${{ github.event_name != 'push' }}
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
 
-        if: github.event_name != 'push'
       - name: Install Chrome
+        if: ${{ github.event_name != 'push' }}
         uses: browser-actions/setup-chrome@v1
 
-        if: github.event_name != 'push'
       - name: Install Python dependencies
+        if: ${{ github.event_name != 'push' }}
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
 
-        if: github.event_name != 'push'
       - name: Collect all Huevo market pages
+        if: ${{ github.event_name != 'push' }}
         env:
           HUEVO_COOKIES_JSON: ${{ secrets.HUEVO_COOKIES_JSON }}
           HUEVO_COOKIES: ${{ secrets.HUEVO_COOKIES }}
@@ -57,20 +55,18 @@ jobs:
           MAX_PAGES: "500"
         run: python scripts/collect_snapshot.py
 
-        if: github.event_name != 'push'
       - name: Validate collected snapshot
+        if: ${{ github.event_name != 'push' }}
         run: |
           python - <<'PY'
           import json
           from pathlib import Path
-          path = Path('cloudflare-site/data.json')
-          data = json.loads(path.read_text(encoding='utf-8'))
+          data = json.loads(Path('cloudflare-site/data.json').read_text(encoding='utf-8'))
           if not isinstance(data.get('lots'), list) or not data['lots']:
               raise SystemExit('Snapshot validation failed: lots must be a non-empty list')
           if not data.get('generated_at'):
               raise SystemExit('Snapshot validation failed: generated_at is missing')
-          collector = data.get('collector') or {}
-          if collector.get('status') != 'ok':
+          if (data.get('collector') or {}).get('status') != 'ok':
               raise SystemExit('Snapshot validation failed: collector status is not ok')
           forbidden = {'cookie', 'cookies', 'authorization', 'token', 'session', 'password'}
           def walk(value, path='root'):
@@ -86,8 +82,8 @@ jobs:
           print(f"Validated {len(data['lots'])} lots; generated_at={data['generated_at']}")
           PY
 
-        if: github.event_name != 'push'
       - name: Commit updated public snapshot
+        if: ${{ github.event_name != 'push' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -99,7 +95,6 @@ jobs:
             git push origin HEAD:main
           fi
 
-        if: github.event_name != 'push'
       - name: Validate Cloudflare credentials
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -115,6 +110,5 @@ jobs:
           echo "CLOUDFLARE_API_TOKEN=$CLOUDFLARE_API_TOKEN" >> "$GITHUB_ENV"
           echo "CLOUDFLARE_ACCOUNT_ID=$CLOUDFLARE_ACCOUNT_ID" >> "$GITHUB_ENV"
 
-        if: github.event_name != 'push'
       - name: Deploy dashboard and snapshot to Cloudflare
         run: npx --yes wrangler@4 deploy --config wrangler.jsonc
