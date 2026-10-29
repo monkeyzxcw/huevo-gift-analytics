@@ -104,14 +104,35 @@ def observe(browser, cfg, path, parser=None):
     return probe, rows, links, parsed.get("failures", [])
 
 
+
+
+def _cookie_expiry(value):
+    """Return a cookie expiry in Unix seconds, or None for a session/invalid expiry."""
+    if value in (None, ""):
+        return None
+    try:
+        return int(float(value))
+    except (TypeError, ValueError, OverflowError):
+        return None
+
 def install_session(browser, cfg, log):
     """Install cookies for the configured base host only. Returns (accepted, rejected)."""
     cookies = load_cookie_export(cfg.cookies_raw)
     if not cookies:
         raise ValueError("В экспорте не найдено cookies с полями name и value.")
     from urllib.parse import urlsplit
-    host = urlsplit(cfg.base_url).hostname
+    host = (urlsplit(cfg.base_url).hostname or "").lower()
     browser.get(cfg.base_url + "/")        # cookies can only be set once a page of the domain is open
+    now = int(time.time())
+    input_domains = sorted({str(c.get("domain", host)).strip().lower().lstrip(".") for c in cookies if isinstance(c, dict)})
+    expired = sum(
+        1 for c in cookies if isinstance(c, dict)
+        and c.get("expiry") not in (None, "")
+        and _cookie_expiry(c.get("expiry")) is not None
+        and _cookie_expiry(c.get("expiry")) <= now
+    )
+    log.info("cookie export summary: count=%d domains=%s expired=%d (values never logged)",
+             len(cookies), ",".join(input_domains) if input_domains else "none", expired)
     accepted = rejected = 0
     for raw in cookies:
         if not isinstance(raw, dict):
@@ -120,12 +141,27 @@ def install_session(browser, cfg, log):
         if not cookie:
             rejected += 1
             continue
+        # A permitted Huevo domain is not necessarily the domain this run visits.
+        # Reject cross-domain cookies explicitly instead of treating add_cookie as proof of auth.
+        scope = str(cookie.get("domain", "")).lstrip(".").lower()
+        if host != scope and not host.endswith("." + scope):
+            rejected += 1
+            continue
+        expiry = _cookie_expiry(cookie.get("expiry"))
+        if expiry is not None and expiry <= now:
+            rejected += 1
+            continue
         try:
             browser.add_cookie(cookie)
             accepted += 1
         except Exception:
             rejected += 1
-    log.info("cookies accepted=%d rejected=%d (values never logged)", accepted, rejected)
+    try:
+        visible = len(browser.get_cookies())
+    except Exception:
+        visible = -1
+    log.info("cookie install summary: accepted=%d rejected=%d visible_on_base_host=%d (values never logged)",
+             accepted, rejected, visible)
     return accepted, rejected
 
 

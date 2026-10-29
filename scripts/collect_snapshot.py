@@ -129,13 +129,17 @@ def make_browser(local_login=False, local_profile=False):
 
     # Use the same browser User-Agent for cookie-based and manual-login runs.
     # Can be overridden through HUEVO_USER_AGENT; cookie values are never logged.
-    user_agent = os.getenv(
-        "HUEVO_USER_AGENT",
+    default_user_agent = (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
-    ).strip()
-    if user_agent:
-        options.add_argument(f"--user-agent={user_agent}")
+        "(KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36"
+    )
+    configured_user_agent = os.getenv("HUEVO_USER_AGENT", "").strip()
+    # GitHub Actions exposes an unset secret as an empty environment variable.
+    # os.getenv(name, default) therefore does NOT apply its default in that case.
+    # Use the known browser-compatible fallback whenever the secret is empty.
+    user_agent = configured_user_agent or default_user_agent
+    LOG.info("browser user-agent source=%s", "HUEVO_USER_AGENT secret" if configured_user_agent else "built-in fallback")
+    options.add_argument(f"--user-agent={user_agent}")
 
     if local_login or local_profile:
         # Dedicated local-only Chrome profile: the Huevo session stays on this PC.
