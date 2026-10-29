@@ -86,6 +86,16 @@ class IngestApiTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+    def test_analytics_price_history_rejects_invalid_lot_id(self):
+        response = self.client.get("/api/analytics/price-history?days=30&lot_id=not-a-number")
+        self.assertEqual(response.status_code, 400)
+
+    def test_analytics_price_history_limits_requested_period(self):
+        response = self.client.get("/api/analytics/price-history?days=999")
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["days"], 90)
+        self.assertEqual(response.json()["points"], [])
+
     def test_diagnostics_never_exposes_ingest_token(self):
         response = self.client.get("/api/diagnostics")
         self.assertEqual(response.status_code, 200)
