@@ -45,12 +45,9 @@
       : "Каталог пока пуст");
     // Match the existing KPI: this is the count of offers with a parsed price.
     $("count").textContent = format(priced);
-    if (lots.length) {
-      const prices = lots.map(lot => price(lot.price)).filter(n => n !== null);
-      $("avg").textContent = prices.length ? format(prices.reduce((sum, n) => sum + n, 0) / prices.length) + " ◉" : "—";
-      $("min").textContent = prices.length ? format(Math.min(...prices)) + " ◉" : "—";
-      $("max").textContent = prices.length ? format(Math.max(...prices)) + " ◉" : "—";
-    }
+    $("avg").textContent = stats.avgp === null || stats.avgp === undefined ? "—" : format(stats.avgp) + " ◉";
+    $("min").textContent = stats.minp === null || stats.minp === undefined ? "—" : format(stats.minp) + " ◉";
+    $("max").textContent = stats.maxp === null || stats.maxp === undefined ? "—" : format(stats.maxp) + " ◉";
   }
   function renderPriceBins(lots) {
     const values = lots.map(lot => price(lot.price)).filter(n => n !== null).sort((a, b) => a - b);
