@@ -131,7 +131,11 @@ def access_block_status(text):
     if not any(marker in normalized for marker in markers):
         return None
     match = re.search(r"\b(418|429|403)\b", normalized)
-    return int(match.group(1)) if match else 403
+    if match:
+        return int(match.group(1))
+    if "too many requests" in normalized:
+        return 429
+    return 403
 
 
 def crawl():
