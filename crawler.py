@@ -49,7 +49,9 @@ def _hosts(cfg):
 def _wait_ready(browser, timeout, sleep):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        if browser.execute_script("return document.readyState") == "complete":
+        # "interactive" is sufficient to inspect the already parsed DOM; waiting
+        # for every late resource can hang on a market page indefinitely.
+        if browser.execute_script("return document.readyState") in ("interactive", "complete"):
             return True
         sleep(0.2)
     return False
@@ -60,7 +62,19 @@ def observe(browser, cfg, path):
     try:
         browser.get(cfg.base_url + path)
     except Exception as exc:
-        return {"verdict": "network_error", "cause": classify_network_error(exc)}, [], 0, []
+        # A Selenium page-load timeout can occur after the DOM has already
+        # navigated to Huevo. Inspect that page before classifying it as a network
+        # failure; non-timeout navigation errors still stop immediately.
+        message = str(exc).lower()
+        is_timeout = "timeout" in message or "timed out" in message
+        if not is_timeout:
+            return {"verdict": "network_error", "cause": classify_network_error(exc)}, [], 0, []
+        try:
+            state = browser.execute_script("return document.readyState")
+        except Exception:
+            return {"verdict": "network_error", "cause": "timeout"}, [], 0, []
+        if state not in ("interactive", "complete") and not _wait_ready(browser, 5, cfg.sleep):
+            return {"verdict": "network_error", "cause": "timeout"}, [], 0, []
     if not _wait_ready(browser, cfg.ready_timeout, cfg.sleep):
         return {"verdict": "network_error", "cause": "timeout"}, [], 0, []
     cfg.sleep(cfg.settle)
