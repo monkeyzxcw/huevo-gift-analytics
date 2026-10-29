@@ -31,3 +31,7 @@ Thumbs.db
 # Local collector cooldown memory
 .collector-state.json
 .collector-state.json.tmp
+
+# Local sales history database
+history.db
+history.db-*
