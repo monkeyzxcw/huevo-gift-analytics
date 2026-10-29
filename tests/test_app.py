@@ -78,7 +78,7 @@ class IngestApiTests(unittest.TestCase):
         self.assertTrue(cookies[0]["httpOnly"])
 
     def test_cookie_netscape_export(self):
-        raw = "# Netscape HTTP Cookie File\\n#HttpOnly_.huevo.departament.site\\tTRUE\\t/\\tTRUE\\t1800000000\\tsession\\texample-only\\n"
+        raw = "# Netscape HTTP Cookie File\n#HttpOnly_.huevo.departament.site\tTRUE\t/\tTRUE\t1800000000\tsession\texample-only\n"
         cookies = app_module.load_cookie_export(raw)
         self.assertEqual(len(cookies), 1)
         self.assertEqual(cookies[0]["domain"], ".huevo.departament.site")
