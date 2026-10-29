@@ -1,4 +1,4 @@
-"""Import public catalog/history from a Render SQLite backup into the static snapshot.
+"""Import public catalog/history from a local SQLite database into the static snapshot.
 
 Only reads lots, price_history, and market_snapshots. It deliberately does not export
 support_payments, key/value runtime state, cookies, or any other internal tables.
