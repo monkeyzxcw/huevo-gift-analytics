@@ -207,6 +207,10 @@ def looks_like_login_page(url, title="", heading="", body_text="", password_visi
             value or "",
         )
         for value in (title, heading)
+        if re.fullmatch(
+            r"\s*(войти|вход|авторизация|вход в аккаунт|sign in|log in|login)\s*",
+            (value or "").strip().lower(),
+        )
     )
     return bool(simple_login_heading and not has_market_cards)
 
