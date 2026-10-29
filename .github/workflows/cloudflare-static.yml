@@ -2,7 +2,6 @@ name: Huevo collector and Cloudflare deploy
 
 on:
   schedule:
-    # GitHub Actions uses UTC. Keep the crawl interval conservative to reduce load on Huevo.
     - cron: "*/10 * * * *"
   push:
     branches:
@@ -14,7 +13,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: huevo-cloudflare-collector-deploy
@@ -25,6 +24,8 @@ jobs:
     if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    permissions:
+      contents: write
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -47,6 +48,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Collect all Huevo market pages
+        id: collect
         env:
           HUEVO_COOKIES_JSON: ${{ secrets.HUEVO_COOKIES_JSON }}
           HUEVO_COOKIES: ${{ secrets.HUEVO_COOKIES }}
@@ -55,7 +57,10 @@ jobs:
           MAX_PAGES: "500"
         run: python scripts/collect_snapshot.py
 
-      - name: Commit updated public snapshot
+      # Even a blocked/failed crawl may write a safe status into the previous valid snapshot.
+      # Commit that status so cooldown survives the ephemeral GitHub runner.
+      - name: Commit updated public snapshot or collector status
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -68,10 +73,12 @@ jobs:
           fi
 
   deploy:
-    if: ${{ always() && (github.event_name == 'push' || needs.collect.result == 'success') }}
+    if: ${{ always() && (github.event_name == 'push' || needs.collect.result == 'success' || needs.collect.result == 'failure') }}
     needs: [collect]
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
