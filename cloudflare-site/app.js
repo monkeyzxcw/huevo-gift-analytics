@@ -436,6 +436,9 @@
       const img = l.image_url && /^https:\/\//i.test(l.image_url) ? h("img", { class: "thumb", src: l.image_url, alt: "", loading: "lazy", referrerpolicy: "no-referrer" }) : h("span", { class: "thumb", text: "🎁", "aria-hidden": "true" });
       img.addEventListener("error", () => img.replaceWith(h("span", { class: "thumb", text: "🎁", "aria-hidden": "true" })));
       const delta = l._delta == null ? h("span", { class: "muted", text: "—" }) : h("span", { class: l._delta < 0 ? "good" : "bad", text: (l._delta > 0 ? "+" : "") + fmt(l._delta) + "%" });
+      const isFavorite = state.favorites.includes(String(l.lot_id));
+      const watch = h("button", { class: "watch-btn", type: "button", "aria-pressed": String(isFavorite), "aria-label": (isFavorite ? "Убрать из избранного " : "Добавить в избранное ") + (l.title || l.lot_id), text: isFavorite ? "★" : "☆" });
+      watch.addEventListener("click", () => toggleFavorite(l.lot_id));
       const btn = h("button", { class: "btn secondary", type: "button", "aria-label": "Подробнее о лоте " + (l.title || l.lot_id), text: "Подробнее" });
       btn.addEventListener("click", () => openDetail(l, btn));
       body.append(h("tr", {}, [
@@ -444,7 +447,7 @@
         h("td", {}, [h("span", { class: "chip", text: l.rarity || "Не указана" }), h("div", { class: "muted", text: l.status || "" })]),
         h("td", {}, [delta]),
         h("td", { text: l.first_seen ? when(l.first_seen) : "—" }),
-        h("td", {}, [btn]),
+        h("td", {}, [watch, btn]),
       ]));
     });
   }
@@ -757,10 +760,14 @@
       $("emptyText").textContent = c.status && c.status !== "ok"
         ? "Каталог пуст: " + (c.message || c.status) + ". Статистика не показывается, чтобы не выдавать пустые значения за реальные."
         : "Первый полный сбор ещё не опубликован. Статистика не показывается, чтобы не выдавать пустые значения за реальные.";
-      show("empty"); return;
+      show("empty");
+      switchView(state.activeView);
+      return;
     }
     show("content");
+    renderDeals(); renderCheapest(); renderFavorites();
     renderCards(); renderCharts(); renderChanges(); renderTop(); renderSales(); fillFacets(); applyFilters();
+    switchView(state.activeView);
   }
 
   // ---------- events ----------
