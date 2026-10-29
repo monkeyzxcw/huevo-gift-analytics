@@ -29,9 +29,9 @@
   function keyOf(lot) {
     return String(lot.title || "").trim().toLocaleLowerCase("ru").replace(/\s+/g, " ");
   }
-  function renderCoverage(lots, diagnostic) {
-    const total = Number(diagnostic.lots_in_database ?? lots.length);
-    const priced = lots.filter(lot => price(lot.price) !== null).length;
+  function renderCoverage(lots, diagnostic, stats) {
+    const total = Number(stats.n_total ?? diagnostic.lots_in_database ?? lots.length);
+    const priced = Number(stats.n ?? lots.filter(lot => price(lot.price) !== null).length);
     const coverage = total > 0 ? Math.round(priced / total * 100) : 0;
     $("coverageScore").textContent = total ? String(Math.min(100, coverage)) : "—";
     $("coverageLots").textContent = format(total);
@@ -127,15 +127,17 @@
     refreshInFlight = true;
     try {
       const results = await Promise.all([
+        api("/api/stats"),
         api("/api/lots?limit=2000"),
         api("/api/diagnostics"),
         api("/api/status")
       ]);
-      const lots = Array.isArray(results[0]) ? results[0] : [];
-      const diagnostic = results[1] || {};
-      const status = results[2] || {};
+      const stats = results[0] || {};
+      const lots = Array.isArray(results[1]) ? results[1] : [];
+      const diagnostic = results[2] || {};
+      const status = results[3] || {};
       lastLots = lots;
-      renderCoverage(lots, diagnostic);
+      renderCoverage(lots, diagnostic, stats);
       renderPriceBins(lots);
       renderRarity(lots);
       renderDeviations(lots);
