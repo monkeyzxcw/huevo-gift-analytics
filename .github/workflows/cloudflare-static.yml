@@ -25,6 +25,20 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Validate published data.json structure
+        run: |
+          python3 - <<'PY'
+          import json, sys
+          sys.path.insert(0, ".")
+          import snapshot
+          data = json.load(open("cloudflare-site/data.json", encoding="utf-8"))
+          problems = snapshot.validate(snapshot.migrate(data))
+          if problems:
+              print("data.json is not publishable:", *problems[:10], sep="\n  ", file=sys.stderr)
+              sys.exit(1)
+          print("data.json OK:", len(data.get("lots", [])), "lots, schema", data.get("schema_version"))
+          PY
+
       - name: Validate Cloudflare credentials
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
