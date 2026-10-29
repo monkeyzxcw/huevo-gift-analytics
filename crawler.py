@@ -136,7 +136,8 @@ def run_crawl(browser, store, cfg, log, progress=lambda page, found: None, shoul
     for page in range(1, cfg.max_pages + 1):
         if should_stop():
             return CrawlResult("error", "Остановлено оператором", pages, len(seen), new_total, changed_total, stop_reason="остановка")
-        path = f"/market/gifts?page={page}"
+        # Use the canonical catalog URL for page 1; page=1 may redirect to the profile.
+        path = "/market/gifts" if page == 1 else f"/market/gifts?page={page}"
         t0 = time.monotonic()
         probe, rows, links, _ = observe(browser, cfg, path)
         verdict = probe["verdict"]
