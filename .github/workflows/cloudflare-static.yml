@@ -58,6 +58,35 @@ jobs:
           MAX_PAGES: "500"
         run: python scripts/collect_snapshot.py
 
+      - name: Validate collected snapshot
+        if: github.event_name != 'push'
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path('cloudflare-site/data.json')
+          data = json.loads(path.read_text(encoding='utf-8'))
+          if not isinstance(data.get('lots'), list) or not data['lots']:
+              raise SystemExit('Snapshot validation failed: lots must be a non-empty list')
+          if not data.get('generated_at'):
+              raise SystemExit('Snapshot validation failed: generated_at is missing')
+          collector = data.get('collector') or {}
+          if collector.get('status') != 'ok':
+              raise SystemExit('Snapshot validation failed: collector status is not ok')
+          forbidden = {'cookie', 'cookies', 'authorization', 'token', 'session', 'password'}
+          def walk(value, path='root'):
+              if isinstance(value, dict):
+                  for key, item in value.items():
+                      if any(word in str(key).lower() for word in forbidden):
+                          raise SystemExit(f'Snapshot validation failed: sensitive field at {path}.{key}')
+                      walk(item, f'{path}.{key}')
+              elif isinstance(value, list):
+                  for index, item in enumerate(value):
+                      walk(item, f'{path}[{index}]')
+          walk(data)
+          print(f"Validated {len(data['lots'])} lots; generated_at={data['generated_at']}")
+          PY
+
       - name: Commit updated public snapshot
         if: github.event_name != 'push'
         run: |
