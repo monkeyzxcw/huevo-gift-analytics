@@ -247,17 +247,21 @@ async def ingest_browser_data(request: Request, token: str = ""):
             status = str(item.get("status", "Неизвестно"))[:100]
             image_url = str(item.get("image_url", ""))[:2000].strip()
             # Images may live on Huevo's CDN, but only HTTPS URLs are rendered by the dashboard.
-            image_parts = urlsplit(image_url)
-            if image_parts.scheme != "https" or not image_parts.netloc or image_parts.username or image_parts.password:
+            try:
+                image_parts = urlsplit(image_url)
+                if image_parts.scheme != "https" or not image_parts.netloc or image_parts.username or image_parts.password:
+                    image_url = ""
+            except ValueError:
                 image_url = ""
             default_lot_url = f"{BASE_URL}/market/lot/{lot_id}"
             candidate_url = str(item.get("lot_url", default_lot_url))[:2000].strip()
-            lot_parts = urlsplit(candidate_url)
-            host = (lot_parts.hostname or "").lower()
-            if lot_parts.scheme == "https" and (host == "huevo.su" or host.endswith(".huevo.su")) and not lot_parts.username and not lot_parts.password:
-                lot_url = candidate_url
-            else:
-                lot_url = default_lot_url
+            try:
+                lot_parts = urlsplit(candidate_url)
+                host = (lot_parts.hostname or "").lower()
+                valid_lot_url = lot_parts.scheme == "https" and (host == "huevo.su" or host.endswith(".huevo.su")) and not lot_parts.username and not lot_parts.password
+            except ValueError:
+                valid_lot_url = False
+            lot_url = candidate_url if valid_lot_url else default_lot_url
             raw_price = item.get("price")
             try:
                 price = int(raw_price) if raw_price is not None else None
