@@ -97,9 +97,8 @@
     // Ignore last_poll_at and per-lot last_seen: those timestamps move on every poll
     // even when the visible market values did not change.
     return JSON.stringify({
-      generated_at: raw && raw.generated_at,
-      collector: [collector.status, collector.checked_at, collector.lots, collector.pages],
-      live: [live.fingerprint, Boolean(live.fresh), Number(live.item_count) || 0],
+      collector: [collector.status, collector.message, collector.lots, collector.pages],
+      live: [live.fingerprint, Number(live.item_count) || 0],
       lots: (lots || []).map((lot) => [
         String(lot.lot_id), lot.title, lot.serial, lot.rarity, lot.price, lot.status,
         lot.active !== false,
