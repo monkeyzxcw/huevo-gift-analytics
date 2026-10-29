@@ -51,7 +51,13 @@
     $("count").textContent = fmt(lots.length);
     const newest = lots[0]; // Collector preserves market order: first card on page 1 is the newest lot.
     const newestLabel = $("latestLot");
-    if (newestLabel) newestLabel.textContent = newest ? "Последний лот: " + (newest.title || ("#" + newest.lot_id)) + " · #" + newest.lot_id : "На странице 1 пока нет лотов";
+    if (newestLabel) {
+      const hasNewest = Boolean(newest && newest.lot_id != null);
+      // Build the target from a numeric lot ID; never trust an external URL from snapshot data.
+      newestLabel.href = hasNewest ? "https://huevo.su/market/lot/" + encodeURIComponent(String(newest.lot_id)) : "https://huevo.su/market/gifts";
+      newestLabel.textContent = hasNewest ? "Последний лот: " + (newest.title || ("#" + newest.lot_id)) + " · #" + newest.lot_id + " ↗" : "На странице 1 пока нет лотов";
+      newestLabel.setAttribute("aria-label", hasNewest ? "Открыть последний лот на Huevo" : "Открыть каталог Huevo");
+    }
     $("avg").textContent = fmt(d.stats && d.stats.avg) + " ◉";
     $("min").textContent = fmt(d.stats && d.stats.min) + " ◉";
     $("median").textContent = fmt(d.stats && d.stats.median) + " ◉";
