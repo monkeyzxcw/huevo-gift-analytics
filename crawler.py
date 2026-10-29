@@ -73,7 +73,7 @@ def observe(browser, cfg, path):
             state = browser.execute_script("return document.readyState")
         except Exception:
             return {"verdict": "network_error", "cause": "timeout"}, [], 0, []
-        if state not in ("interactive", "complete") and not _wait_ready(browser, 5, cfg.sleep):
+        if state not in ("interactive", "complete") and not _wait_ready(browser, min(5, cfg.ready_timeout), cfg.sleep):
             return {"verdict": "network_error", "cause": "timeout"}, [], 0, []
     if not _wait_ready(browser, cfg.ready_timeout, cfg.sleep):
         return {"verdict": "network_error", "cause": "timeout"}, [], 0, []
