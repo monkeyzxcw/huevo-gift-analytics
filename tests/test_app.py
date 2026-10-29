@@ -69,10 +69,35 @@ class IngestApiTests(unittest.TestCase):
         self.assertEqual(len(daily.json()["points"]), 1)
         self.assertEqual(daily.json()["points"][0]["avg_price"], 12345)
 
+    def test_cookie_json_export_supports_common_extension_fields(self):
+        cookies = app_module.load_cookie_export(
+            '[{"name":"session","value":"example-only","domain":".huevo.su","expirationDate":1800000000,"httpOnly":true}]'
+        )
+        self.assertEqual(len(cookies), 1)
+        self.assertEqual(cookies[0]["expiry"], 1800000000)
+        self.assertTrue(cookies[0]["httpOnly"])
+
+    def test_cookie_netscape_export(self):
+        raw = "# Netscape HTTP Cookie File\\n#HttpOnly_.huevo.departament.site\\tTRUE\\t/\\tTRUE\\t1800000000\\tsession\\texample-only\\n"
+        cookies = app_module.load_cookie_export(raw)
+        self.assertEqual(len(cookies), 1)
+        self.assertEqual(cookies[0]["domain"], ".huevo.departament.site")
+        self.assertTrue(cookies[0]["httpOnly"])
+        self.assertEqual(cookies[0]["value"], "example-only")
+
+    def test_alternate_huevo_host_is_allowed_but_unrelated_host_is_not(self):
+        self.assertTrue(app_module.is_huevo_host("huevo.su"))
+        self.assertTrue(app_module.is_huevo_host("huevo.departament.site"))
+        self.assertTrue(app_module.is_huevo_host("cdn.huevo.departament.site"))
+        self.assertFalse(app_module.is_huevo_host("not-huevo.departament.site"))
+        self.assertFalse(app_module.is_huevo_host("example.com"))
+
     def test_crawl_returns_actionable_error_without_server_session(self):
         response = self.client.post("/api/crawl")
         self.assertEqual(response.status_code, 503)
-        self.assertIn("browser collector", response.json()["detail"].lower())
+        detail = response.json()["detail"].lower()
+        self.assertIn("huevo_cookies_json", detail)
+        self.assertIn("huevo_cookies", detail)
 
     def test_ingest_rejects_bad_token(self):
         response = self.client.post(
