@@ -421,6 +421,204 @@ async function storeFullSnapshot(request, env) {
   });
 }
 
+const SUPPORT_AMOUNTS = [5000, 10000, 25000, 50000, 100000];
+const SUPPORT_FINAL_STATUSES = new Set(["succeeded", "failed", "cancelled", "expired"]);
+const HUEVO_APPS_API = "https://huevo.su/api/apps/v1";
+const HUEVO_APPS_SDK = "https://huevo.su/static/js/huevo-apps-v1.js";
+
+function supportCredentials(env) {
+  return {
+    clientId: String(env.HU_APP_ID || env.HUEVO_CLIENT_ID || "").trim(),
+    clientSecret: String(env.HU_SECRET || env.HUEVO_CLIENT_SECRET || "").trim(),
+  };
+}
+
+function hexBytes(value) {
+  return [...new Uint8Array(value)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function supportHmac(clientSecret, message) {
+  const encoder = new TextEncoder();
+  const hashedSecret = await crypto.subtle.digest("SHA-256", encoder.encode(clientSecret));
+  const key = await crypto.subtle.importKey("raw", hashedSecret, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return hexBytes(await crypto.subtle.sign("HMAC", key, encoder.encode(message)));
+}
+
+async function verifySupportLaunch(query, clientSecret) {
+  if (!clientSecret || typeof query !== "string" || query.length > 4096) return null;
+  const params = Object.fromEntries(new URLSearchParams(query.replace(/^\?/, "")).entries());
+  const signed = Object.entries(params)
+    .filter(([key]) => key.startsWith("hu_") && key !== "hu_hash")
+    .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+    .map(([key, value]) => key + "=" + value)
+    .join("\n");
+  const expected = await supportHmac(clientSecret, signed);
+  if (!constantTimeEqual(expected, String(params.hu_hash || "").toLowerCase())) return null;
+  const timestamp = Number.parseInt(params.hu_ts || "", 10);
+  const age = Math.floor(Date.now() / 1000) - timestamp;
+  if (!Number.isFinite(timestamp) || age < 0 || age > 86400) return null;
+  return Object.fromEntries(Object.entries(params).filter(([key]) => key.startsWith("hu_")));
+}
+
+function supportDbConfigured(env) {
+  return Boolean(env.DB);
+}
+
+async function supportConfig(request, env) {
+  const credentials = supportCredentials(env);
+  return jsonResponse(request, env, {
+    enabled: Boolean(credentials.clientId && credentials.clientSecret && supportDbConfigured(env)),
+    amounts: SUPPORT_AMOUNTS,
+    sdk_url: HUEVO_APPS_SDK,
+    origins: ["https://huevo.su", "https://huevo.departament.site"],
+  });
+}
+
+async function supportStats(request, env) {
+  if (!env.DB) return jsonResponse(request, env, { supporters: 0, total: 0, enabled: false });
+  try {
+    const row = await env.DB.prepare(
+      "SELECT COUNT(*) AS supporters, COALESCE(SUM(amount), 0) AS total FROM support_payments WHERE status = 'succeeded' AND test = 0"
+    ).first();
+    return jsonResponse(request, env, {
+      supporters: Number(row && row.supporters) || 0,
+      total: Number(row && row.total) || 0,
+      enabled: true,
+    });
+  } catch (_) {
+    return jsonResponse(request, env, { supporters: 0, total: 0, enabled: false });
+  }
+}
+
+async function callHuevoApps(env, method, path, body) {
+  const credentials = supportCredentials(env);
+  if (!credentials.clientId || !credentials.clientSecret) {
+    return { status: 503, body: { error: { code: "support_not_configured" } } };
+  }
+  const headers = {
+    "Authorization": "Basic " + btoa(credentials.clientId + ":" + credentials.clientSecret),
+    "Accept": "application/json",
+  };
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  try {
+    const response = await fetch(HUEVO_APPS_API + path, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    let data = {};
+    try { data = await response.json(); } catch (_) {}
+    return { status: response.status, body: data };
+  } catch (_) {
+    return { status: 502, body: { error: { code: "huevo_api_unavailable" } } };
+  }
+}
+
+async function createSupportIntent(request, env) {
+  const credentials = supportCredentials(env);
+  if (!env.DB || !credentials.clientId || !credentials.clientSecret) {
+    return jsonResponse(request, env, { ok: false, detail: "Поддержка автора пока не настроена." }, 503);
+  }
+  const parsed = await readJsonBody(request, 10000);
+  if (parsed.error) return jsonResponse(request, env, { ok: false, detail: parsed.error }, parsed.status);
+  const payload = parsed.value;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return jsonResponse(request, env, { ok: false, detail: "Ожидается JSON-объект." }, 400);
+  }
+  const amount = payload.amount;
+  if (!Number.isSafeInteger(amount) || amount < 1 || amount > 100000) {
+    return jsonResponse(request, env, { ok: false, detail: "Сумма должна быть целым числом от 1 до 100000." }, 400);
+  }
+  const launch = await verifySupportLaunch(String(payload.launch_query || "").slice(0, 4096), credentials.clientSecret);
+  if (!launch || !/^\d{1,20}$/.test(String(launch.hu_user_id || "")) || !Number.isSafeInteger(Number(launch.hu_user_id))) {
+    return jsonResponse(request, env, { ok: false, detail: "Откройте AMNYAM MODE внутри huEVO: подпись запуска не подтверждена." }, 401);
+  }
+  const test = launch.hu_mode !== "live";
+  const idempotencyKey = "amnyam-" + crypto.randomUUID().replace(/-/g, "");
+  const response = await callHuevoApps(env, "POST", "/payments", {
+    user_id: Number(launch.hu_user_id),
+    amount,
+    description: "Поддержка автора AMNYAM MODE",
+    idempotency_key: idempotencyKey,
+    test,
+  });
+  if (response.status !== 200 || !response.body || !response.body.ok || !response.body.intent_id) {
+    const error = response.body && response.body.error && response.body.error.code;
+    return jsonResponse(request, env, { ok: false, detail: "huEVO не создал платёж (" + String(error || "нет ответа").slice(0, 80) + ")." }, 502);
+  }
+  const now = new Date().toISOString();
+  try {
+    await env.DB.prepare(
+      "INSERT OR IGNORE INTO support_payments (intent_id, user_id, amount, test, status, created_at, updated_at, error) VALUES (?, ?, ?, ?, 'pending', ?, ?, NULL)"
+    ).bind(String(response.body.intent_id), String(launch.hu_user_id), amount, test ? 1 : 0, now, now).run();
+  } catch (_) {
+    return jsonResponse(request, env, { ok: false, detail: "Не удалось записать состояние платежа. Обратитесь к автору." }, 503);
+  }
+  return jsonResponse(request, env, { ok: true, intent_id: response.body.intent_id, amount, test });
+}
+
+async function getSupportPaymentStatus(request, env, intentId) {
+  if (!/^pi_[A-Za-z0-9_-]{1,80}$/.test(intentId)) {
+    return jsonResponse(request, env, { ok: false, detail: "Некорректный идентификатор платежа." }, 400);
+  }
+  if (!env.DB) return jsonResponse(request, env, { ok: false, detail: "Хранилище платежей пока не подключено." }, 503);
+  let row;
+  try {
+    row = await env.DB.prepare(
+      "SELECT intent_id, amount, test, status, created_at, updated_at FROM support_payments WHERE intent_id = ?"
+    ).bind(intentId).first();
+  } catch (_) {
+    return jsonResponse(request, env, { ok: false, detail: "Хранилище платежей не готово." }, 503);
+  }
+  if (!row) return jsonResponse(request, env, { ok: false, detail: "Платёж не найден." }, 404);
+  let status = String(row.status);
+  const credentials = supportCredentials(env);
+  if (status === "pending" && credentials.clientId && credentials.clientSecret) {
+    const remote = await callHuevoApps(env, "GET", "/payments/" + encodeURIComponent(intentId));
+    const remoteStatus = remote.body && remote.body.status;
+    if (remote.status === 200 && SUPPORT_FINAL_STATUSES.has(remoteStatus)) {
+      status = remoteStatus;
+      await env.DB.prepare(
+        "UPDATE support_payments SET status = ?, error = ?, updated_at = ? WHERE intent_id = ? AND status = 'pending'"
+      ).bind(status, String(remote.body.error && (remote.body.error.message || remote.body.error.code) || "").slice(0, 500), new Date().toISOString(), intentId).run();
+    }
+  }
+  return jsonResponse(request, env, { intent_id: intentId, amount: Number(row.amount), status, test: Boolean(row.test) });
+}
+
+async function supportCallback(request, env) {
+  const credentials = supportCredentials(env);
+  if (!env.DB || !credentials.clientSecret) {
+    return jsonResponse(request, env, { ok: false, error: "not configured" }, 503);
+  }
+  const raw = await request.text();
+  if (new TextEncoder().encode(raw).byteLength > 20000) {
+    return jsonResponse(request, env, { ok: false, error: "payload too large" }, 413);
+  }
+  const signature = String(request.headers.get("X-Huevo-Signature") || "").trim().toLowerCase();
+  const expected = await supportHmac(credentials.clientSecret, raw);
+  if (!signature || !constantTimeEqual(expected, signature)) {
+    return jsonResponse(request, env, { ok: false, error: "bad signature" }, 401);
+  }
+  let data;
+  try { data = JSON.parse(raw); } catch (_) {
+    return jsonResponse(request, env, { ok: false, error: "bad payload" }, 400);
+  }
+  const intentId = String(data && data.intent_id || "");
+  const status = String(data && data.status || "");
+  if (!/^pi_[A-Za-z0-9_-]{1,80}$/.test(intentId) || !SUPPORT_FINAL_STATUSES.has(status)) {
+    return jsonResponse(request, env, { ok: false, error: "bad payload" }, 400);
+  }
+  try {
+    await env.DB.prepare(
+      "UPDATE support_payments SET status = ?, error = ?, updated_at = ? WHERE intent_id = ? AND status = 'pending'"
+    ).bind(status, String(data.error && (data.error.message || data.error.code) || "").slice(0, 500), new Date().toISOString(), intentId).run();
+    return new Response(null, { status: 204, headers: responseHeaders(request, env) });
+  } catch (_) {
+    return jsonResponse(request, env, { ok: false, error: "storage unavailable" }, 503);
+  }
+}
+
 function bridgePage(request, env) {
   // A same-origin transport page for the desktop bridge. Huevo's own CSP can block
   // cross-origin fetches, so the desktop app posts from this Worker origin instead.
@@ -449,6 +647,12 @@ async function fetchHandler(request, env, ctx) {
   if (request.method === "GET" && path === "/api/health") {
     return jsonResponse(request, env, { ok: true, ...(await getStorageHealth(env)) });
   }
+  if (request.method === "GET" && path === "/api/support/config") return supportConfig(request, env);
+  if (request.method === "GET" && path === "/api/support/stats") return supportStats(request, env);
+  if (request.method === "POST" && path === "/api/support/intent") return createSupportIntent(request, env);
+  if (request.method === "POST" && path === "/api/support/callback") return supportCallback(request, env);
+  const supportStatusMatch = path.match(/^\\/api\\/support\\/status\\/(pi_[A-Za-z0-9_-]{1,80})$/);
+  if (request.method === "GET" && supportStatusMatch) return getSupportPaymentStatus(request, env, supportStatusMatch[1]);
   if (request.method === "GET" && path === "/api/live/status") return liveStatus(request, env);
   if (request.method === "POST" && path === "/api/live/page") return ingestLivePage(request, env);
   if (request.method === "POST" && path === "/api/snapshot") return storeFullSnapshot(request, env);
