@@ -23,5 +23,10 @@
     "crons": [
       "0 * * * *"
     ]
+  },
+  "secrets": {
+    "required": [
+      "LIVE_INGEST_TOKEN"
+    ]
   }
 }
