@@ -4,7 +4,7 @@
  * the INGEST_TOKEN, and stops on 403/418/429/5xx or a login page. It does not bypass protection:
  * no proxies, no IP/header tricks, no retries after a refusal. Honors Retry-After.
  *
- * Optional settings (before pasting): window.HUEVO_COLLECTOR = { dashboard: "https://<your>.onrender.com", delayMs: 2500, maxPages: 300 }
+ * Optional settings (before pasting): window.HUEVO_COLLECTOR = { dashboard: "http://localhost:8000", delayMs: 2500, maxPages: 300 }
  */
 (async () => {
   'use strict';
@@ -13,22 +13,22 @@
   const warn = (...a) => console.warn('[huevo-collector]', ...a);
 
   // ---- where may the token be sent?
-  const DEFAULT_DASHBOARD = 'https://huevo-gift-analytics.onrender.com';
+  const DEFAULT_DASHBOARD = 'http://localhost:8000';
   const dashboardOk = (u) => {
     try {
       const x = new URL(u);
       const local = x.protocol === 'http:' && (x.hostname === 'localhost' || x.hostname === '127.0.0.1');
       const render = x.protocol === 'https:' && /^[a-z0-9-]+\.onrender\.com$/i.test(x.hostname);
-      return (local || render) && !x.username && !x.password && x.pathname === '/' ? x.origin : '';
+      return (local || https) && !x.username && !x.password && x.pathname === '/' ? x.origin : '';
     } catch (_) { return ''; }
   };
   const dashboard = dashboardOk(opts.dashboard || DEFAULT_DASHBOARD);
-  if (!dashboard) { alert('Адрес панели не разрешён. Допустимы https://<имя>.onrender.com и http://localhost. Токен никуда не отправлен.'); return; }
+  if (!dashboard) { alert('Адрес панели не разрешён. Допустимы HTTPS API-сервер, который вы контролируете, и http://localhost. Токен никуда не отправлен.'); return; }
 
   const HOSTS = new Set(['huevo.su', 'www.huevo.su', 'huevo.departament.site', 'www.huevo.departament.site']);
   if (!HOSTS.has(location.hostname.toLowerCase())) { alert('Откройте маркет Huevo в уже авторизованной вкладке и запустите сборщик там.'); return; }
 
-  const token = (prompt('Введите INGEST_TOKEN из Environment вашего сервиса Render (он не сохраняется):') || '').trim();
+  const token = (prompt('Введите INGEST_TOKEN вашего собственного FastAPI API-сервера (он не сохраняется):') || '').trim();
   if (!token) { alert('Токен не указан; сбор отменён.'); return; }
 
   const delayMs = Math.max(opts.allowFast ? 0 : 1500, Number.isFinite(Number(opts.delayMs)) && opts.delayMs !== undefined ? Number(opts.delayMs) : 2500);
