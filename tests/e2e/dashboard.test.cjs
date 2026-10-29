@@ -200,3 +200,44 @@ test("page has no inline handlers/styles and fits a phone screen", async () => {
   assert.deepEqual(problems, []);
   await browser.close();
 });
+
+
+test("AMNYAM navigation renders all views and author support shows five levels", async () => {
+  const { browser, page, problems } = await open(serve(dataV2()), { width: 1280, height: 900 });
+  await page.waitForSelector("#content:not(.hide)");
+  for (const view of ["overview", "market", "deals", "cheap", "analytics", "favorites", "support"]) {
+    await page.click('#mainNav [data-view="' + view + '"]');
+    assert.equal(await page.getAttribute('#mainNav [data-view="' + view + '"]', "aria-selected"), "true", view + " tab selected");
+    assert.equal(await page.locator('[data-view-section="' + view + '"]:not(.hide)').count() > 0, true, view + " view visible");
+  }
+  assert.equal(await page.locator("#supportAmounts [data-amount]").count(), 5);
+  assert.deepEqual(await page.locator("#supportAmounts [data-amount]").evaluateAll(nodes => nodes.map(n => n.dataset.amount)), ["5000", "10000", "25000", "50000", "100000"]);
+  assert.deepEqual(problems, []);
+  await browser.close();
+});
+
+test("value hunt compares similar gifts; smart search supports price, rarity and lot ID operators", async () => {
+  const data = dataV2();
+  data.lots.forEach((lot, index) => {
+    if (index % 7 === 0) {
+      lot.title = "Звезда";
+      lot.rarity = "Редкий";
+    }
+  });
+  const { browser, page, problems } = await open(serve(data), { width: 1280, height: 900 });
+  await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="deals"]');
+  assert.match(await page.textContent("#belowBest"), /Звезда/);
+  assert.match(await page.textContent("#belowBestMeta"), /медианы/);
+  assert.ok(await page.locator("#dealsList .deal-row").count() > 0);
+  await page.click('#mainNav [data-view="market"]');
+  await page.fill("#search", "price<200");
+  assert.match(await page.textContent("#rowCount"), /9 из 120/);
+  await page.fill("#search", "rarity:Редкий price<200");
+  assert.match(await page.textContent("#rowCount"), /4 из 120/);
+  await page.fill("#search", "#1007");
+  assert.match(await page.textContent("#rowCount"), /1 из 120/);
+  assert.match(await page.textContent("#rows"), /Звезда/);
+  assert.deepEqual(problems, []);
+  await browser.close();
+});
