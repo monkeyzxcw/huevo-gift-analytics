@@ -456,7 +456,7 @@
         h("td", {}, [h("span", { class: "chip", text: l.rarity || "Не указана" }), h("div", { class: "muted", text: l.status || "" })]),
         h("td", {}, [delta]),
         h("td", { text: l.first_seen ? when(l.first_seen) : "—" }),
-        h("td", {}, [watch, btn]),
+        h("td", {}, [btn, watch]),
       ]));
     });
   }
