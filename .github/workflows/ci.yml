@@ -55,3 +55,5 @@ jobs:
           Path("/tmp/huevo-dashboard.js").write_text("\n".join(parser.parts), encoding="utf-8")
           PY
           node --check /tmp/huevo-dashboard.js
+      - name: Build Docker image
+        run: docker build -t huevo-gift-analytics:test .
