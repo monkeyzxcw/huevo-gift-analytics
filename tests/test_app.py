@@ -100,6 +100,23 @@ class IngestApiTests(unittest.TestCase):
         self.assertEqual(response.json()["days"], 90)
         self.assertEqual(response.json()["points"], [])
 
+    def test_access_block_status_recognizes_huevo_restrictions(self):
+        self.assertEqual(app_module.access_block_status("HTTP Error 418: I'm a teapot"), 418)
+        self.assertEqual(app_module.access_block_status("Access denied"), 403)
+        self.assertEqual(app_module.access_block_status("Обычная страница каталога"), None)
+
+    def test_crawl_returns_retry_after_during_block_cooldown(self):
+        previous = app_module.state.get("blocked_until")
+        until = (app_module.datetime.now(app_module.timezone.utc) +
+                 app_module.timedelta(minutes=10)).isoformat()
+        app_module.state["blocked_until"] = until
+        try:
+            response = self.client.post("/api/crawl")
+            self.assertEqual(response.status_code, 429)
+            self.assertTrue(int(response.headers["Retry-After"]) > 0)
+        finally:
+            app_module.state["blocked_until"] = previous
+
     def test_diagnostics_never_exposes_ingest_token(self):
         response = self.client.get("/api/diagnostics")
         self.assertEqual(response.status_code, 200)
