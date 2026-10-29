@@ -20,7 +20,7 @@
 </header>
 <section class="hero"><div><div class="eyebrow">Обзор рынка</div><h2>Каталог подарков и динамика цен</h2><p>Автообновляемый снимок публичных предложений. Цены объявлений — не цены завершённых сделок.</p></div><div class="updated" id="updated">Ожидает первого сбора</div></section>
 <section class="metrics">
-  <div class="metric"><label>Активные лоты</label><strong id="count">—</strong><small>Последний полный проход</small></div>
+  <div class="metric"><label>Активные лоты</label><strong id="count">—</strong><small id="latestLot">Первый подарок страницы 1</small></div>
   <div class="metric"><label>Средняя цена</label><strong id="avg">—</strong><small>Только лоты с ценой</small></div>
   <div class="metric"><label>Минимальная цена</label><strong id="min">—</strong><small>Среди текущих предложений</small></div>
   <div class="metric"><label>Медианная цена</label><strong id="median">—</strong><small>Половина лотов дешевле, половина дороже</small></div>
@@ -33,7 +33,7 @@
   <div class="panel-head"><div><h3>Каталог маркета</h3><div class="muted" style="margin-top:5px" id="rowCount">—</div></div><a class="btn secondary" href="https://huevo.su/market/gifts" target="_blank" rel="noopener noreferrer">Открыть маркет ↗</a></div>
   <div class="toolbar"><input class="input" id="search" type="search" placeholder="Поиск по названию, серии или ID…"><select class="select" id="sort"><option value="price">Сначала дешевле</option><option value="price_desc">Сначала дороже</option><option value="discount">Сначала выгодные</option><option value="name">По названию</option></select><select class="select" id="rarity"><option value="">Все редкости</option></select><select class="select" id="status"><option value="">Все статусы</option></select></div>
   <div class="table-wrap"><table><thead><tr><th>Подарок</th><th>Цена</th><th>Редкость / статус</th><th>Обновлено</th><th>Ссылка</th></tr></thead><tbody id="rows"><tr><td colspan="5" class="empty">Загружаю…</td></tr></tbody></table></div>
-  <div class="footer"><span>Обновления: автоматический запуск сборщика в GitHub Actions</span><span id="footStatus">Данные ещё не загружены</span></div>
+  <div class="footer"><span>Сборщик: каждые 10 минут · проверка опубликованных данных: каждую секунду</span><span id="footStatus">Данные ещё не загружены</span></div>
 </section>
 <div class="notice hide" id="warning"></div>
 <footer class="footer"><span>Huevo Gift Analytics · бесплатная статическая версия</span><span>Сбор остановится при ограничении доступа Huevo; блокировки не обходятся.</span></footer>
