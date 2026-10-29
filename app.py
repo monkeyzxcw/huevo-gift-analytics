@@ -1,5 +1,5 @@
 import os, re, time, sqlite3, threading, json, hmac
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from urllib.parse import urljoin, urlsplit
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -46,6 +46,8 @@ def init_db():
         c.execute("""CREATE TABLE IF NOT EXISTS price_history(
             id INTEGER PRIMARY KEY AUTOINCREMENT, lot_id TEXT, price INTEGER,
             status TEXT, observed_at TEXT)""")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_history_lot_date ON price_history(lot_id, observed_at)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_lots_active_price ON lots(active, price)")
 init_db()
 
 def money(text):
@@ -367,7 +369,9 @@ def get_status():
 @app.get("/api/stats")
 def stats():
     with db() as c:
-        row = c.execute("""SELECT COUNT(*) n, COUNT(DISTINCT title) kinds,
+        row = c.execute("""SELECT
+        (SELECT COUNT(*) FROM lots WHERE active=1) n_total,
+        COUNT(*) n, COUNT(DISTINCT title) kinds,
         MIN(price) minp, MAX(price) maxp, AVG(price) avgp, SUM(price) total
         FROM lots WHERE active=1 AND price IS NOT NULL""").fetchone()
         return dict(row)
@@ -382,6 +386,38 @@ def lots(q: str = "", sort: str = "price", limit: int = 500):
         rows = c.execute(f"""SELECT * FROM lots WHERE active=1 AND (title LIKE ? OR lot_id LIKE ?)
         ORDER BY {order} LIMIT ?""", (f"%{q}%", f"%{q}%", limit)).fetchall()
         return [dict(r) for r in rows]
+
+@app.get("/api/analytics/price-history")
+def analytics_price_history(days: int = 7, lot_id: str = ""):
+    """Daily aggregates of stored price-change observations; these are not completed sale prices."""
+    days = max(1, min(int(days), 90))
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days - 1)).date().isoformat()
+    with db() as c:
+        if lot_id:
+            if not re.fullmatch(r"\d{1,20}", str(lot_id)):
+                raise HTTPException(status_code=400, detail="Некорректный ID лота")
+            rows = c.execute("""
+                SELECT substr(observed_at, 1, 10) AS day,
+                       AVG(price) AS avg_price,
+                       COUNT(*) AS snapshots
+                FROM price_history
+                WHERE lot_id=? AND price IS NOT NULL AND date(observed_at)>=?
+                GROUP BY substr(observed_at, 1, 10)
+                ORDER BY day
+            """, (lot_id, cutoff)).fetchall()
+        else:
+            rows = c.execute("""
+                SELECT substr(observed_at, 1, 10) AS day,
+                       AVG(price) AS avg_price,
+                       COUNT(*) AS snapshots
+                FROM price_history
+                WHERE price IS NOT NULL AND date(observed_at)>=?
+                GROUP BY substr(observed_at, 1, 10)
+                ORDER BY day
+            """, (cutoff,)).fetchall()
+    points = [{"day": row["day"], "avg_price": round(row["avg_price"], 2),
+               "snapshots": row["snapshots"]} for row in rows]
+    return {"days": days, "lot_id": lot_id or None, "points": points}
 
 @app.get("/api/history/{lot_id}")
 def history(lot_id: str):
