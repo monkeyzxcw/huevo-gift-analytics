@@ -160,6 +160,16 @@
         }
       }
       state.lots = nextLots;
+      state.data.lots = nextLots.map((lot) => {
+        const raw = Object.assign({}, lot);
+        delete raw._history; delete raw._delta; delete raw._text;
+        raw.history = Array.isArray(lot._history) ? lot._history : (lot.history || []);
+        return raw;
+      });
+      // Force derived charts/top-list to use live prices instead of stale fields from the full snapshot.
+      state.data.price_bins = [];
+      state.data.categories = [];
+      state.data.top_expensive = nextLots.filter((lot) => isNum(lot.price)).sort((a, b) => b.price - a.price).slice(0, 10);
       state.liveFingerprint = fingerprint;
       render();
     } catch (_) {
