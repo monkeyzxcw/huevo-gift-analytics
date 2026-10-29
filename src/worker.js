@@ -471,11 +471,18 @@ function supportDbConfigured(env) {
 
 async function supportConfig(request, env) {
   const credentials = supportCredentials(env);
+  let storageReady = false;
+  if (env.DB) {
+    try {
+      await env.DB.prepare("SELECT 1 FROM support_payments LIMIT 1").first();
+      storageReady = true;
+    } catch (_) {}
+  }
   return jsonResponse(request, env, {
-    enabled: Boolean(credentials.clientId && credentials.clientSecret && supportDbConfigured(env)),
+    enabled: Boolean(credentials.clientId && credentials.clientSecret && storageReady),
     amounts: SUPPORT_AMOUNTS,
     sdk_url: HUEVO_APPS_SDK,
-    origins: ["https://huevo.su", "https://huevo.departament.site"],
+    origins: ["huevo.su", "huevo.departament.site"],
   });
 }
 
