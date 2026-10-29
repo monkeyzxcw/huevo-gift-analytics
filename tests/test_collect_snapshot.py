@@ -51,6 +51,40 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(second["1"], first["1"], "first_seen must survive across runs")
         self.assertGreater(second["3"], first["1"], "a new lot is first seen later than the old ones")
 
+    def test_v2_snapshot_has_changes_categories_and_valid_structure(self):
+        import snapshot
+        self.run_main([lot(1, 100), lot(2, 200)])
+        self.run_main([lot(2, 150), lot(3, 900)])
+        d = self.data()
+        self.assertEqual(d["schema_version"], snapshot.SCHEMA_VERSION)
+        self.assertEqual(snapshot.validate(d), [])
+        self.assertEqual(d["changes"]["counts"]["new"], 1)
+        self.assertEqual(d["changes"]["counts"]["gone"], 1)
+        self.assertEqual(d["changes"]["counts"]["price_down"], 1)
+        self.assertEqual(d["top_expensive"][0]["lot_id"], "3")
+        self.assertEqual(d["categories"][0]["name"], "Редкий")
+        self.assertEqual(d["snapshots"][-1]["new_lots"], 1)
+
+    def test_old_v1_data_json_is_migrated_not_discarded(self):
+        v1 = {"schema_version": 1, "generated_at": "2026-01-01T00:00:00+00:00", "collector": {"status": "ok"},
+              "stats": {"n_total": 1}, "lots": [dict(lot(7, 50), first_seen="2026-01-01T00:00:00+00:00", history=[])],
+              "snapshots": [], "gone_lots": []}
+        cs.OUT.write_text(json.dumps(v1), encoding="utf-8")
+        self.assertEqual(self.run_main([lot(7, 50)]), 0)
+        d = self.data()
+        self.assertEqual(d["schema_version"], 2)
+        self.assertEqual(d["lots"][0]["first_seen"], "2026-01-01T00:00:00+00:00")
+
+    def test_identical_rerun_does_not_add_duplicate_history_point(self):
+        self.run_main([lot(1), lot(2)])
+        self.run_main([lot(1), lot(2)])
+        self.assertEqual(len(self.data()["snapshots"]), 1)
+
+    def test_broken_previous_file_is_never_published_after_failure(self):
+        cs.OUT.write_text("{not json", encoding="utf-8")
+        self.assertEqual(self.run_main([], status="blocked", reached_end=False, http_status=418), 2)
+        self.assertEqual(cs.OUT.read_text(encoding="utf-8"), "{not json", "no empty snapshot is invented")
+
     def test_blocked_run_keeps_last_good_data_and_sets_persistent_cooldown(self):
         self.run_main([lot(1), lot(2)])
         good = self.data()["lots"]
