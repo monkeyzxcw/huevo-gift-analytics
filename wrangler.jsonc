@@ -28,5 +28,6 @@
     "required": [
       "LIVE_INGEST_TOKEN"
     ]
-  }
+  },
+  "keep_vars": true
 }
