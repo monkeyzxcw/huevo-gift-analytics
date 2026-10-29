@@ -8,6 +8,9 @@ on:
       - main
     paths:
       - "cloudflare-site/**"
+      - "src/**"
+      - "migrations/**"
+      - "scripts/poll_first_page.py"
       - "wrangler.jsonc"
       - ".github/workflows/cloudflare-static.yml"
   workflow_dispatch:
@@ -24,6 +27,8 @@ jobs:
     if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    outputs:
+      persistence_mode: ${{ steps.persist.outputs.mode }}
     permissions:
       contents: write
     steps:
@@ -57,11 +62,29 @@ jobs:
           MAX_PAGES: "500"
         run: python scripts/collect_snapshot.py
 
-      # Even a blocked/failed crawl may write a safe status into the previous valid snapshot.
-      # Commit that status so cooldown survives the ephemeral GitHub runner.
-      - name: Commit updated public snapshot or collector status
+      # When D1 is enabled, write the whole snapshot to Cloudflare storage and avoid
+      # one data.json Git commit every ten minutes. Until D1 + token are configured, fall back
+      # to the safe Git snapshot workflow so the live site keeps working.
+      - name: Publish snapshot to Cloudflare storage or commit fallback
+        id: persist
         if: always()
+        env:
+          HUEVO_LIVE_INGEST_TOKEN: ${{ secrets.HUEVO_LIVE_INGEST_TOKEN }}
+          HUEVO_WORKER_URL: https://huevo-gift-analytics.monkeyzxc1437.workers.dev
         run: |
+          if [ -n "$HUEVO_LIVE_INGEST_TOKEN" ] && [ -f cloudflare-site/data.json ]; then
+            HEALTH="$(curl -fsS --max-time 10 "$HUEVO_WORKER_URL/api/health" || true)"
+            if printf '%s' "$HEALTH" | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get("storage_configured") and d.get("schema_ready") and d.get("ingest_enabled") else 1)' 2>/dev/null; then
+              curl --fail --silent --show-error --max-time 30 \
+                -X POST "$HUEVO_WORKER_URL/api/snapshot" \
+                -H "Authorization: Bearer $HUEVO_LIVE_INGEST_TOKEN" \
+                -H "Content-Type: application/json" \
+                --data-binary @cloudflare-site/data.json
+              echo "Snapshot stored in Cloudflare D1; no data.json commit created."
+              echo "mode=live" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add cloudflare-site/data.json
@@ -71,9 +94,10 @@ jobs:
             git commit -m "chore: refresh Huevo market snapshot [skip ci]"
             git push origin HEAD:main
           fi
+          echo "mode=static" >> "$GITHUB_OUTPUT"
 
   deploy:
-    if: ${{ always() && (github.event_name == 'push' || needs.collect.result == 'success' || needs.collect.result == 'failure') }}
+    if: ${{ always() && (github.event_name == 'push' || (needs.collect.result != 'skipped' && needs.collect.outputs.persistence_mode != 'live')) }}
     needs: [collect]
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -110,6 +134,24 @@ jobs:
           if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
             echo "Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID GitHub secrets." >&2
             exit 1
+          fi
+
+      - name: Apply D1 migrations when the database is configured
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          HAS_D1="$(python3 - <<'PY'
+          import json
+          cfg=json.load(open("wrangler.jsonc", encoding="utf-8"))
+          rows=cfg.get("d1_databases", [])
+          print("yes" if any(x.get("binding") == "DB" and x.get("database_id") for x in rows) else "no")
+          PY
+          )"
+          if [ "$HAS_D1" = "yes" ]; then
+            npx --yes wrangler@4 d1 migrations apply huevo-live-data --remote --config wrangler.jsonc
+          else
+            echo "D1 is not bound yet; deploying with the static snapshot fallback."
           fi
 
       - name: Deploy dashboard and snapshot to Cloudflare
