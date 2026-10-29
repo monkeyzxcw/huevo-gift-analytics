@@ -21,5 +21,3 @@ huevo.db-wal
 Thumbs.db
 .vscode/
 .idea/
-node_modules/
-package-lock.json
