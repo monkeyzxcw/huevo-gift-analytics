@@ -385,7 +385,7 @@
       }
       return " ";
     });
-    rest = rest.replace(/\b(?:id:|#)([A-Za-z0-9_-]+)/gi, (_, id) => { rules.id = id; return " "; });
+    rest = rest.replace(/(?:\bid:|#)([A-Za-z0-9_-]+)/gi, (_, id) => { rules.id = id; return " "; });
     rest = rest.replace(/\b(rarity|status)\s*:\s*("[^"]+"|'[^']+'|.+?)(?=\s+(?:rarity|status)\s*:|\s+price\s*(?:<=|>=|<|>)|\s+(?:id:|#)[A-Za-z0-9_-]+|$)/gi,
       (_, key, raw) => {
         const val = String(raw).replace(/^["']|["']$/g, "").trim();
