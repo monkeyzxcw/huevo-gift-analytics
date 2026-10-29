@@ -16,6 +16,9 @@ huevo.db-wal
 *.sqlite
 *.sqlite3
 
+# Local scheduled collector logs
+logs/
+
 # OS / editor
 .DS_Store
 Thumbs.db
