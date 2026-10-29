@@ -11,7 +11,7 @@ services:
       - key: INGEST_TOKEN
         generateValue: true
       - key: CRAWL_DELAY
-        value: "0.2"
+        value: "2.0"
       - key: MAX_PAGES
         value: "500"
       - key: AUTO_REFRESH_HOURS
