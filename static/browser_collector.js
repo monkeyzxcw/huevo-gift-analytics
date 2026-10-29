@@ -39,6 +39,33 @@
       };
     }).filter(Boolean);
   };
+  const retryAfterMs = response => {
+    const value = response.headers.get('Retry-After');
+    if (!value) return null;
+    const seconds = Number(value);
+    if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+    const date = Date.parse(value);
+    return Number.isFinite(date) ? Math.max(0, date - Date.now()) : null;
+  };
+  const fetchPage = async (url, page) => {
+    let response = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
+    if (response.status === 429) {
+      const waitMs = retryAfterMs(response);
+      if (waitMs === null) {
+        throw new Error(`Huevo вернул HTTP 429 на странице ${page} без Retry-After. Сбор остановлен; повторных запросов не будет.`);
+      }
+      if (waitMs > 15 * 60 * 1000) {
+        throw new Error(`Huevo просит подождать более 15 минут после HTTP 429 на странице ${page}. Сбор остановлен.`);
+      }
+      status.textContent = `Huevo ограничил частоту (429). Жду ${Math.ceil(waitMs / 1000)} с по Retry-After…`;
+      await delay(waitMs);
+      response = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
+    }
+    if (response.status === 418 || response.status === 429 || response.status === 403) {
+      throw new Error(`Huevo вернул HTTP ${response.status} на странице ${page}. Сбор остановлен, чтобы не повторять запросы.`);
+    }
+    return response;
+  };
   const send = async lots => {
     const response = await fetch(`${dashboard}/api/ingest`, {
       method: 'POST', mode: 'cors',
@@ -58,10 +85,7 @@
     while (page <= 500) {
       status.textContent = `Huevo Gift Analytics: страница ${page}; сохранено записей ${total}`;
       const url = new URL('/market/gifts', location.origin); url.searchParams.set('page', String(page));
-      const response = await fetch(url.href, { credentials: 'same-origin', cache: 'no-store' });
-      if (response.status === 418 || response.status === 429 || response.status === 403) {
-        throw new Error(`Huevo вернул HTTP ${response.status} на странице ${page}. Сбор остановлен, чтобы не повторять запросы.`);
-      }
+      const response = await fetchPage(url.href, page);
       if (!response.ok) throw new Error(`Страница ${page}: HTTP ${response.status}`);
       const lots = parse(await response.text());
       const fresh = lots.filter(lot => !seen.has(lot.lot_id) && seen.add(lot.lot_id));
