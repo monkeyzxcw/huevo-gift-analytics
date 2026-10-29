@@ -16,6 +16,7 @@ DB_PATH = os.getenv("HUEVO_DB", "huevo.db")
 os.makedirs(os.path.dirname(os.path.abspath(DB_PATH)), exist_ok=True)
 DELAY = float(os.getenv("CRAWL_DELAY", "2.0"))
 MAX_PAGES = int(os.getenv("MAX_PAGES", "500"))
+CRAWL_BLOCK_COOLDOWN_HOURS = max(1, int(os.getenv("CRAWL_BLOCK_COOLDOWN_HOURS", "6")))
 app = FastAPI(title="Huevo Gift Analytics")
 app.add_middleware(
     CORSMiddleware,
@@ -28,7 +29,7 @@ INGEST_TOKEN = os.getenv("INGEST_TOKEN", "")
 # JSON array of cookies exported from an already authenticated huevo.su browser.
 HUEVO_COOKIES_JSON = os.getenv("HUEVO_COOKIES_JSON", "").strip()
 lock = threading.Lock()
-state = {"running": False, "page": 0, "found": 0, "message": "Ожидает запуска", "started_at": None, "last_ingest_at": None}
+state = {"running": False, "page": 0, "found": 0, "message": "Ожидает запуска", "started_at": None, "last_ingest_at": None, "blocked_until": None, "last_http_status": None}
 
 def db():
     con = sqlite3.connect(DB_PATH, timeout=20)
@@ -121,11 +122,38 @@ def parse_cards(html):
                      "observed_at": now})
     return rows, len(cards)
 
+def access_block_status(text):
+    """Return a detected HTTP status for recognizable access/rate-limit pages, if present."""
+    normalized = (text or "").lower()
+    markers = ("http error 418", "418 i'm a teapot", "http error 429",
+               "too many requests", "access denied", "verify you are human",
+               "captcha", "проверка браузера", "ограничение доступа")
+    if not any(marker in normalized for marker in markers):
+        return None
+    match = re.search(r"\b(418|429|403)\b", normalized)
+    return int(match.group(1)) if match else 403
+
+
 def crawl():
+    now = datetime.now(timezone.utc)
     with lock:
+        blocked_until = state.get("blocked_until")
+        if blocked_until:
+            try:
+                cooldown_end = datetime.fromisoformat(blocked_until)
+                if cooldown_end > now:
+                    state["message"] = (
+                        f"Сбор на паузе после ограничения Huevo до "
+                        f"{cooldown_end.strftime('%Y-%m-%d %H:%M UTC')}; запросы не отправляются."
+                    )
+                    return
+                state["blocked_until"] = None
+                state["last_http_status"] = None
+            except (TypeError, ValueError):
+                state["blocked_until"] = None
         if state["running"]: return
         state.update(running=True, page=0, found=0, message="Сбор запущен",
-                     started_at=datetime.now(timezone.utc).isoformat())
+                     started_at=now.isoformat())
     seen_this_run = set()
     try:
         options = Options()
@@ -187,8 +215,12 @@ def crawl():
                 WebDriverWait(browser, 20).until(lambda d: d.execute_script("return document.readyState") == "complete")
                 time.sleep(1.5)
                 page_text = (browser.title + " " + browser.find_element("tag name", "body").text[:1500]).lower()
-                if any(term in page_text for term in ("http error 418", "too many requests", "access denied", "verify you are human")):
-                    raise RuntimeError("Huevo показал страницу ограничения доступа/проверки браузера. Selenium не обходит эту защиту; сбор остановлен.")
+                blocked_status = access_block_status(page_text)
+                if blocked_status:
+                    raise RuntimeError(
+                        f"Huevo вернул страницу ограничения доступа (HTTP {blocked_status}). "
+                        "Сбор остановлен без повторных запросов; проверьте разрешённый способ доступа."
+                    )
                 rows, card_count = parse_cards(browser.page_source)
                 if not rows:
                     empty_streak += 1
@@ -217,7 +249,19 @@ def crawl():
         # Do not mark unseen lots inactive on partial/blocked runs.
         with lock: state["message"] = f"Готово. Уникальных лотов просмотрено: {len(seen_this_run)}"
     except Exception as e:
-        with lock: state["message"] = f"Ошибка: {e}"
+        message = str(e)
+        blocked_status = access_block_status(message)
+        with lock:
+            if blocked_status:
+                cooldown_end = datetime.now(timezone.utc) + timedelta(hours=CRAWL_BLOCK_COOLDOWN_HOURS)
+                state["blocked_until"] = cooldown_end.isoformat()
+                state["last_http_status"] = blocked_status
+                state["message"] = (
+                    f"Доступ ограничен (HTTP {blocked_status}). Повторный сбор отложен до "
+                    f"{cooldown_end.strftime('%Y-%m-%d %H:%M UTC')}; защита не обходится."
+                )
+            else:
+                state["message"] = f"Ошибка: {message}"
     finally:
         with lock: state["running"] = False
 
@@ -327,6 +371,22 @@ async def ingest_browser_data(request: Request, token: str = ""):
 
 @app.post("/api/crawl")
 def start_crawl(background: BackgroundTasks):
+    with lock:
+        blocked_until = state.get("blocked_until")
+        if blocked_until:
+            try:
+                cooldown_end = datetime.fromisoformat(blocked_until)
+                remaining = int((cooldown_end - datetime.now(timezone.utc)).total_seconds())
+                if remaining > 0:
+                    raise HTTPException(
+                        status_code=429,
+                        detail=f"Сбор приостановлен после блокировки Huevo до {cooldown_end.strftime('%Y-%m-%d %H:%M UTC')}.",
+                        headers={"Retry-After": str(remaining)},
+                    )
+                state["blocked_until"] = None
+                state["last_http_status"] = None
+            except ValueError:
+                state["blocked_until"] = None
     if not HUEVO_COOKIES_JSON:
         raise HTTPException(
             status_code=503,
