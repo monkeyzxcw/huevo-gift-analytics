@@ -201,12 +201,14 @@ def looks_like_login_page(url, title="", heading="", body_text="", password_visi
     )
     if any(prompt in normalized for prompt in explicit_prompts):
         return True
-    headline = " ".join((title or "", heading or "")).strip().lower()
-    simple_login_headline = re.fullmatch(
-        r"\s*(войти|вход|авторизация|вход в аккаунт|sign in|log in|login)\s*",
-        headline,
+    simple_login_heading = any(
+        re.fullmatch(
+            r"\s*(войти|вход|авторизация|вход в аккаунт|sign in|log in|login)\s*",
+            value or "",
+        )
+        for value in (title, heading)
     )
-    return bool(simple_login_headline and not has_market_cards)
+    return bool(simple_login_heading and not has_market_cards)
 
 
 def access_block_status(text):
