@@ -64,15 +64,18 @@ def make_browser(local_login=False):
                     "--disable-gpu"):
             options.add_argument(arg)
     options.add_argument("--window-size=1440,1000")
+
+    # Use the same browser User-Agent for cookie-based and manual-login runs.
+    # Can be overridden through HUEVO_USER_AGENT; cookie values are never logged.
+    user_agent = os.getenv(
+        "HUEVO_USER_AGENT",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+    ).strip()
+    if user_agent:
+        options.add_argument(f"--user-agent={user_agent}")
+
     if local_login:
-        # Match the visible Windows Chrome UA; can be overridden locally if Chrome updates.
-        user_agent = os.getenv(
-            "HUEVO_USER_AGENT",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
-        ).strip()
-        if user_agent:
-            options.add_argument(f"--user-agent={user_agent}")
         # Dedicated local-only Chrome profile: the Huevo session stays on this PC.
         # This directory is gitignored and is never uploaded or committed.
         profile = ROOT / ".local-huevo-chrome-profile"
