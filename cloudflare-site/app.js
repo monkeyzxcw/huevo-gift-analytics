@@ -771,10 +771,39 @@
   }
 
   // ---------- events ----------
-  ["search", "pmin", "pmax"].forEach((id) => $(id).addEventListener("input", () => { state.page = 0; applyFilters(); }));
+  document.querySelectorAll("#mainNav [data-view]").forEach((button) => {
+    button.addEventListener("click", () => switchView(button.dataset.view));
+  });
+  document.querySelectorAll("[data-go-view]").forEach((button) => {
+    button.addEventListener("click", () => switchView(button.dataset.goView));
+  });
+  $("globalSearch").addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    $("search").value = $("globalSearch").value.trim();
+    state.page = 0;
+    switchView("market");
+    applyFilters();
+  });
+  document.querySelectorAll("[data-search-token]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const token = button.dataset.searchToken || "";
+      const input = $("search");
+      input.value = (input.value.trim() + " " + token).trim();
+      $("globalSearch").value = input.value;
+      state.page = 0;
+      switchView("market");
+      applyFilters();
+    });
+  });
+  $("supportAmounts").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-amount]");
+    if (button && !button.disabled) makeSupportPayment(button.dataset.amount);
+  });
+  ["search", "pmin", "pmax"].forEach((id) => $(id).addEventListener("input", () => { state.page = 0; $("globalSearch").value = $("search").value; applyFilters(); }));
   ["rarity", "status"].forEach((id) => $(id).addEventListener("change", () => { state.page = 0; applyFilters(); }));
   $("filters").addEventListener("submit", (e) => e.preventDefault());
-  $("reset").addEventListener("click", () => { ["search", "pmin", "pmax", "rarity", "status"].forEach((id) => { $(id).value = ""; }); state.page = 0; applyFilters(); });
+  $("reset").addEventListener("click", () => { ["search", "pmin", "pmax", "rarity", "status", "globalSearch"].forEach((id) => { $(id).value = ""; }); state.page = 0; applyFilters(); });
   document.querySelectorAll(".sort").forEach((b) => b.addEventListener("click", () => {
     const key = b.dataset.key;
     state.sort = { key, dir: state.sort.key === key ? -state.sort.dir : (key === "title" || key === "rarity" ? 1 : key === "price" ? 1 : -1) };
@@ -788,7 +817,8 @@
   $("detail").addEventListener("close", () => { if (lastTrigger && document.contains(lastTrigger)) lastTrigger.focus(); });
   $("detail").addEventListener("click", (e) => { if (e.target === $("detail")) $("detail").close(); });
   load();
+  initSupport();
   pollLive();
   window.setInterval(pollLive, 3000);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) pollLive(); });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { pollLive(); } });
 })();
