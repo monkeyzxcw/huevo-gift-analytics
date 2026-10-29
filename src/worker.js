@@ -130,12 +130,12 @@ async function getStorageHealth(env) {
   if (!env.DB) return { storage_configured: false, schema_ready: false, ingest_enabled: Boolean(env.LIVE_INGEST_TOKEN) };
   try {
     const result = await env.DB.prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('full_snapshot','live_page_state','live_price_history')"
+      "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('full_snapshot','live_page_state','live_price_history','support_payments')"
     ).all();
     const names = new Set((result.results || []).map((row) => row.name));
     return {
       storage_configured: true,
-      schema_ready: names.has("full_snapshot") && names.has("live_page_state") && names.has("live_price_history"),
+      schema_ready: names.has("full_snapshot") && names.has("live_page_state") && names.has("live_price_history") && names.has("support_payments"),
       ingest_enabled: Boolean(env.LIVE_INGEST_TOKEN),
     };
   } catch (_) {
