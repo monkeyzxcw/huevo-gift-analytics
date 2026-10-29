@@ -57,6 +57,7 @@
   // ---------- state ----------
   const state = { data: null, lots: [], view: [], page: 0, sort: { key: "price", dir: 1 }, changeKind: "new", liveFingerprint: null };
   let livePollRunning = false;
+  let lastSnapshotSignature = "";
 
   // ---------- load & normalise (tolerates partial / old JSON) ----------
   function normalise(d) {
@@ -73,12 +74,13 @@
   async function load() {
     show("loading");
     try {
-      const response = await fetch("./data.json", { cache: "no-store" });
+      const response = await fetch("./data.json?_=" + Date.now(), { cache: "no-store" });
       if (!response.ok) throw new Error("HTTP " + response.status);
       const json = await response.json();
       const n = normalise(json);
       state.data = n.raw; state.lots = n.lots;
       state.liveFingerprint = n.raw.live && n.raw.live.fingerprint ? String(n.raw.live.fingerprint) : null;
+      lastSnapshotSignature = snapshotSignature(n.raw, n.lots);
       render();
     } catch (error) {
       $("errorText").textContent = "Не удалось загрузить data.json (" + (error && error.message ? error.message : "ошибка") + "). Данные могут быть ещё не опубликованы.";
@@ -87,93 +89,65 @@
     }
   }
 
+  function snapshotSignature(raw, lots) {
+    const live = raw && raw.live && typeof raw.live === "object" ? raw.live : {};
+    const collector = raw && raw.collector && typeof raw.collector === "object" ? raw.collector : {};
+    const lastSnapshot = Array.isArray(raw && raw.snapshots) ? raw.snapshots[raw.snapshots.length - 1] : null;
+    const changes = raw && raw.changes && raw.changes.counts ? raw.changes.counts : null;
+    // Ignore last_poll_at and per-lot last_seen: those timestamps move on every poll
+    // even when the visible market values did not change.
+    return JSON.stringify({
+      collector: [collector.status, collector.message, collector.lots, collector.pages],
+      live: [live.fingerprint, Number(live.item_count) || 0],
+      lots: (lots || []).map((lot) => [
+        String(lot.lot_id), lot.title, lot.serial, lot.rarity, lot.price, lot.status,
+        lot.active !== false,
+        Array.isArray(lot._history) && lot._history.length
+          ? [lot._history.length, lot._history[lot._history.length - 1].observed_at, lot._history[lot._history.length - 1].price]
+          : Array.isArray(lot.history) && lot.history.length
+            ? [lot.history.length, lot.history[lot.history.length - 1].observed_at, lot.history[lot.history.length - 1].price]
+            : []
+      ]),
+      stats: raw && raw.stats,
+      snapshots: Array.isArray(raw && raw.snapshots) ? raw.snapshots.length : 0,
+      lastSnapshot: lastSnapshot ? [lastSnapshot.observed_at, lastSnapshot.active_lots, lastSnapshot.median_price] : null,
+      changes: changes ? [changes.new, changes.gone, changes.price_up, changes.price_down] : null
+    });
+  }
+
   async function pollLive() {
+    // The dashboard polls the Worker's merged /data.json, not only the first-page
+    // endpoint. This lets both the 3-second live stream and the 5-minute full snapshot
+    // reach every panel without reloading the document.
     if (livePollRunning || !state.data || document.visibilityState !== "visible") return;
     livePollRunning = true;
     try {
-      const response = await fetch("./api/live/status", { cache: "no-store" });
-      if (!response.ok) return;
-      const live = await response.json();
-      state.data.live = {
-        enabled: Boolean(live.enabled),
-        fresh: Boolean(live.fresh),
-        last_poll_at: live.last_poll_at || null,
-        age_seconds: Number.isFinite(live.age_seconds) ? live.age_seconds : null,
-        item_count: Number(live.item_count) || 0,
-        fingerprint: live.fingerprint || null,
-        message: !live.enabled ? "Облачное live-хранилище пока не подключено." :
-          live.fresh ? "Первая страница Huevo обновляется в реальном времени." :
-          "Ожидается свежий опрос первой страницы."
-      };
-      if (!live.enabled || !live.fresh || !Array.isArray(live.items)) {
-        renderState();
-        return;
-      }
-      const fingerprint = String(live.fingerprint || "");
-      if (!fingerprint || fingerprint === state.liveFingerprint) {
-        renderState();
-        return;
-      }
-
-      const observedAt = live.last_poll_at || new Date().toISOString();
-      const indexById = new Map(state.lots.map((lot, index) => [String(lot.lot_id), index]));
-      const nextLots = state.lots.slice();
-      for (const item of live.items) {
-        if (!item || item.lot_id == null) continue;
-        const id = String(item.lot_id);
-        const index = indexById.get(id);
-        const old = index == null ? null : nextLots[index];
-        const history = Array.isArray(old && old._history)
-          ? old._history.slice()
-          : Array.isArray(old && old.history) ? old.history.slice() : [];
-        const newPrice = typeof item.price === "number" && Number.isFinite(item.price) ? item.price : null;
-        const previousPrice = old && typeof old.price === "number" ? old.price : null;
-        if (newPrice != null && newPrice !== previousPrice &&
-            (!history.length || history[history.length - 1].price !== newPrice)) {
-          history.push({ observed_at: observedAt, price: newPrice });
-        }
-        const keepAfter = Date.now() - 72 * 3600e3;
-        const keptHistory = history.filter((point) => {
-          const time = point && Date.parse(point.observed_at);
-          return Number.isFinite(time) && time >= keepAfter && typeof point.price === "number";
-        }).slice(-200);
-        const merged = Object.assign({}, old || {}, item, {
-          lot_id: id,
-          price: newPrice,
-          first_seen: (old && old.first_seen) || observedAt,
-          last_seen: observedAt,
-          active: true,
-          history: keptHistory,
-          _history: keptHistory,
-          _delta: keptHistory.length > 1 && keptHistory[keptHistory.length - 2].price > 0
-            ? (keptHistory[keptHistory.length - 1].price - keptHistory[keptHistory.length - 2].price) /
-              keptHistory[keptHistory.length - 2].price * 100
-            : null,
-          _text: [id, item.title || (old && old.title) || "", item.serial || (old && old.serial) || "",
-            item.rarity || (old && old.rarity) || "", item.status || (old && old.status) || ""].join(" ").toLocaleLowerCase("ru")
-        });
-        if (index == null) {
-          indexById.set(id, nextLots.length);
-          nextLots.push(merged);
-        } else {
-          nextLots[index] = merged;
-        }
-      }
-      state.lots = nextLots;
-      state.data.lots = nextLots.map((lot) => {
-        const raw = Object.assign({}, lot);
-        delete raw._history; delete raw._delta; delete raw._text;
-        raw.history = Array.isArray(lot._history) ? lot._history : (lot.history || []);
-        return raw;
+      const response = await fetch("./data.json?_=" + Date.now(), {
+        cache: "no-store",
+        headers: { "Accept": "application/json" }
       });
-      // Force derived charts/top-list to use live prices instead of stale fields from the full snapshot.
-      state.data.price_bins = [];
-      state.data.categories = [];
-      state.data.top_expensive = nextLots.filter((lot) => isNum(lot.price)).sort((a, b) => b.price - a.price).slice(0, 10);
-      state.liveFingerprint = fingerprint;
-      render();
+      if (!response.ok) return;
+      const json = await response.json();
+      const n = normalise(json);
+      const signature = snapshotSignature(n.raw, n.lots);
+      const changed = signature !== lastSnapshotSignature;
+
+      if (changed) {
+        // Replace the in-memory snapshot only when actual visible data changed.
+        // render() mutates the current DOM in place; no navigation or page reload occurs.
+        state.data = n.raw;
+        state.lots = n.lots;
+        state.liveFingerprint = n.raw.live && n.raw.live.fingerprint ? String(n.raw.live.fingerprint) : null;
+        lastSnapshotSignature = signature;
+        render();
+      } else {
+        // Keep freshness timestamps/status current without rebuilding cards, charts, or rows.
+        state.data.live = n.raw.live || state.data.live;
+        state.data.collector = n.raw.collector || state.data.collector;
+        renderState();
+      }
     } catch (_) {
-      // Keep the last successfully rendered data if the live endpoint is temporarily unavailable.
+      // Keep the last successfully rendered data if the Worker is temporarily unavailable.
     } finally {
       livePollRunning = false;
     }
