@@ -493,7 +493,7 @@
     const allowed = new Set(["overview", "market", "deals", "cheap", "analytics", "favorites", "support"]);
     state.activeView = allowed.has(view) ? view : "overview";
     document.querySelectorAll("[data-view-section]").forEach((section) => {
-      section.classList.toggle("hide", section.getAttribute("data-view-section") !== state.activeView);
+      section.classList.toggle("view-hidden", section.getAttribute("data-view-section") !== state.activeView);
     });
     document.querySelectorAll("#mainNav [data-view]").forEach((button) => {
       button.setAttribute("aria-selected", String(button.dataset.view === state.activeView));
