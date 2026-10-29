@@ -48,6 +48,12 @@ async function open(handler, viewport = { width: 1280, height: 900 }) {
   await ctx.route("https://huevo.su/**", (r) => r.fulfill({ status: 204, body: "" }));
   await ctx.route("http://site.test/**", async (route) => {
     const u = new URL(route.request().url());
+    if (u.pathname === "/api/support/config") {
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ enabled: false, amounts: [5000, 10000, 25000, 50000, 100000], sdk_url: "https://huevo.su/static/js/huevo-apps-v1.js", origins: ["huevo.su", "huevo.departament.site"] }) });
+    }
+    if (u.pathname === "/api/support/stats") {
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ enabled: false, supporters: 0, total: 0 }) });
+    }
     if (u.pathname === "/data.json") return handler(route);
     const file = path.join(SITE, u.pathname === "/" ? "index.html" : u.pathname.slice(1));
     if (!file.startsWith(SITE) || !fs.existsSync(file)) return route.fulfill({ status: 404, body: "" });
