@@ -39,6 +39,28 @@ def iso(dt):
     return dt.astimezone(timezone.utc).isoformat()
 
 
+def retention_hours():
+    """How long to remember gone lots and price/market history (default 72 h, 1..720)."""
+    try:
+        return max(1, min(int(os.getenv("HUEVO_RETENTION_HOURS", "72")), 720))
+    except ValueError:
+        return 72
+
+
+def parse_ts(value):
+    try:
+        dt = datetime.fromisoformat(str(value or "").replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def is_recent(value, cutoff):
+    """True only for a parseable timestamp not older than cutoff; unknown dates are dropped."""
+    dt = parse_ts(value)
+    return dt is not None and dt >= cutoff
+
+
 def load_previous():
     """Previous published snapshot, migrated to the current schema; {} if missing/corrupt/invalid."""
     try:
@@ -134,19 +156,23 @@ def make_browser(local_login=False, local_profile=False):
         "(KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36"
     )
     configured_user_agent = os.getenv("HUEVO_USER_AGENT", "").strip()
-    # GitHub Actions exposes an unset secret as an empty environment variable.
-    # os.getenv(name, default) therefore does NOT apply its default in that case.
-    # Use the known browser-compatible fallback whenever the secret is empty.
-    user_agent = configured_user_agent or default_user_agent
-    LOG.info("browser user-agent source=%s", "HUEVO_USER_AGENT secret" if configured_user_agent else "built-in fallback")
-    options.add_argument(f"--user-agent={user_agent}")
+    # A copied Chrome profile is bound to the real browser/OS; do not force a synthetic
+    # User-Agent over it unless explicitly configured.
+    cloned_profile = bool(os.getenv("HUEVO_CHROME_PROFILE", "").strip())
+    user_agent = configured_user_agent or ("" if cloned_profile else default_user_agent)
+    LOG.info("browser user-agent source=%s", "HUEVO_USER_AGENT secret" if configured_user_agent else
+             ("cloned Chrome profile" if cloned_profile else "built-in fallback"))
+    if user_agent:
+        options.add_argument(f"--user-agent={user_agent}")
 
     if local_login or local_profile:
-        # Dedicated local-only Chrome profile: the Huevo session stays on this PC.
-        # This directory is gitignored and is never uploaded or committed.
+        # Dedicated local-only Chrome profile: never upload/commit this directory.
         profile = ROOT / ".local-huevo-chrome-profile"
         profile.mkdir(parents=True, exist_ok=True)
         options.add_argument(f"--user-data-dir={profile}")
+        profile_name = os.getenv("HUEVO_CHROME_PROFILE", "").strip()
+        if profile_name:
+            options.add_argument(f"--profile-directory={profile_name}")
     options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
     options.add_experimental_option("perfLoggingPrefs", {"enableNetwork": True})
     binary = os.getenv("CHROME_BIN")
@@ -172,18 +198,9 @@ def snapshot_lot(row, old_by_id, observed_at):
     price = item.get("price")
     if price is not None and (not history or history[-1].get("price") != price):
         history.append({"observed_at": observed_at, "price": price})
-    cutoff = now_utc() - timedelta(days=180)
-    kept = []
-    for point in history[-30:]:
-        try:
-            date = datetime.fromisoformat(str(point.get("observed_at", "")).replace("Z", "+00:00"))
-            if date.tzinfo is None:
-                date = date.replace(tzinfo=timezone.utc)
-            if date >= cutoff:
-                kept.append(point)
-        except (ValueError, TypeError):
-            continue
-    item["history"] = kept
+    cutoff = now_utc() - timedelta(hours=retention_hours())
+    item["history"] = [point for point in history[-200:]
+                       if is_recent(point.get("observed_at"), cutoff)]
     return item
 
 
@@ -339,7 +356,10 @@ def main(argv=None):
                 gone["active"] = False
                 gone["status"] = "Не найден в последнем полном проходе"
                 gone_by_id[lot_id] = gone
-        gone_lots = list(gone_by_id.values())[-5000:]
+        # "Not found" is not proof of a sale; forget such lots after the retention window.
+        keep_after = now_utc() - timedelta(hours=retention_hours())
+        gone_lots = [row for row in gone_by_id.values()
+                     if is_recent(row.get("last_seen"), keep_after)][-5000:]
 
         changes = compare([l for l in old_lots if l.get("active", True)], lots) if old_lots else None
         if changes:
@@ -350,7 +370,8 @@ def main(argv=None):
             print("Состав лотов не изменился с прошлого снимка (<10 мин): новая точка истории не добавлена.")
         else:
             snapshots.append(snapshot_entry(observed_at, lots, summary, changes))
-        snapshots = snapshots[-180:]
+        snapshots = [row for row in snapshots
+                      if is_recent(row.get("observed_at"), keep_after)][-1000:]
 
         drops = []
         for lot in lots:
