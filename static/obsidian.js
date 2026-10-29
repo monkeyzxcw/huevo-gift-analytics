@@ -56,15 +56,15 @@
       $("priceBins").innerHTML = '<div class="empty">Пока нет импортированных цен.</div>';
       return;
     }
-    const quantile = p => values[Math.floor((values.length - 1) * p)];
-    const cuts = [quantile(.25), quantile(.5), quantile(.75)];
-    const bins = [
-      { label: "≤ " + format(cuts[0]), test: n => n <= cuts[0] },
-      { label: format(cuts[0]) + "–" + format(cuts[1]), test: n => n > cuts[0] && n <= cuts[1] },
-      { label: format(cuts[1]) + "–" + format(cuts[2]), test: n => n > cuts[1] && n <= cuts[2] },
-      { label: "> " + format(cuts[2]), test: n => n > cuts[2] }
-    ];
-    bins.forEach(bin => { bin.count = values.filter(bin.test).length; });
+    const bucketCount = Math.min(4, values.length);
+    const bins = Array.from({ length: bucketCount }, (_, index) => {
+      const start = Math.floor(index * values.length / bucketCount);
+      const end = Math.floor((index + 1) * values.length / bucketCount);
+      const sample = values.slice(start, end);
+      const bounds = sample[0] === sample[sample.length - 1]
+        ? format(sample[0]) : format(sample[0]) + "–" + format(sample[sample.length - 1]);
+      return { label: "Q" + (index + 1) + " · " + bounds, count: sample.length };
+    });
     const maximum = Math.max(1, ...bins.map(bin => bin.count));
     $("priceBins").innerHTML = bins.map(bin =>
       '<div class="analytics-bar-row"><span class="analytics-bar-name">' + esc(bin.label) +
