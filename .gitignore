@@ -27,3 +27,7 @@ Thumbs.db
 
 # Local Chrome profile contains the private Huevo session; never commit it
 .local-huevo-chrome-profile/
+
+# Local collector cooldown memory
+.collector-state.json
+.collector-state.json.tmp

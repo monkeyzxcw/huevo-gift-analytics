@@ -21,6 +21,9 @@ from crawler import CrawlConfig, run_crawl
 from storage import Store, utcnow
 
 OUT = ROOT / "cloudflare-site" / "data.json"
+# Local-only cooldown memory (gitignored). data.json is restored by the scheduled .bat after a
+# failed run, so the block time must not live only there.
+STATE = ROOT / ".collector-state.json"
 LOG = logging.getLogger("huevo-static-collector")
 
 
@@ -38,6 +41,38 @@ def load_previous():
         return data if isinstance(data, dict) else {}
     except (OSError, json.JSONDecodeError):
         return {}
+
+
+def load_state():
+    try:
+        data = json.loads(STATE.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def save_state(state):
+    temp = STATE.with_suffix(".json.tmp")
+    temp.write_text(json.dumps(state, ensure_ascii=False) + "\n", encoding="utf-8")
+    temp.replace(STATE)
+
+
+def active_cooldown(*sources):
+    """Latest future `blocked_until` among the given dicts, as an aware datetime, else None."""
+    latest = None
+    for src in sources:
+        value = (src or {}).get("blocked_until")
+        if not value:
+            continue
+        try:
+            until = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if until.tzinfo is None:
+            until = until.replace(tzinfo=timezone.utc)
+        if until > now_utc() and (latest is None or until > latest):
+            latest = until
+    return latest
 
 
 def write_json(data):
@@ -98,6 +133,10 @@ def snapshot_lot(row, old_by_id, observed_at):
     )}
     item["active"] = True
     old = old_by_id.get(str(item["lot_id"]), {})
+    # The crawl runs against a fresh temporary database, so its first_seen is just "this run".
+    # The real first observation is the one already published in the previous snapshot.
+    if old.get("first_seen"):
+        item["first_seen"] = old["first_seen"]
     history = list(old.get("history") or [])
     price = item.get("price")
     if price is not None and (not history or history[-1].get("price") != price):
@@ -144,14 +183,13 @@ def main(argv=None):
         return 2
 
     old_collector = previous.get("collector") or {}
-    if not local_session and old_collector.get("status") == "blocked" and old_collector.get("blocked_until"):
-        try:
-            until = datetime.fromisoformat(old_collector["blocked_until"].replace("Z", "+00:00"))
-            if until > now_utc():
-                print("Collector cooldown is still active; no request sent to Huevo.")
-                return 3
-        except (ValueError, TypeError):
-            pass
+    until = active_cooldown(load_state(), old_collector if old_collector.get("status") == "blocked" else None)
+    if until and not local_login:
+        print(f"Huevo ограничил доступ ранее; пауза до {until.isoformat()}. Запрос к Huevo не отправляется.", file=sys.stderr)
+        return 3
+    if until and local_login:
+        print(f"Внимание: пауза после ограничения Huevo действует до {until.isoformat()}. "
+              "Вы запускаете сбор вручную и осознанно; при повторном ограничении пауза продлится.", file=sys.stderr)
 
     base_url = os.getenv("HUEVO_BASE_URL", "https://huevo.su").strip().rstrip("/")
     if base_url not in ("https://huevo.su", "https://huevo.departament.site"):
@@ -207,6 +245,7 @@ def main(argv=None):
             if result is not None and result.status == "blocked":
                 wait_seconds = max(cooldown_hours * 3600, int(result.retry_after or 0))
                 blocked_until = iso(now + timedelta(seconds=wait_seconds))
+                save_state({"blocked_until": blocked_until, "http_status": result.http_status, "checked_at": iso(now)})
             previous["collector"] = {
                 "status": status, "message": message, "blocked_until": blocked_until,
                 "checked_at": iso(now), "pages": result.pages if result else 0,
@@ -218,6 +257,7 @@ def main(argv=None):
             print(f"Snapshot not updated: {status}: {message}", file=sys.stderr)
             return 2
 
+        save_state({})      # a complete pass clears any earlier cooldown
         observed_at = utcnow()
         current_rows = store.active_lots(priced_only=False)
         current_prices = [r["price"] for r in current_rows
