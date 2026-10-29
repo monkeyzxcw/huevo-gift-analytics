@@ -213,7 +213,10 @@ class Store:
 
     def active_lots(self, priced_only=True):
         with self.connect() as c:
-            sql = "SELECT * FROM lots WHERE active=1" + (" AND price IS NOT NULL" if priced_only else "")
+            sql = ("SELECT * FROM lots WHERE active=1" + (" AND price IS NOT NULL" if priced_only else "")
+                   + " ORDER BY first_seen ASC, rowid ASC")
+            # The crawler inserts page 1 first, preserving the market's displayed order.
+            # This lets the snapshot's first lot reliably mean the first gift on page 1.
             return [dict(r) for r in c.execute(sql)]
 
     def gone_lots(self):
