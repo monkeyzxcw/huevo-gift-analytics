@@ -6,6 +6,7 @@ import unittest
 _TEST_DIR = tempfile.TemporaryDirectory(prefix="huevo-tests-")
 os.environ["HUEVO_DB"] = os.path.join(_TEST_DIR.name, "test.sqlite3")
 os.environ["INGEST_TOKEN"] = "test-token-not-for-production"
+os.environ["HUEVO_COOKIES_JSON"] = ""
 
 from fastapi.testclient import TestClient
 import app as app_module
@@ -45,6 +46,11 @@ class IngestApiTests(unittest.TestCase):
         history = self.client.get("/api/history/900001").json()
         self.assertEqual(len(history), 1)
         self.assertEqual(history[0]["price"], 12345)
+
+    def test_crawl_returns_actionable_error_without_server_session(self):
+        response = self.client.post("/api/crawl")
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("browser collector", response.json()["detail"].lower())
 
     def test_ingest_rejects_bad_token(self):
         response = self.client.post(
