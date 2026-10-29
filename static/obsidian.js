@@ -59,15 +59,20 @@
       $("priceBins").innerHTML = '<div class="empty">Пока нет импортированных цен.</div>';
       return;
     }
-    const bucketCount = Math.min(4, values.length);
-    const bins = Array.from({ length: bucketCount }, (_, index) => {
-      const start = Math.floor(index * values.length / bucketCount);
-      const end = Math.floor((index + 1) * values.length / bucketCount);
-      const sample = values.slice(start, end);
-      const bounds = sample[0] === sample[sample.length - 1]
-        ? format(sample[0]) : format(sample[0]) + "–" + format(sample[sample.length - 1]);
-      return { label: "Q" + (index + 1) + " · " + bounds, count: sample.length };
-    });
+    const low = values[0], high = values[values.length - 1];
+    const bins = low === high
+      ? [{ label: format(low), count: values.length }]
+      : Array.from({ length: 4 }, (_, index) => {
+          const left = low + (high - low) * index / 4;
+          const right = low + (high - low) * (index + 1) / 4;
+          const count = values.filter(value => index === 0
+            ? value <= right
+            : index === 3 ? value > left : value > left && value <= right).length;
+          const label = index === 0 ? "≤ " + format(right)
+            : index === 3 ? "> " + format(left)
+            : format(left) + "–" + format(right);
+          return { label, count };
+        });
     const maximum = Math.max(1, ...bins.map(bin => bin.count));
     $("priceBins").innerHTML = bins.map(bin =>
       '<div class="analytics-bar-row"><span class="analytics-bar-name">' + esc(bin.label) +
