@@ -338,7 +338,8 @@ def stats():
 
 @app.get("/api/lots")
 def lots(q: str = "", sort: str = "price", limit: int = 500):
-    allowed = {"price":"price ASC", "price_desc":"price DESC", "title":"title COLLATE NOCASE ASC", "recent":"last_seen DESC"}
+    # Keep lots without a parsed price at the end, not ahead of priced offers.
+    allowed = {"price":"price IS NULL ASC, price ASC", "price_desc":"price IS NULL ASC, price DESC", "title":"title COLLATE NOCASE ASC", "recent":"last_seen DESC"}
     order = allowed.get(sort, allowed["price"])
     limit = max(1, min(limit, 2000))
     with db() as c:
