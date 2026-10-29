@@ -1,50 +1,83 @@
-name: Inspect uploaded Claude v4 archives
+name: Inspect and import uploaded Claude v4 app
 
 on:
   push:
     branches: [fix/ci-and-collector-regressions]
     paths:
-      - "Для Chatgpt/*.zip"
       - ".github/workflows/inspect-v4-archives.yml"
+      - "Для Chatgpt/*.zip"
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  inspect-archives:
+  import-app:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Safely extract uploaded archives for code review
+        with:
+          ref: fix/ci-and-collector-regressions
+      - name: Safely extract uploaded Claude v4 app and patches
         run: |
           python - <<'PY'
           from pathlib import Path, PurePosixPath
           from zipfile import ZipFile
-          root = Path(".")
-          output = Path("archive-review")
-          output.mkdir(exist_ok=True)
-          sources = [
-              ("Для Chatgpt/huevo-gift-analytics-v4.zip", output / "app"),
-              ("Для Chatgpt/huevo-v4-patches.zip", output / "patches"),
-          ]
-          for source, destination in sources:
-              src = root / source
-              if not src.is_file():
-                  raise SystemExit(f"Missing source archive: {source}")
+          out = Path("archive-review")
+          out.mkdir(exist_ok=True)
+          for source, name in [
+              ("Для Chatgpt/huevo-gift-analytics-v4.zip", "app"),
+              ("Для Chatgpt/huevo-v4-patches.zip", "patches"),
+          ]:
+              destination = out / name
               destination.mkdir(parents=True, exist_ok=True)
-              with ZipFile(src) as z:
-                  entries = z.infolist()
-                  print(f"ARCHIVE {source}: {len(entries)} entries")
-                  for info in entries:
-                      raw = info.filename.replace("\\", "/")
-                      path = PurePosixPath(raw)
+              with ZipFile(source) as archive:
+                  print(f"{source}: {len(archive.infolist())} entries")
+                  for info in archive.infolist():
+                      path = PurePosixPath(info.filename.replace("\\", "/"))
                       if path.is_absolute() or ".." in path.parts:
                           raise SystemExit(f"Unsafe archive path: {info.filename}")
-                      print(("DIR " if info.is_dir() else "FILE ") + f"{source} :: {info.filename} ({info.file_size} bytes)")
-                  z.extractall(destination)
+                  archive.extractall(destination)
           PY
-      - name: Upload extracted source for analysis
+      - name: Import the ready v4 application into the working branch
+        run: |
+          set -euo pipefail
+          SRC="archive-review/app/huevo-gift-analytics"
+          test -f "$SRC/app.py"
+          test -f "$SRC/huevo_probe.py"
+          test -f "$SRC/crawler.py"
+          test -f "$SRC/static/index.html"
+          test -f "$SRC/tests/test_app.py"
+          # Replace app-owned files with the exact version from the uploaded bundle.
+          # Preserve repository metadata, GitHub workflows, and Docker ignore rules.
+          for f in Dockerfile README_RU.md analytics.py app.py cookies.py crawler.py huevo_probe.py lot_parser.py package.json render.yaml requirements.txt security.py storage.py support.py; do
+            cp "$SRC/$f" "$f"
+          done
+          rm -rf static tests
+          cp -a "$SRC/static" static
+          cp -a "$SRC/tests" tests
+          # Remove stale styles/scripts from the previous app version that are no longer referenced.
+          rm -f static/obsidian.css static/obsidian.js
+          git status --short
+      - name: Validate imported Python code before committing
+        run: |
+          python -m pip install -r requirements.txt httpx
+          python -m unittest discover -s tests -v
+          node --check static/app.js
+          node --check static/browser_collector.js
+      - name: Commit imported v4 app to the working branch
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No application changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Dockerfile README_RU.md analytics.py app.py cookies.py crawler.py huevo_probe.py lot_parser.py package.json render.yaml requirements.txt security.py storage.py support.py static tests
+          git commit -m "Import tested Claude v4 application bundle"
+          git push origin HEAD:fix/ci-and-collector-regressions
+      - name: Upload extracted archives for traceability
         uses: actions/upload-artifact@v4
         with:
           name: claude-v4-source-review
