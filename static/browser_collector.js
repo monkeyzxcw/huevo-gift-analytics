@@ -23,10 +23,12 @@
         }
         return '';
       };
-      const priceText = pick('.mk-price', '.mk-gprice', '[class*="price"]', '[data-price]');
+      const priceNode = card.querySelector('.mk-price, .mk-gprice, [class*="price"], [data-price]');
+      const priceText = pick('.mk-price', '.mk-gprice', '[class*="price"]', '[data-price]') ||
+        priceNode?.getAttribute('data-price') || priceNode?.getAttribute('content') || '';
       const digits = priceText.replace(/[^0-9]/g, '');
       const img = card.querySelector('img');
-      const title = pick('.mk-gtitle', '[class*="title"]', '[class*="name"]', 'h2', 'h3');
+      const title = pick('.mk-gtitle', '[class*="title"]', '[class*="name"]', 'h2', 'h3') || img?.getAttribute('alt') || '';
       const serial = pick('.mk-gserial', '[class*="serial"]', '[class*="number"]');
       const rarity = pick('.mk-gsub', '[class*="rarity"]', '[class*="collection"]');
       return {
@@ -40,7 +42,7 @@
   const send = async lots => {
     const response = await fetch(`${dashboard}/api/ingest`, {
       method: 'POST', mode: 'cors',
-      headers: { 'Content-Type': 'text/plain;charset=UTF-8', 'Authorization': `Bearer ${token}` },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ lots })
     });
     const result = await response.json().catch(() => ({}));
@@ -69,8 +71,13 @@
       page++;
       await delay(2200);
     }
-    status.textContent = `Готово. Передано ${total} записей с ${Math.max(0, page - 1)} страниц. Обновите вкладку аналитики.`;
-    status.style.borderColor = '#55d98b';
+    if (total === 0) {
+      status.textContent = 'Карточки не найдены. Huevo мог изменить разметку или ограничить доступ; проверьте страницу вручную. Данные не импортированы.';
+      status.style.borderColor = '#ff6969';
+    } else {
+      status.textContent = `Готово. Передано ${total} записей с ${Math.max(0, page - 1)} страниц. Обновите вкладку аналитики.`;
+      status.style.borderColor = '#55d98b';
+    }
   } catch (error) {
     status.textContent = `Сбор остановлен: ${error.message}`;
     status.style.borderColor = '#ff6969';
