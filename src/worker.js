@@ -421,12 +421,31 @@ async function storeFullSnapshot(request, env) {
   });
 }
 
+function bridgePage(request, env) {
+  // A same-origin transport page for the desktop bridge. Huevo's own CSP can block
+  // cross-origin fetches, so the desktop app posts from this Worker origin instead.
+  const headers = responseHeaders(request, env, {
+    "Content-Type": "text/html; charset=utf-8",
+    "Cache-Control": "no-store",
+    "X-Robots-Tag": "noindex, nofollow",
+  });
+  headers.set(
+    "Content-Security-Policy",
+    "default-src 'none'; connect-src 'self'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+  );
+  return new Response(
+    "<!doctype html><html><head><meta charset=\"utf-8\"><title>Huevo Gift Bridge transport</title></head><body>Local Huevo Gift Bridge transport endpoint.</body></html>",
+    { status: 200, headers }
+  );
+}
+
 async function fetchHandler(request, env, ctx) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
   if (path.startsWith("/api/") && request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: responseHeaders(request, env) });
   }
+  if (request.method === "GET" && path === "/api/bridge") return bridgePage(request, env);
   if (request.method === "GET" && path === "/api/health") {
     return jsonResponse(request, env, { ok: true, ...(await getStorageHealth(env)) });
   }
