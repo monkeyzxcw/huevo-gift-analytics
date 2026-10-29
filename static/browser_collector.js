@@ -38,8 +38,9 @@
     }).filter(Boolean);
   };
   const send = async lots => {
-    const response = await fetch(`${dashboard}/api/ingest?token=${encodeURIComponent(token)}`, {
-      method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+    const response = await fetch(`${dashboard}/api/ingest`, {
+      method: 'POST', mode: 'cors',
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ lots })
     });
     const result = await response.json().catch(() => ({}));
