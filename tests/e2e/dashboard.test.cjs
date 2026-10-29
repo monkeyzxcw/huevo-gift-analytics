@@ -208,7 +208,7 @@ test("AMNYAM navigation renders all views and author support shows five levels",
   for (const view of ["overview", "market", "deals", "cheap", "analytics", "favorites", "support"]) {
     await page.click('#mainNav [data-view="' + view + '"]');
     assert.equal(await page.getAttribute('#mainNav [data-view="' + view + '"]', "aria-selected"), "true", view + " tab selected");
-    assert.equal(await page.locator('[data-view-section="' + view + '"]:not(.hide)').count() > 0, true, view + " view visible");
+    assert.equal(await page.locator('[data-view-section="' + view + '"]:not(.view-hidden)').count() > 0, true, view + " view visible");
   }
   assert.equal(await page.locator("#supportAmounts [data-amount]").count(), 5);
   assert.deepEqual(await page.locator("#supportAmounts [data-amount]").evaluateAll(nodes => nodes.map(n => n.dataset.amount)), ["5000", "10000", "25000", "50000", "100000"]);
