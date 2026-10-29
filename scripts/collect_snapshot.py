@@ -84,7 +84,7 @@ def snapshot_lot(row, old_by_id, observed_at):
         history.append({"observed_at": observed_at, "price": price})
     cutoff = now_utc() - timedelta(days=180)
     kept = []
-    for point in history[-100:]:
+    for point in history[-30:]:
         try:
             date = datetime.fromisoformat(str(point.get("observed_at", "")).replace("Z", "+00:00"))
             if date.tzinfo is None:
@@ -181,13 +181,14 @@ def main():
         current_ids = {str(row["lot_id"]) for row in lots}
 
         gone_by_id = {}
+        gone_fields = ("lot_id", "title", "serial", "rarity", "price", "status", "image_url", "lot_url", "first_seen", "last_seen", "active")
         for row in previous.get("gone_lots") or []:
             if row.get("lot_id") is not None:
-                gone_by_id[str(row["lot_id"])] = row
+                gone_by_id[str(row["lot_id"])] = {key: row.get(key) for key in gone_fields}
         for row in old_lots:
             lot_id = str(row.get("lot_id", ""))
             if lot_id and lot_id not in current_ids and row.get("active", True):
-                gone = dict(row)
+                gone = {key: row.get(key) for key in gone_fields}
                 gone["active"] = False
                 gone["status"] = "Не найден в последнем полном проходе"
                 gone_by_id[lot_id] = gone
