@@ -21,3 +21,6 @@ huevo.db-wal
 Thumbs.db
 .vscode/
 .idea/
+
+# Local Chrome profile contains the private Huevo session; never commit it
+.local-huevo-chrome-profile/
