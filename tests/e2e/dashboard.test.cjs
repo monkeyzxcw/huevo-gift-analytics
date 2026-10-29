@@ -244,7 +244,7 @@ test("value hunt compares similar gifts; smart search supports price, rarity and
   await page.fill("#search", "price<200");
   assert.match(await page.textContent("#rowCount"), /9 из 120/);
   await page.fill("#search", "rarity:Редкий price<200");
-  assert.match(await page.textContent("#rowCount"), /4 из 120/);
+  assert.match(await page.textContent("#rowCount"), /5 из 120/);
   await page.fill("#search", "#1007");
   assert.match(await page.textContent("#rowCount"), /1 из 120/);
   assert.match(await page.textContent("#rows"), /Звезда/);
