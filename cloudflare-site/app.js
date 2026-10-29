@@ -55,7 +55,8 @@
   }
 
   // ---------- state ----------
-  const state = { data: null, lots: [], view: [], page: 0, sort: { key: "price", dir: 1 }, changeKind: "new" };
+  const state = { data: null, lots: [], view: [], page: 0, sort: { key: "price", dir: 1 }, changeKind: "new", liveFingerprint: null };
+  let livePollRunning = false;
 
   // ---------- load & normalise (tolerates partial / old JSON) ----------
   function normalise(d) {
@@ -77,11 +78,94 @@
       const json = await response.json();
       const n = normalise(json);
       state.data = n.raw; state.lots = n.lots;
+      state.liveFingerprint = n.raw.live && n.raw.live.fingerprint ? String(n.raw.live.fingerprint) : null;
       render();
     } catch (error) {
       $("errorText").textContent = "Не удалось загрузить data.json (" + (error && error.message ? error.message : "ошибка") + "). Данные могут быть ещё не опубликованы.";
       setBadge("err", "Данные недоступны");
       show("error");
+    }
+  }
+
+  async function pollLive() {
+    if (livePollRunning || !state.data || document.visibilityState !== "visible") return;
+    livePollRunning = true;
+    try {
+      const response = await fetch("./api/live/status", { cache: "no-store" });
+      if (!response.ok) return;
+      const live = await response.json();
+      state.data.live = {
+        enabled: Boolean(live.enabled),
+        fresh: Boolean(live.fresh),
+        last_poll_at: live.last_poll_at || null,
+        age_seconds: Number.isFinite(live.age_seconds) ? live.age_seconds : null,
+        item_count: Number(live.item_count) || 0,
+        fingerprint: live.fingerprint || null,
+        message: !live.enabled ? "Облачное live-хранилище пока не подключено." :
+          live.fresh ? "Первая страница Huevo обновляется в реальном времени." :
+          "Ожидается свежий опрос первой страницы."
+      };
+      if (!live.enabled || !live.fresh || !Array.isArray(live.items)) {
+        renderState();
+        return;
+      }
+      const fingerprint = String(live.fingerprint || "");
+      if (!fingerprint || fingerprint === state.liveFingerprint) {
+        renderState();
+        return;
+      }
+
+      const observedAt = live.last_poll_at || new Date().toISOString();
+      const indexById = new Map(state.lots.map((lot, index) => [String(lot.lot_id), index]));
+      const nextLots = state.lots.slice();
+      for (const item of live.items) {
+        if (!item || item.lot_id == null) continue;
+        const id = String(item.lot_id);
+        const index = indexById.get(id);
+        const old = index == null ? null : nextLots[index];
+        const history = Array.isArray(old && old._history)
+          ? old._history.slice()
+          : Array.isArray(old && old.history) ? old.history.slice() : [];
+        const newPrice = typeof item.price === "number" && Number.isFinite(item.price) ? item.price : null;
+        const previousPrice = old && typeof old.price === "number" ? old.price : null;
+        if (newPrice != null && newPrice !== previousPrice &&
+            (!history.length || history[history.length - 1].price !== newPrice)) {
+          history.push({ observed_at: observedAt, price: newPrice });
+        }
+        const keepAfter = Date.now() - 72 * 3600e3;
+        const keptHistory = history.filter((point) => {
+          const time = point && Date.parse(point.observed_at);
+          return Number.isFinite(time) && time >= keepAfter && typeof point.price === "number";
+        }).slice(-200);
+        const merged = Object.assign({}, old || {}, item, {
+          lot_id: id,
+          price: newPrice,
+          first_seen: (old && old.first_seen) || observedAt,
+          last_seen: observedAt,
+          active: true,
+          history: keptHistory,
+          _history: keptHistory,
+          _delta: keptHistory.length > 1 && keptHistory[keptHistory.length - 2].price > 0
+            ? (keptHistory[keptHistory.length - 1].price - keptHistory[keptHistory.length - 2].price) /
+              keptHistory[keptHistory.length - 2].price * 100
+            : null,
+          _text: [id, item.title || (old && old.title) || "", item.serial || (old && old.serial) || "",
+            item.rarity || (old && old.rarity) || "", item.status || (old && old.status) || ""].join(" ").toLocaleLowerCase("ru")
+        });
+        if (index == null) {
+          indexById.set(id, nextLots.length);
+          nextLots.push(merged);
+        } else {
+          nextLots[index] = merged;
+        }
+      }
+      state.lots = nextLots;
+      state.liveFingerprint = fingerprint;
+      render();
+    } catch (_) {
+      // Keep the last successfully rendered data if the live endpoint is temporarily unavailable.
+    } finally {
+      livePollRunning = false;
     }
   }
 
@@ -93,6 +177,8 @@
   // ---------- header / data state ----------
   function renderState() {
     const d = state.data, c = d.collector && typeof d.collector === "object" ? d.collector : {};
+    const live = d.live && typeof d.live === "object" ? d.live : {};
+    const liveFresh = Boolean(live.enabled && live.fresh);
     const okAt = d.generated_at;
     $("lastOk").textContent = okAt ? when(okAt) + " (" + ago(okAt) + ")" : "—";
     $("lastTry").textContent = c.checked_at ? when(c.checked_at) + (c.status ? " · " + c.status : "") : "—";
@@ -102,12 +188,31 @@
     let kind = okAt ? "ok" : "";
     let label = okAt ? "Данные актуальны" : "Ожидает первого сбора";
     if (okAt && (Date.now() - new Date(okAt).getTime()) > STALE_HOURS * 3600e3) {
-      kind = ""; label = "Данные устарели";
-      parts.push("Последний успешный сбор был больше " + STALE_HOURS + " ч назад. Сборщик запускается на ПК владельца и работает только пока ПК включён.");
+      if (liveFresh) {
+        parts.push("В реальном времени обновляется первая страница; остальные лоты и графики используют последний полный снимок от " + when(okAt) + ".");
+      } else {
+        kind = ""; label = "Данные устарели";
+        parts.push("Последний успешный полный сбор был больше " + STALE_HOURS + " ч назад.");
+      }
+    }
+    if (liveFresh) {
+      kind = "ok";
+      label = "Live · первая страница";
+      if (live.last_poll_at && !(okAt && (Date.now() - new Date(okAt).getTime()) > STALE_HOURS * 3600e3)) {
+        parts.push("Первая страница обновлена " + when(live.last_poll_at) + "; полный каталог обновляется отдельно.");
+      }
+    } else if (live.enabled) {
+      parts.push(live.last_poll_at
+        ? "Live-опрос не обновлялся с " + when(live.last_poll_at) + "."
+        : "Live-хранилище готово, но локальный опрос ещё не запущен.");
+    } else {
+      parts.push(live.message || "Live-хранилище Cloudflare пока не подключено; показывается опубликованный снимок.");
     }
     if (c.status && c.status !== "ok") {
-      kind = "err"; label = c.status === "blocked" ? "Сбор на паузе" : "Последний сбор не удался";
-      parts.push("Последняя попытка: " + (c.message || c.status) + (c.blocked_until ? " Пауза до " + when(c.blocked_until) + "." : "") + " Показан последний успешный снимок.");
+      if (!liveFresh) {
+        kind = "err"; label = c.status === "blocked" ? "Сбор на паузе" : "Последний сбор не удался";
+      }
+      parts.push("Последняя попытка полного сбора: " + (c.message || c.status) + (c.blocked_until ? " Пауза до " + when(c.blocked_until) + "." : "") + " Показан последний полный снимок.");
       notice.classList.add("bad");
     }
     setBadge(kind, label);
@@ -363,4 +468,7 @@
   $("detail").addEventListener("close", () => { if (lastTrigger && document.contains(lastTrigger)) lastTrigger.focus(); });
   $("detail").addEventListener("click", (e) => { if (e.target === $("detail")) $("detail").close(); });
   load();
+  pollLive();
+  window.setInterval(pollLive, 3000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) pollLive(); });
 })();
