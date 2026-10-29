@@ -22,6 +22,24 @@ class IngestApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["ok"])
 
+    def test_parser_handles_card_without_mk_gcard_and_data_price(self):
+        html = '''
+        <a class="gift-card" href="/market/lot/900002" aria-label="Fallback Gift">
+          <img data-src="/images/gift.webp" alt="Fallback Gift">
+          <span class="serial">#2</span>
+          <span class="price" data-price="456"></span>
+          <span class="status">В продаже</span>
+        </a>
+        '''
+        rows, card_count = app_module.parse_cards(html)
+        self.assertEqual(card_count, 1)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["lot_id"], "900002")
+        self.assertEqual(rows[0]["title"], "Fallback Gift")
+        self.assertEqual(rows[0]["price"], 456)
+        self.assertEqual(rows[0]["image_url"], "https://huevo.su/images/gift.webp")
+        self.assertEqual(rows[0]["lot_url"], "https://huevo.su/market/lot/900002")
+
     def test_ingest_saves_history_and_sanitizes_urls(self):
         response = self.client.post(
             "/api/ingest",
