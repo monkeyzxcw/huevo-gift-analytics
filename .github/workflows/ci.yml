@@ -29,8 +29,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: JavaScript syntax
-        run: npm run check
+      - name: JavaScript, collector, and deployment config syntax
+        run: |
+          npm run check
+          node --check cloudflare-site/app.js
+          python -m py_compile scripts/collect_snapshot.py scripts/import_sqlite_snapshot.py
+          python -m json.tool cloudflare-site/data.json > /dev/null
+          python -m json.tool wrangler.jsonc > /dev/null
       - name: Install Playwright
         run: |
           npm install --no-audit --no-fund

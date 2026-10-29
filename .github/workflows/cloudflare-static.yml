@@ -1,0 +1,84 @@
+name: Cloudflare static market dashboard
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: huevo-cloudflare-static
+  cancel-in-progress: false
+
+jobs:
+  collect-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Validate required secrets before crawling
+        env:
+          HUEVO_COOKIES_JSON: ${{ secrets.HUEVO_COOKIES_JSON }}
+          HUEVO_COOKIES: ${{ secrets.HUEVO_COOKIES }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$HUEVO_COOKIES_JSON" ] && [ -z "$HUEVO_COOKIES" ]; then
+            echo "Missing HUEVO_COOKIES_JSON GitHub secret." >&2
+            exit 1
+          fi
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID GitHub secrets before crawling." >&2
+            exit 1
+          fi
+
+      - name: Build the existing Selenium image
+        run: docker build -t huevo-static-collector .
+
+      - name: Collect a complete market snapshot
+        id: collect
+        env:
+          HUEVO_COOKIES_JSON: ${{ secrets.HUEVO_COOKIES_JSON }}
+          HUEVO_COOKIES: ${{ secrets.HUEVO_COOKIES }}
+          HUEVO_BASE_URL: ${{ vars.HUEVO_BASE_URL || 'https://huevo.su' }}
+          CRAWL_DELAY: ${{ vars.CRAWL_DELAY || '2.0' }}
+          MAX_PAGES: ${{ vars.MAX_PAGES || '500' }}
+          CRAWL_BLOCK_COOLDOWN_HOURS: ${{ vars.CRAWL_BLOCK_COOLDOWN_HOURS || '6' }}
+          LOG_LEVEL: INFO
+        run: |
+          docker run --rm --shm-size=2g \
+            --volume "$PWD:/app" --workdir /app \
+            -e HUEVO_COOKIES_JSON \
+            -e HUEVO_COOKIES \
+            -e HUEVO_BASE_URL \
+            -e CRAWL_DELAY \
+            -e MAX_PAGES \
+            -e CRAWL_BLOCK_COOLDOWN_HOURS \
+            -e LOG_LEVEL \
+            huevo-static-collector python scripts/collect_snapshot.py
+
+      - name: Commit public snapshot and history
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add cloudflare-site/data.json
+          if git diff --cached --quiet; then
+            echo "No snapshot metadata changes to commit."
+          else
+            git commit -m "Update Huevo public market snapshot"
+            git push origin HEAD:main
+          fi
+
+      - name: Deploy static assets to Cloudflare
+        if: success()
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes wrangler@4 deploy --config wrangler.jsonc
