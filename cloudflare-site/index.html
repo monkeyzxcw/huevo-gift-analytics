@@ -6,17 +6,17 @@
 <meta name="color-scheme" content="dark">
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://huevo.su; style-src 'self'; img-src 'self' https://huevo.su https://huevo.departament.site data:; connect-src 'self' https://huevo.su https://*.huevo.su; base-uri 'none'; form-action 'none'">
-<title>Huevo Gift Analytics</title>
+<title>AMNYAM MODE — Huevo Gift Intelligence</title>
 <link rel="stylesheet" href="./styles.css?v=amnyam-v1">
 </head>
 <body>
 <a class="skip" href="#catalog">К каталогу</a>
 <main class="wrap">
 <header class="top">
-  <div class="brand"><div class="logo" aria-hidden="true">H</div><div><h1>Huevo <span>Gift Analytics</span></h1><p>Аналитика маркета подарков</p></div></div>
+  <div class="brand"><div class="logo" aria-hidden="true">H</div><div><h1>AMNYAM <span>MODE</span></h1><p>WORKER EDITION · GIFT MARKET INTELLIGENCE</p></div></div>
   <div class="top-right">
     <span class="badge" role="status"><i class="dot" id="stateDot"></i><span id="stateText">Загружаю данные…</span></span>
-    <a class="btn secondary" href="https://huevo.su/market/gifts" target="_blank" rel="noopener noreferrer">Открыть Huevo ↗</a>
+    <a class="btn secondary" href="https://huevo.su/market/gifts" target="_blank" rel="noopener noreferrer">Войти в рынок ↗</a>
   </div>
 </header>
 
@@ -32,8 +32,8 @@
 <div class="command-strip"><span class="command-mark">AMNYAM / WORKER EDITION</span><span>MARKET INTELLIGENCE <i></i> SILENT SYNC 3S</span><label class="command-search"><b>⌕</b><input id="globalSearch" type="search" placeholder="Быстрый поиск по рынку…" autocomplete="off" aria-label="Быстрый поиск"><kbd>ENTER</kbd></label></div>
 
 <section class="hero" id="hero" data-view-section="overview" aria-labelledby="heroTitle">
-  <div><div class="eyebrow">Обзор рынка</div><h2 id="heroTitle">Каталог подарков и динамика цен</h2>
-  <p>Снимок публичных предложений. Везде показаны <b>цены объявлений</b>, а не цены завершённых сделок.</p></div>
+  <div><div class="eyebrow">AMNYAM / ПОЛЕВОЙ СКАНЕР</div><h2 id="heroTitle">Поймай лот.<br><em>Не переплати.</em></h2>
+  <p>Цены маркета, история и выгодные входы. Работаем быстро: <b>собираем данные, сравниваем рынок, принимаем решение.</b></p></div>
   <dl class="freshness" id="freshness"><div><dt>Последний успешный сбор</dt><dd id="lastOk">—</dd></div><div><dt>Последняя попытка</dt><dd id="lastTry">—</dd></div></dl>
 </section>
 
@@ -44,6 +44,13 @@
 <div id="empty" class="panel state hide"><h3>Данных пока нет</h3><p id="emptyText">Первый полный сбор ещё не опубликован. Статистика не показывается, чтобы не выдавать пустые значения за реальные.</p></div>
 
 <div id="content" class="hide">
+
+<section class="panel overview-pick" id="overviewPick" data-view-section="overview">
+  <div class="pick-stamp" aria-hidden="true">AM<br>NYAM</div>
+  <div class="pick-copy"><span class="section-index">/ CURRENT BEST PICK</span><h2>Лот дня <span>ниже ориентира</span></h2><p id="overviewPickHint">Ищем лучший лот относительно похожих предложений…</p></div>
+  <div id="overviewPickLot" class="pick-lot"><span class="muted">Рынок загружается</span></div>
+  <button class="btn secondary" type="button" data-go-view="deals">Все предложения ↗</button>
+</section>
 <section class="cards" id="cards" data-view-section="overview" aria-label="Ключевые показатели"></section>
 
 <section class="grid2" data-view-section="overview">
@@ -115,6 +122,7 @@
     <label class="f num"><span>Цена до</span><input class="input" id="pmax" type="number" min="0" inputmode="numeric" placeholder="∞"></label>
     <button class="btn secondary reset" id="reset" type="button">Сбросить</button>
   </form>
+  <div class="search-tips"><span>БЫСТРЫЕ ФИЛЬТРЫ</span><button type="button" data-search-token="price<100000">до 100k</button><button type="button" data-search-token="rarity:Редкий">редкие</button><button type="button" data-search-token="status:На продаже">на продаже</button><button type="button" data-search-token="price>500000">выше 500k</button></div>
   <div class="table-wrap">
     <table>
       <caption class="sr">Каталог подарков. Нажмите на заголовок столбца, чтобы отсортировать.</caption>
