@@ -185,6 +185,30 @@ def parse_cards(html):
                      "observed_at": now})
     return rows, len(cards)
 
+def looks_like_login_page(url, title="", heading="", body_text="", password_visible=False, has_market_cards=False):
+    """Avoid mistaking a navigation link saying 'Log in' for an unauthenticated session."""
+    parsed = urlsplit(url or "")
+    path = (parsed.path or "").lower().rstrip("/")
+    if re.search(r"/(login|log-in|signin|sign-in|auth|authorize|authentication)$", path):
+        return True
+    if password_visible:
+        return True
+    normalized = " ".join((body_text or "").lower().split())
+    explicit_prompts = (
+        "войдите в аккаунт", "необходимо войти", "требуется авторизация",
+        "для продолжения войдите", "авторизуйтесь", "sign in to continue",
+        "please log in", "login required", "authentication required",
+    )
+    if any(prompt in normalized for prompt in explicit_prompts):
+        return True
+    headline = " ".join((title or "", heading or "")).strip().lower()
+    simple_login_headline = re.fullmatch(
+        r"\s*(войти|вход|авторизация|вход в аккаунт|sign in|log in|login)\s*",
+        headline,
+    )
+    return bool(simple_login_headline and not has_market_cards)
+
+
 def access_block_status(text):
     """Return a detected HTTP status for recognizable access/rate-limit pages, if present."""
     normalized = (text or "").lower()
@@ -283,11 +307,51 @@ def crawl():
 
             if not accepted:
                 raise RuntimeError("Не удалось применить cookies для huevo.su. Проверь JSON и срок действия сессии.")
+            # Verify the session from the actual root/login entry point first.
+            browser.get(BASE_URL + "/")
+            WebDriverWait(browser, 20).until(lambda d: d.execute_script("return document.readyState") == "complete")
+            time.sleep(1)
+            body_text = browser.find_element("tag name", "body").text[:2000]
+            heading_text = " ".join(
+                element.text.strip() for element in browser.find_elements("css selector", "h1, h2")
+                if element.is_displayed() and element.text.strip()
+            )[:300]
+            has_market_cards = bool(browser.find_elements("css selector", "a[href*='/market/lot/']"))
+            password_visible = any(
+                element.is_displayed()
+                for element in browser.find_elements("css selector", "input[type='password']")
+            )
+            if looks_like_login_page(
+                browser.current_url, browser.title, heading_text, body_text,
+                password_visible=password_visible, has_market_cards=has_market_cards,
+            ):
+                raise RuntimeError(
+                    "После загрузки cookies корневая страница Huevo показывает форму/маршрут входа. "
+                    "Возможны cookies от другого домена, истёкшая сессия или привязка авторизации к браузеру. "
+                    "Выключение 2FA не делает старые cookies действительными."
+                )
+
             browser.get(f"{BASE_URL}/market/gifts?page=1")
-            time.sleep(2)
-            auth_text = (browser.title + " " + browser.find_element("tag name", "body").text[:1000]).lower()
-            if any(term in auth_text for term in ("войти", "sign in", "log in", "авторизац")):
-                raise RuntimeError("Cookies установлены, но авторизация не подтверждена. Возможны истёкшая сессия, неполный экспорт, cookies от другого домена или challenge со стороны сайта. Выключение 2FA не делает старые cookies действительными.")
+            WebDriverWait(browser, 20).until(lambda d: d.execute_script("return document.readyState") == "complete")
+            time.sleep(1)
+            market_text = browser.find_element("tag name", "body").text[:2000]
+            heading_text = " ".join(
+                element.text.strip() for element in browser.find_elements("css selector", "h1, h2")
+                if element.is_displayed() and element.text.strip()
+            )[:300]
+            has_market_cards = bool(browser.find_elements("css selector", "a[href*='/market/lot/']"))
+            password_visible = any(
+                element.is_displayed()
+                for element in browser.find_elements("css selector", "input[type='password']")
+            )
+            if looks_like_login_page(
+                browser.current_url, browser.title, heading_text, market_text,
+                password_visible=password_visible, has_market_cards=has_market_cards,
+            ):
+                raise RuntimeError(
+                    "Корневая страница открылась, но маркет перенаправил на вход. "
+                    "Сессия cookies не авторизовала целевой раздел или нужна дополнительная авторизация."
+                )
         except Exception:
             browser.quit()
             raise
