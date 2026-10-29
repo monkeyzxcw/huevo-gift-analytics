@@ -2,6 +2,7 @@ import json
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 _TEST_DIR = tempfile.TemporaryDirectory(prefix="huevo-tests-")
 os.environ["HUEVO_DB"] = os.path.join(_TEST_DIR.name, "test.sqlite3")
@@ -85,6 +86,12 @@ class IngestApiTests(unittest.TestCase):
         self.assertEqual(cookies[0]["domain"], ".huevo.departament.site")
         self.assertTrue(cookies[0]["httpOnly"])
         self.assertEqual(cookies[0]["value"], "example-only")
+
+    def test_proxy_check_requires_vless_configuration(self):
+        with patch("app_module.proxy_status", return_value={"configured": False, "running": False}):
+            response = self.client.post("/api/proxy-check")
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("VLESS_URL", response.json()["detail"])
 
     def test_vless_url_builds_local_socks_and_websocket_tls_config(self):
         config = parse_vless_url(
