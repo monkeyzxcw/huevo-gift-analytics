@@ -21,6 +21,9 @@ concurrency:
 
 jobs:
   deploy:
+    # The scheduled/manual run already deploys its snapshot. Avoid a second deploy
+    # when that run pushes its generated data.json commit back to main.
+    if: github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'chore: refresh Huevo market snapshot')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
