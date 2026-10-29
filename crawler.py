@@ -22,6 +22,8 @@ class CrawlConfig:
     max_pages: int = 500
     ready_timeout: float = 20.0
     settle: float = 1.5
+    network_retries: int = 2        # bounded retries, only for transient timeout/connect errors
+    retry_backoff: float = 5.0
     cookies_raw: str = ""
     sleep: callable = field(default=time.sleep, repr=False)
 
@@ -127,6 +129,31 @@ def install_session(browser, cfg, log):
     return accepted, rejected
 
 
+TRANSIENT_CAUSES = ("timeout", "connect")
+
+
+def observe_with_retry(browser, cfg, path, log, parser=None):
+    """`observe`, retried a bounded number of times and ONLY for transient network errors.
+
+    Blocks (403/418/429), login pages, 5xx and DNS/TLS failures are returned at once: retrying
+    them would just be pressure on the source. Waits grow 1x, 2x, ... of `retry_backoff`.
+    """
+    attempt = 0
+    while True:
+        result = observe(browser, cfg, path, parser)
+        probe = result[0]
+        if (probe.get("verdict") != "network_error" or probe.get("cause") not in TRANSIENT_CAUSES
+                or attempt >= max(0, int(cfg.network_retries))):
+            if attempt:
+                probe["attempts"] = attempt + 1
+            return result
+        attempt += 1
+        wait = max(0.0, cfg.retry_backoff) * attempt
+        log.warning("transient network error (%s) on %s; retry %d/%d in %.0fs",
+                    probe.get("cause"), path, attempt, cfg.network_retries, wait)
+        cfg.sleep(wait)
+
+
 def run_crawl(browser, store, cfg, log, progress=lambda page, found: None, should_stop=lambda: False):
     # --- session check on the root page, then the catalog
     if cfg.cookies_raw:
@@ -145,7 +172,7 @@ def run_crawl(browser, store, cfg, log, progress=lambda page, found: None, shoul
         # Use the canonical catalog URL for page 1; page=1 may redirect to the profile.
         path = "/market/gifts" if page == 1 else f"/market/gifts?page={page}"
         t0 = time.monotonic()
-        probe, rows, links, _ = observe(browser, cfg, path)
+        probe, rows, links, _ = observe_with_retry(browser, cfg, path, log)
         verdict = probe["verdict"]
         log.info("crawl page=%d verdict=%s http=%s(%s) host=%s title=%r body_len=%s cards=%s parsed=%d %.1fs", page, verdict,
                  probe.get("http_status"), probe.get("status_source"), probe.get("final_host"), probe.get("title"),
@@ -158,7 +185,7 @@ def run_crawl(browser, store, cfg, log, progress=lambda page, found: None, shoul
             src = "подтверждён сетевым журналом" if probe.get("status_source") == "network" else "определён по тексту страницы"
             return CrawlResult("blocked", f"Huevo ограничил доступ (HTTP {code}, {src}). Сбор остановлен без повторов.", stop_reason="блокировка", **common)
         if verdict == "network_error":
-            return CrawlResult("network_error", f"Сетевая ошибка ({probe.get('cause')}). Сбор остановлен без повторов.", cause=probe.get("cause"), stop_reason="сеть", **common)
+            return CrawlResult("network_error", f"Сетевая ошибка ({probe.get('cause')}), попыток: {probe.get('attempts', 1)}. Сбор остановлен.", cause=probe.get("cause"), stop_reason="сеть", **common)
         if verdict == "server_error":
             return CrawlResult("server_error", VERDICT_HINTS["server_error"], stop_reason="ошибка источника", **common)
         if not rows:
@@ -206,7 +233,7 @@ def run_history_crawl(browser, store, cfg, log, max_pages=5, should_stop=lambda:
             return CrawlResult("error", "Остановлено оператором", pages, saved, new_total, stop_reason="остановка")
         meta.clear()
         path = "/market/history" if page == 1 else f"/market/history?page={page}"
-        probe, rows, _, _ = observe(browser, cfg, path, parser=parser)
+        probe, rows, _, _ = observe_with_retry(browser, cfg, path, log, parser=parser)
         verdict = probe["verdict"]
         log.info("history page=%d verdict=%s http=%s(%s) rows=%d table=%s total_pages=%s", page, verdict, probe.get("http_status"),
                  probe.get("status_source"), len(rows), meta.get("table_found"), meta.get("total_pages"))
