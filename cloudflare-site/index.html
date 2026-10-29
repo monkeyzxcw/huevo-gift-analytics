@@ -44,19 +44,19 @@
 <div id="empty" class="panel state hide"><h3>Данных пока нет</h3><p id="emptyText">Первый полный сбор ещё не опубликован. Статистика не показывается, чтобы не выдавать пустые значения за реальные.</p></div>
 
 <div id="content" class="hide">
-<section class="cards" id="cards" aria-label="Ключевые показатели"></section>
+<section class="cards" id="cards" data-view-section="overview" aria-label="Ключевые показатели"></section>
 
-<section class="grid2">
+<section class="grid2" data-view-section="overview">
   <article class="panel"><div class="panel-head"><h3>Распределение цен</h3><span class="muted" id="binsNote"></span></div><div class="chart" id="chartBins"></div></article>
   <article class="panel"><div class="panel-head"><h3>Категории (редкость)</h3><span class="muted" id="catNote"></span></div><div id="chartCats" class="bars"></div></article>
 </section>
 
-<section class="grid2">
+<section class="grid2" data-view-section="analytics">
   <article class="panel"><div class="panel-head"><h3>Число активных лотов по снимкам</h3><span class="muted" id="countNote"></span></div><div class="chart" id="chartCount"></div></article>
   <article class="panel"><div class="panel-head"><h3>Медианная цена по снимкам</h3><span class="muted" id="medianNote"></span></div><div class="chart" id="chartMedian"></div></article>
 </section>
 
-<section class="grid2">
+<section class="grid2" data-view-section="analytics">
   <article class="panel">
     <div class="panel-head"><h3>Изменения каталога</h3><span class="muted" id="changesNote"></span></div>
     <div class="tabs" role="tablist" aria-label="Тип изменений">
@@ -70,12 +70,12 @@
   <article class="panel"><div class="panel-head"><h3>Самые дорогие лоты</h3><span class="muted">по цене объявления</span></div><ol class="list" id="topList"></ol></article>
 </section>
 
-<section class="panel hide" id="salesPanel" aria-labelledby="salesTitle">
+<section class="panel hide" id="salesPanel" data-view-section="analytics" aria-labelledby="salesTitle">
   <div class="panel-head"><h3 id="salesTitle">История продаж</h3><span class="muted" id="salesNote"></span></div>
   <div id="salesBody"></div>
 </section>
 
-<section class="panel" id="catalog" aria-labelledby="catTitle">
+<section class="panel catalog-panel" id="catalog" data-view-section="market" aria-labelledby="catTitle">
   <div class="panel-head"><div><h3 id="catTitle">Каталог маркета</h3><div class="muted" id="rowCount" aria-live="polite">—</div></div></div>
   <form class="toolbar" id="filters" role="search" aria-label="Фильтры каталога">
     <label class="f grow"><span>Поиск</span><input class="input" id="search" type="search" placeholder="Название, серия или ID" autocomplete="off"></label>
