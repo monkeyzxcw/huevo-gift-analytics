@@ -32,7 +32,7 @@ class FakeBrowser:
         self.gets.append(url)
         if self.fail_on and self.fail_on(url):
             raise RuntimeError("net::ERR_NAME_NOT_RESOLVED")
-        n = int(url.split("page=")[1]) if "page=" in url else 0
+        # Page 1 now uses the canonical /market/gifts URL without ?page=1.\n        # Treat that URL as page 1 in the fake browser just like the real catalog.\n        n = int(url.split("page=")[1]) if "page=" in url else 1
         status, html, ra = self.pages.get(n, (200, page_html([]), None))
         self.current_url, self.page_source, self.title = url, html, "Маркет"
         self._log = [perf(url, status, ra)]
