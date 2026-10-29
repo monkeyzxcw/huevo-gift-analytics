@@ -141,9 +141,9 @@
         lastSnapshotSignature = signature;
         render();
       } else {
-        // Keep freshness timestamps/status current without rebuilding cards, charts, or rows.
-        state.data.live = n.raw.live || state.data.live;
-        state.data.collector = n.raw.collector || state.data.collector;
+        // Update non-visual metadata (including last successful full-snapshot time) without
+        // rebuilding cards, charts, rows, the active tab, or the search controls.
+        state.data = n.raw;
         renderState();
       }
     } catch (_) {
