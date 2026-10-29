@@ -1,0 +1,53 @@
+name: Inspect uploaded Claude v4 archives
+
+on:
+  push:
+    branches: [fix/ci-and-collector-regressions]
+    paths:
+      - "Для Chatgpt/*.zip"
+      - ".github/workflows/inspect-v4-archives.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-archives:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Safely extract uploaded archives for code review
+        run: |
+          python - <<'PY'
+          from pathlib import Path, PurePosixPath
+          from zipfile import ZipFile
+          root = Path(".")
+          output = Path("archive-review")
+          output.mkdir(exist_ok=True)
+          sources = [
+              ("Для Chatgpt/huevo-gift-analytics-v4.zip", output / "app"),
+              ("Для Chatgpt/huevo-v4-patches.zip", output / "patches"),
+          ]
+          for source, destination in sources:
+              src = root / source
+              if not src.is_file():
+                  raise SystemExit(f"Missing source archive: {source}")
+              destination.mkdir(parents=True, exist_ok=True)
+              with ZipFile(src) as z:
+                  entries = z.infolist()
+                  print(f"ARCHIVE {source}: {len(entries)} entries")
+                  for info in entries:
+                      raw = info.filename.replace("\\", "/")
+                      path = PurePosixPath(raw)
+                      if path.is_absolute() or ".." in path.parts:
+                          raise SystemExit(f"Unsafe archive path: {info.filename}")
+                      print(("DIR " if info.is_dir() else "FILE ") + f"{source} :: {info.filename} ({info.file_size} bytes)")
+                  z.extractall(destination)
+          PY
+      - name: Upload extracted source for analysis
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-v4-source-review
+          path: archive-review/
+          if-no-files-found: error
+          retention-days: 2
