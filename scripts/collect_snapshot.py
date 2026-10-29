@@ -15,7 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from analytics import best_value, find_deals, market_summary, price_bins
+from analytics import best_value, find_deals, market_summary, price_bins, sales_by_title, sales_summary
 from cookies import ALLOWED_HUEVO_HOSTS
 from crawler import CrawlConfig, run_crawl
 from snapshot import (SnapshotError, category_distribution, compare, is_duplicate_snapshot, migrate,
@@ -26,6 +26,8 @@ OUT = ROOT / "cloudflare-site" / "data.json"
 # Local-only cooldown memory (gitignored). data.json is restored by the scheduled .bat after a
 # failed run, so the block time must not live only there.
 STATE = ROOT / ".collector-state.json"
+HISTORY_DB = ROOT / "history.db"
+MIN_PUBLISHED_SALES = 20      # below this the sample is not confirmed enough to publish anything
 LOG = logging.getLogger("huevo-static-collector")
 
 
@@ -89,6 +91,22 @@ def write_json(data):
     except SnapshotError as exc:
         print(f"data.json не обновлён: проверка структуры не пройдена: {exc}", file=sys.stderr)
         return False
+
+
+def sales_block():
+    """Aggregate-only sales statistics from the local history.db, or None.
+
+    Published only when `--with-sales` is given AND the local database holds at least
+    MIN_PUBLISHED_SALES rows with a known price. No names, no per-sale rows, no invented dates.
+    """
+    if not HISTORY_DB.exists():
+        return None
+    store = Store(str(HISTORY_DB))
+    rows = store.sales(limit=50000)
+    summary = sales_summary([r.get("price") for r in rows])
+    if summary["count"] < MIN_PUBLISHED_SALES:
+        return None
+    return {"summary": summary, "by_title": sales_by_title(rows), "generated_at": utcnow()}
 
 
 def write_action_output(name, value):
@@ -174,6 +192,10 @@ def main(argv=None):
     parser.add_argument(
         "--local-profile", action="store_true",
         help="Use the saved local Chrome profile headlessly for scheduled runs; no cookie export required.",
+    )
+    parser.add_argument(
+        "--with-sales", action="store_true",
+        help="Also publish aggregate sales statistics from the local history.db (only if it has enough confirmed rows).",
     )
     args = parser.parse_args(argv)
     local_login = args.local_login
@@ -373,7 +395,7 @@ def main(argv=None):
             "categories": category_distribution(lots),
             "top_expensive": top_expensive(lots),
             "changes": changes,
-            "sales": previous.get("sales"),
+            "sales": (sales_block() if args.with_sales else None) or previous.get("sales"),
         }
         if not write_json(data):
             return 2

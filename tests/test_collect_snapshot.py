@@ -85,6 +85,26 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(self.run_main([], status="blocked", reached_end=False, http_status=418), 2)
         self.assertEqual(cs.OUT.read_text(encoding="utf-8"), "{not json", "no empty snapshot is invented")
 
+    def test_sales_are_published_only_when_requested_and_confirmed(self):
+        from storage import Store
+        db = Path(self.tmp.name) / "history.db"
+        store = Store(str(db)); store.migrate()
+        rows = [{"sale_key": f"k{i}", "lot_id": str(i), "title": "Звезда #%d" % i, "price": 100 + i, "time_raw": "10:00", "sold_at": None} for i in range(25)]
+        store.upsert_sales(rows, now="2026-10-29T10:00:00+00:00")
+        with patch.object(cs, "HISTORY_DB", db):
+            self.assertEqual(self.run_main([lot(1)]), 0)
+            self.assertIsNone(self.data()["sales"], "never published without --with-sales")
+            with self.crawl_with([lot(1)]):
+                self.assertEqual(cs.main(["--local-profile", "--with-sales"]), 0)
+            sales = self.data()["sales"]
+            self.assertEqual(sales["summary"]["count"], 25)
+            self.assertNotIn("seller", json.dumps(sales).lower())
+        small = Path(self.tmp.name) / "small.db"
+        s2 = Store(str(small)); s2.migrate(); s2.upsert_sales(rows[:5], now="2026-10-29T10:00:00+00:00")
+        with patch.object(cs, "HISTORY_DB", small), self.crawl_with([lot(2)]):
+            cs.main(["--local-profile", "--with-sales"])
+        self.assertEqual(self.data()["sales"]["summary"]["count"], 25, "a too-small sample does not replace/erase published stats")
+
     def test_blocked_run_keeps_last_good_data_and_sets_persistent_cooldown(self):
         self.run_main([lot(1), lot(2)])
         good = self.data()["lots"]
