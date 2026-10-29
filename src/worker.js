@@ -543,8 +543,8 @@ async function createSupportIntent(request, env) {
     return jsonResponse(request, env, { ok: false, detail: "Ожидается JSON-объект." }, 400);
   }
   const amount = payload.amount;
-  if (!Number.isSafeInteger(amount) || amount < 1 || amount > 100000) {
-    return jsonResponse(request, env, { ok: false, detail: "Сумма должна быть целым числом от 1 до 100000." }, 400);
+  if (!Number.isSafeInteger(amount) || amount < 5000 || amount > 100000) {
+    return jsonResponse(request, env, { ok: false, detail: "Сумма должна быть целым числом от 5000 до 100000." }, 400);
   }
   const launch = await verifySupportLaunch(String(payload.launch_query || "").slice(0, 4096), credentials.clientSecret);
   if (!launch || !/^\d{1,20}$/.test(String(launch.hu_user_id || "")) || !Number.isSafeInteger(Number(launch.hu_user_id))) {
