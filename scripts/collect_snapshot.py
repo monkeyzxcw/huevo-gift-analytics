@@ -54,7 +54,7 @@ def write_action_output(name, value):
             handle.write(f"{name}={value}\n")
 
 
-def make_browser(local_login=False):
+def make_browser(local_login=False, local_profile=False):
     from selenium import webdriver
     from selenium.webdriver.chrome.options import Options
 
@@ -75,7 +75,7 @@ def make_browser(local_login=False):
     if user_agent:
         options.add_argument(f"--user-agent={user_agent}")
 
-    if local_login:
+    if local_login or local_profile:
         # Dedicated local-only Chrome profile: the Huevo session stays on this PC.
         # This directory is gitignored and is never uploaded or committed.
         profile = ROOT / ".local-huevo-chrome-profile"
@@ -123,20 +123,28 @@ def main(argv=None):
         "--local-login", action="store_true",
         help="Open visible Chrome on this PC and let the operator sign in manually; no cookie export required.",
     )
+    parser.add_argument(
+        "--local-profile", action="store_true",
+        help="Use the saved local Chrome profile headlessly for scheduled runs; no cookie export required.",
+    )
     args = parser.parse_args(argv)
     local_login = args.local_login
+    local_profile = args.local_profile
+    if local_login and local_profile:
+        parser.error("Use either --local-login or --local-profile, not both.")
+    local_session = local_login or local_profile
 
     previous = load_previous()
-    cookies = "" if local_login else (
+    cookies = "" if local_session else (
         os.getenv("HUEVO_COOKIES_JSON", "").strip()
         or os.getenv("HUEVO_COOKIES", "").strip()
     )
-    if not local_login and not cookies:
+    if not local_session and not cookies:
         print("Missing GitHub secret HUEVO_COOKIES_JSON (or HUEVO_COOKIES). Use --local-login on your own PC instead.", file=sys.stderr)
         return 2
 
     old_collector = previous.get("collector") or {}
-    if not local_login and old_collector.get("status") == "blocked" and old_collector.get("blocked_until"):
+    if not local_session and old_collector.get("status") == "blocked" and old_collector.get("blocked_until"):
         try:
             until = datetime.fromisoformat(old_collector["blocked_until"].replace("Z", "+00:00"))
             if until > now_utc():
@@ -162,7 +170,7 @@ def main(argv=None):
         store.migrate()
         browser = None
         try:
-            browser = make_browser(local_login=local_login)
+            browser = make_browser(local_login=local_login, local_profile=local_profile)
             if local_login:
                 print(f"Открываю отдельный Chrome-профиль на этом ПК: {base_url}")
                 browser.get(base_url + "/")
