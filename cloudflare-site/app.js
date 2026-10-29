@@ -6,24 +6,52 @@
   const timestamp = value => value ? new Date(value).toLocaleString("ru-RU", { dateStyle:"medium", timeStyle:"short", timeZone:"UTC" }) + " UTC" : "—";
   let data = null;
 
-  async function start() {
+  let refreshing = false;
+  let lastFingerprint = "";
+
+  async function refreshData() {
+    if (refreshing) return;
+    refreshing = true;
     try {
-      const response = await fetch("./data.json", { cache: "no-store" });
+      // Poll the published snapshot every second and bypass browser/CDN cache.
+      const response = await fetch("./data.json?ts=" + Date.now(), {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" }
+      });
       if (!response.ok) throw new Error("HTTP " + response.status);
-      data = await response.json();
-      paint(data);
+      const next = await response.json();
+      if (!next || !Array.isArray(next.lots)) throw new Error("Некорректная структура data.json");
+      const fingerprint = [next.generated_at || "", next.collector && next.collector.status || "", next.lots.length].join("|");
+      // Repaint only when the published snapshot/status changes, avoiding a UI flicker each second.
+      if (fingerprint !== lastFingerprint) {
+        data = next;
+        lastFingerprint = fingerprint;
+        paint(data);
+      }
     } catch (error) {
-      $("stateText").textContent = "Не удалось загрузить data.json";
-      $("stateDot").className = "dot err";
-      $("warning").textContent = "Статический каталог пока не опубликован. Запусти workflow Cloudflare в GitHub Actions после добавления необходимых секретов. Подробность: " + error.message;
-      $("warning").classList.remove("hide");
+      if (!data) {
+        $("stateText").textContent = "Не удалось загрузить data.json";
+        $("stateDot").className = "dot err";
+        $("warning").textContent = "Статический каталог пока не опубликован или недоступен. Подробность: " + error.message;
+        $("warning").classList.remove("hide");
+      }
+    } finally {
+      refreshing = false;
     }
+  }
+
+  function start() {
+    refreshData();
+    window.setInterval(refreshData, 1000);
   }
 
   function paint(d) {
     const lots = Array.isArray(d.lots) ? d.lots : [];
     const priced = lots.filter(x => Number.isFinite(Number(x.price)) && x.price !== null);
     $("count").textContent = fmt(lots.length);
+    const newest = lots[0]; // Collector preserves market order: first card on page 1 is the newest lot.
+    const newestLabel = $("latestLot");
+    if (newestLabel) newestLabel.textContent = newest ? "Последний лот: " + (newest.title || ("#" + newest.lot_id)) + " · #" + newest.lot_id : "На странице 1 пока нет лотов";
     $("avg").textContent = fmt(d.stats && d.stats.avg) + " ◉";
     $("min").textContent = fmt(d.stats && d.stats.min) + " ◉";
     $("median").textContent = fmt(d.stats && d.stats.median) + " ◉";
