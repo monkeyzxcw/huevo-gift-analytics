@@ -10,7 +10,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-BASE_URL = "https://huevo.su"
+ALLOWED_HUEVO_HOSTS = ("huevo.su", "huevo.departament.site")
+BASE_URL = os.getenv("HUEVO_BASE_URL", "https://huevo.su").strip().rstrip("/")
+_base_parts = urlsplit(BASE_URL)
+if _base_parts.scheme != "https" or _base_parts.hostname not in ALLOWED_HUEVO_HOSTS or _base_parts.username or _base_parts.password:
+    raise RuntimeError("HUEVO_BASE_URL должен быть https://huevo.su или https://huevo.departament.site")
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.getenv("HUEVO_DB", "huevo.db")
 os.makedirs(os.path.dirname(os.path.abspath(DB_PATH)), exist_ok=True)
@@ -20,14 +24,68 @@ CRAWL_BLOCK_COOLDOWN_HOURS = max(1, int(os.getenv("CRAWL_BLOCK_COOLDOWN_HOURS", 
 app = FastAPI(title="Huevo Gift Analytics")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://huevo.su"],
+    allow_origins=["https://huevo.su", "https://huevo.departament.site"],
     allow_credentials=False,
     allow_methods=["POST", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
 )
 INGEST_TOKEN = os.getenv("INGEST_TOKEN", "")
-# JSON array of cookies exported from an already authenticated huevo.su browser.
-HUEVO_COOKIES_JSON = os.getenv("HUEVO_COOKIES_JSON", "").strip()
+# Accept JSON cookie exports and Netscape cookies.txt; never commit these secrets.
+HUEVO_COOKIES_EXPORT = (os.getenv("HUEVO_COOKIES_JSON", "").strip()
+                        or os.getenv("HUEVO_COOKIES", "").strip())
+
+def is_huevo_host(host):
+    host = (host or "").lower().rstrip(".")
+    return any(host == domain or host.endswith("." + domain) for domain in ALLOWED_HUEVO_HOSTS)
+
+def load_cookie_export(raw):
+    """Normalize browser-extension JSON and Netscape cookies.txt exports."""
+    if not raw or not raw.strip():
+        return []
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict):
+            parsed = parsed.get("cookies", parsed.get("data", []))
+        if not isinstance(parsed, list):
+            raise ValueError("JSON должен быть массивом cookies или объектом с полем cookies")
+        cookies = []
+        for item in parsed:
+            if not isinstance(item, dict) or not item.get("name") or "value" not in item:
+                continue
+            cookie = dict(item)
+            if "expiry" not in cookie and "expirationDate" in cookie:
+                cookie["expiry"] = cookie.pop("expirationDate")
+            cookies.append(cookie)
+        return cookies
+    except json.JSONDecodeError:
+        pass
+
+    # Netscape format: domain, includeSubdomains, path, secure, expiry, name, value.
+    cookies = []
+    for line in raw.splitlines():
+        if not line.strip():
+            continue
+        http_only = line.startswith("#HttpOnly_")
+        if line.startswith("#") and not http_only:
+            continue
+        if http_only:
+            line = line[len("#HttpOnly_"):]
+        parts = line.split("\\t")
+        if len(parts) != 7:
+            continue
+        domain, _include_subdomains, path, secure, expiry, name, value = parts
+        cookie = {"domain": domain, "path": path or "/", "secure": secure.upper() == "TRUE",
+                  "httpOnly": http_only, "name": name, "value": value}
+        try:
+            expiration = int(expiry)
+            if expiration > 0:
+                cookie["expiry"] = expiration
+        except (TypeError, ValueError):
+            pass
+        cookies.append(cookie)
+    if not cookies:
+        raise ValueError("Формат cookies не распознан. Нужен JSON-массив или Netscape cookies.txt")
+    return cookies
 lock = threading.Lock()
 state = {"running": False, "page": 0, "found": 0, "message": "Ожидает запуска", "started_at": None, "last_ingest_at": None, "blocked_until": None, "last_http_status": None}
 
@@ -112,7 +170,7 @@ def parse_cards(html):
             candidate_url = urljoin(BASE_URL, href)
             parts = urlsplit(candidate_url)
             host = (parts.hostname or "").lower()
-            lot_url = candidate_url if parts.scheme == "https" and (host == "huevo.su" or host.endswith(".huevo.su")) else f"{BASE_URL}/market/lot/{lot_id}"
+            lot_url = candidate_url if parts.scheme == "https" and is_huevo_host(host) else f"{BASE_URL}/market/lot/{lot_id}"
         except ValueError:
             lot_url = f"{BASE_URL}/market/lot/{lot_id}"
         title = title or (str(image.get("alt") or "").strip() if image else "") or str(card.get("aria-label") or "").strip() or "Без названия"
@@ -168,45 +226,59 @@ def crawl():
         options.add_argument("--window-size=1440,1000")
         browser = webdriver.Chrome(options=options)
         try:
-            if not HUEVO_COOKIES_JSON:
-                raise RuntimeError("Не задан HUEVO_COOKIES_JSON в Render Environment. Экспортируй cookies авторизованного huevo.su в JSON и добавь их как секрет.")
+            if not HUEVO_COOKIES_EXPORT:
+                raise RuntimeError("Не задан HUEVO_COOKIES_JSON или HUEVO_COOKIES в Environment. Поддерживаются JSON-экспорт и Netscape cookies.txt; cookies должны принадлежать выбранному домену и действующей сессии.")
             try:
-                cookies = json.loads(HUEVO_COOKIES_JSON)
-            except json.JSONDecodeError as exc:
-                raise RuntimeError("HUEVO_COOKIES_JSON должен содержать JSON-массив cookies.") from exc
-            if not isinstance(cookies, list) or not cookies:
-                raise RuntimeError("HUEVO_COOKIES_JSON должен быть непустым JSON-массивом cookies.")
-            # Selenium accepts cookies only after visiting the matching domain.
-            browser.get(BASE_URL)
+                cookies = load_cookie_export(HUEVO_COOKIES_EXPORT)
+            except ValueError as exc:
+                raise RuntimeError(str(exc)) from exc
+            if not cookies:
+                raise RuntimeError("В экспорте не найдено cookies с полями name и value.")
             accepted = 0
             allowed_keys = {"name", "value", "path", "domain", "secure", "httpOnly", "expiry", "sameSite"}
+            visited_cookie_hosts = set()
             for raw_cookie in cookies:
                 if not isinstance(raw_cookie, dict) or not raw_cookie.get("name") or "value" not in raw_cookie:
                     continue
-                domain = str(raw_cookie.get("domain", "huevo.su")).lstrip(".").lower()
-                if domain != "huevo.su" and not domain.endswith(".huevo.su"):
+                domain_raw = str(raw_cookie.get("domain", _base_parts.hostname)).strip().lower()
+                domain = domain_raw.lstrip(".")
+                if not is_huevo_host(domain):
                     continue
+                if domain not in visited_cookie_hosts:
+                    try:
+                        browser.get("https://" + domain + "/")
+                        visited_cookie_hosts.add(domain)
+                    except Exception:
+                        continue
                 cookie = {k: v for k, v in raw_cookie.items() if k in allowed_keys}
+                cookie["domain"] = domain_raw
                 if "expiry" in cookie:
                     try:
-                        cookie["expiry"] = int(cookie["expiry"])
-                    except (TypeError, ValueError):
+                        cookie["expiry"] = int(float(cookie["expiry"]))
+                    except (TypeError, ValueError, OverflowError):
                         cookie.pop("expiry", None)
                 if cookie.get("sameSite") not in ("Strict", "Lax", "None"):
                     cookie.pop("sameSite", None)
+                if "httpOnly" in cookie:
+                    cookie["httpOnly"] = bool(cookie["httpOnly"])
+                if "secure" in cookie:
+                    cookie["secure"] = bool(cookie["secure"])
                 try:
                     browser.add_cookie(cookie)
                     accepted += 1
                 except Exception:
-                    # Ignore cookies Chrome refuses (e.g. expired or incompatible).
+                    # Expired, partitioned, or domain-incompatible cookies cannot be installed by Selenium.
                     continue
+            if not accepted:
+                raise RuntimeError("Ни одна cookie не применена. Проверь домен экспорта: cookies huevo.su не авторизуют huevo.departament.site и наоборот.")
+
             if not accepted:
                 raise RuntimeError("Не удалось применить cookies для huevo.su. Проверь JSON и срок действия сессии.")
             browser.get(f"{BASE_URL}/market/gifts?page=1")
             time.sleep(2)
             auth_text = (browser.title + " " + browser.find_element("tag name", "body").text[:1000]).lower()
             if any(term in auth_text for term in ("войти", "sign in", "log in", "авторизац")):
-                raise RuntimeError("Похоже, cookies не авторизовали браузер. Обнови экспорт cookies из Huevo.")
+                raise RuntimeError("Cookies установлены, но авторизация не подтверждена. Возможны истёкшая сессия, неполный экспорт, cookies от другого домена или challenge со стороны сайта. Выключение 2FA не делает старые cookies действительными.")
         except Exception:
             browser.quit()
             raise
@@ -285,7 +357,9 @@ def diagnostics():
         "ok": True,
         "database_configured": bool(DB_PATH),
         "ingest_token_configured": bool(INGEST_TOKEN),
-        "huevo_cookies_configured": bool(HUEVO_COOKIES_JSON),
+        "huevo_cookies_configured": bool(HUEVO_COOKIES_EXPORT),
+        "huevo_base_url": BASE_URL,
+        "cookie_export_format": "JSON or Netscape" if HUEVO_COOKIES_EXPORT else None,
         "lots_in_database": lots_count,
         "price_history_rows": history_count,
         "collector": crawl_state,
@@ -346,7 +420,7 @@ async def ingest_browser_data(request: Request, token: str = ""):
             try:
                 lot_parts = urlsplit(candidate_url)
                 host = (lot_parts.hostname or "").lower()
-                valid_lot_url = lot_parts.scheme == "https" and (host == "huevo.su" or host.endswith(".huevo.su")) and not lot_parts.username and not lot_parts.password
+                valid_lot_url = lot_parts.scheme == "https" and is_huevo_host(host) and not lot_parts.username and not lot_parts.password
             except ValueError:
                 valid_lot_url = False
             lot_url = candidate_url if valid_lot_url else default_lot_url
@@ -391,10 +465,10 @@ def start_crawl(background: BackgroundTasks):
                 state["last_http_status"] = None
             except ValueError:
                 state["blocked_until"] = None
-    if not HUEVO_COOKIES_JSON:
+    if not HUEVO_COOKIES_EXPORT:
         raise HTTPException(
             status_code=503,
-            detail="Серверная сессия Huevo не настроена. Откройте Huevo в авторизованном браузере и используйте browser collector из панели; cookies вручную передавать не нужно.",
+            detail="Серверная сессия Huevo не настроена. Задайте HUEVO_BASE_URL и HUEVO_COOKIES_JSON (JSON) или HUEVO_COOKIES (Netscape cookies.txt) в Environment.",
         )
     with lock:
         if state["running"]:
@@ -420,7 +494,7 @@ def scheduled_crawler():
 @app.on_event("startup")
 def start_scheduler():
     # Do not start a crawler that is guaranteed to fail without an authenticated session.
-    if HUEVO_COOKIES_JSON:
+    if HUEVO_COOKIES_EXPORT:
         threading.Thread(target=scheduled_crawler, name="huevo-auto-refresh", daemon=True).start()
     else:
         with lock:
