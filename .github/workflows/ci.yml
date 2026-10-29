@@ -33,7 +33,7 @@ jobs:
         run: |
           npm run check
           node --check cloudflare-site/app.js
-          python -m py_compile scripts/collect_snapshot.py
+          python -m py_compile scripts/collect_snapshot.py scripts/import_sqlite_snapshot.py
           python -m json.tool cloudflare-site/data.json > /dev/null
           python -m json.tool wrangler.jsonc > /dev/null
       - name: Install Playwright
