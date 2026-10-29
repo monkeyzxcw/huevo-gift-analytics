@@ -51,6 +51,60 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(second["1"], first["1"], "first_seen must survive across runs")
         self.assertGreater(second["3"], first["1"], "a new lot is first seen later than the old ones")
 
+    def test_v2_snapshot_has_changes_categories_and_valid_structure(self):
+        import snapshot
+        self.run_main([lot(1, 100), lot(2, 200)])
+        self.run_main([lot(2, 150), lot(3, 900)])
+        d = self.data()
+        self.assertEqual(d["schema_version"], snapshot.SCHEMA_VERSION)
+        self.assertEqual(snapshot.validate(d), [])
+        self.assertEqual(d["changes"]["counts"]["new"], 1)
+        self.assertEqual(d["changes"]["counts"]["gone"], 1)
+        self.assertEqual(d["changes"]["counts"]["price_down"], 1)
+        self.assertEqual(d["top_expensive"][0]["lot_id"], "3")
+        self.assertEqual(d["categories"][0]["name"], "Редкий")
+        self.assertEqual(d["snapshots"][-1]["new_lots"], 1)
+
+    def test_old_v1_data_json_is_migrated_not_discarded(self):
+        v1 = {"schema_version": 1, "generated_at": "2026-01-01T00:00:00+00:00", "collector": {"status": "ok"},
+              "stats": {"n_total": 1}, "lots": [dict(lot(7, 50), first_seen="2026-01-01T00:00:00+00:00", history=[])],
+              "snapshots": [], "gone_lots": []}
+        cs.OUT.write_text(json.dumps(v1), encoding="utf-8")
+        self.assertEqual(self.run_main([lot(7, 50)]), 0)
+        d = self.data()
+        self.assertEqual(d["schema_version"], 2)
+        self.assertEqual(d["lots"][0]["first_seen"], "2026-01-01T00:00:00+00:00")
+
+    def test_identical_rerun_does_not_add_duplicate_history_point(self):
+        self.run_main([lot(1), lot(2)])
+        self.run_main([lot(1), lot(2)])
+        self.assertEqual(len(self.data()["snapshots"]), 1)
+
+    def test_broken_previous_file_is_never_published_after_failure(self):
+        cs.OUT.write_text("{not json", encoding="utf-8")
+        self.assertEqual(self.run_main([], status="blocked", reached_end=False, http_status=418), 2)
+        self.assertEqual(cs.OUT.read_text(encoding="utf-8"), "{not json", "no empty snapshot is invented")
+
+    def test_sales_are_published_only_when_requested_and_confirmed(self):
+        from storage import Store
+        db = Path(self.tmp.name) / "history.db"
+        store = Store(str(db)); store.migrate()
+        rows = [{"sale_key": f"k{i}", "lot_id": str(i), "title": "Звезда #%d" % i, "price": 100 + i, "time_raw": "10:00", "sold_at": None} for i in range(25)]
+        store.upsert_sales(rows, now="2026-10-29T10:00:00+00:00")
+        with patch.object(cs, "HISTORY_DB", db):
+            self.assertEqual(self.run_main([lot(1)]), 0)
+            self.assertIsNone(self.data()["sales"], "never published without --with-sales")
+            with self.crawl_with([lot(1)]):
+                self.assertEqual(cs.main(["--local-profile", "--with-sales"]), 0)
+            sales = self.data()["sales"]
+            self.assertEqual(sales["summary"]["count"], 25)
+            self.assertNotIn("seller", json.dumps(sales).lower())
+        small = Path(self.tmp.name) / "small.db"
+        s2 = Store(str(small)); s2.migrate(); s2.upsert_sales(rows[:5], now="2026-10-29T10:00:00+00:00")
+        with patch.object(cs, "HISTORY_DB", small), self.crawl_with([lot(2)]):
+            cs.main(["--local-profile", "--with-sales"])
+        self.assertEqual(self.data()["sales"]["summary"]["count"], 25, "a too-small sample does not replace/erase published stats")
+
     def test_blocked_run_keeps_last_good_data_and_sets_persistent_cooldown(self):
         self.run_main([lot(1), lot(2)])
         good = self.data()["lots"]

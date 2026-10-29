@@ -1,56 +1,47 @@
-# Huevo Gift Analytics — GitHub Actions + Cloudflare
+# Huevo Gift Analytics — Cloudflare Workers
 
-## Как работает
+Рабочий сайт: https://huevo-gift-analytics.monkeyzxcw.workers.dev
 
-Пользовательский ПК не участвует в сборе, хранении или деплое.
+## Архитектура
 
-```
-GitHub Actions (каждые 10 минут)
-  → headless Chrome + Selenium
-  → Huevo: полный проход каталога
-  → cloudflare-site/data.json (коммит, если файл изменился)
-  → Wrangler deploy
-  → Cloudflare Worker: статический сайт и снимок
-```
+- GitHub Actions запускает сборщик Huevo по расписанию раз в 10 минут и по ручному запуску.
+- Сборщик использует headless Chrome, получает полный снимок каталога и обновляет `cloudflare-site/data.json` только после успешного полного прохода.
+- После сбора GitHub Actions сохраняет обновлённый снимок (или безопасный статус блокировки) в `main`.
+- Отдельный job проверяет JSON и публикует статический сайт через Wrangler на Cloudflare.
+- Render не используется.
+- Cookies не хранятся в исходниках, публичном JSON, артефактах или логах.
 
-Фронтенд проверяет опубликованный `data.json` каждую секунду без кеша и перерисовывается только при изменении снимка. Это обновляет отображение каждую секунду, но не создаёт запрос к Huevo каждую секунду.
+## 1. GitHub Secrets
 
-«Последний лот» — первый подарок на первой странице. Порядок лотов сохраняется при экспорте снимка.
-
-## GitHub Secrets
-
-Открой **Settings → Secrets and variables → Actions → Repository secrets**. Нужны:
+Открой репозиторий → **Settings → Secrets and variables → Actions** и добавь:
 
 | Secret | Назначение |
 |---|---|
-| `HUEVO_COOKIES_JSON` | JSON-экспорт актуальных cookies Huevo |
-| `CLOUDFLARE_API_TOKEN` | Cloudflare API token для деплоя Worker |
-| `CLOUDFLARE_ACCOUNT_ID` | ID аккаунта Cloudflare |
-| `HUEVO_USER_AGENT` | Необязательно: User-Agent, соответствующий сессии |
+| `HUEVO_COOKIES_JSON` | Актуальный экспорт cookies Huevo в JSON |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare API Token с минимальными правами для Workers Scripts/Static Assets |
+| `CLOUDFLARE_ACCOUNT_ID` | Account ID из Cloudflare Dashboard |
+| `HUEVO_USER_AGENT` | Необязательно: User-Agent браузера, экспортировавшего cookies |
 
-Вместо `HUEVO_COOKIES_JSON` можно использовать `HUEVO_COOKIES`, если этот secret уже создан. Cookies не должны находиться в исходниках, публичном JSON или логах. При утечке сессии отзови её на Huevo и создай новые cookies.
+Можно использовать `HUEVO_COOKIES` вместо `HUEVO_COOKIES_JSON`, если уже настроен этот secret. Не используй Global API Key. При утечке cookies отзови сессию на Huevo и создай новый экспорт. Никогда не вставляй значения secrets в issue, PR, исходники или логи.
 
-## Разрешения GitHub Actions
+## 2. Проверить Cloudflare
 
-В репозитории открой **Settings → Actions → General → Workflow permissions** и включи **Read and write permissions**. Это нужно, чтобы плановый сборщик мог обновлять `cloudflare-site/data.json`.
+Файл `wrangler.jsonc` содержит имя Worker `huevo-gift-analytics` и публикует только каталог `cloudflare-site/`. Не создавай второй Worker с другим именем.
 
-## Автоматизация
+## 3. Автоматический сбор и деплой
 
-Workflow `.github/workflows/cloudflare-static.yml` запускается по расписанию `*/10 * * * *` (время UTC), а также при изменениях статического сайта в `main` и вручную через **Actions → Huevo cloud collector and Cloudflare deploy → Run workflow**.
+Workflow `.github/workflows/cloudflare-static.yml`:
+- запускается по расписанию каждые 10 минут (UTC);
+- поддерживает ручной запуск через **Actions → Huevo collector and Cloudflare deploy → Run workflow**;
+- останавливается при блокировке Huevo и сохраняет статус/период ожидания, чтобы следующий запуск не отправлял запросы раньше времени;
+- проверяет снимок перед публикацией и деплоит статические файлы на Cloudflare.
 
-GitHub может задерживать scheduled-запуски при высокой нагрузке. Полный обход каталога также может занимать больше 10 минут в зависимости от количества страниц и ответов Huevo. Workflow не обходит защиту Huevo: при блокировке или неполном проходе последний успешный каталог не должен заменяться пустым снимком.
+GitHub может задерживать scheduled-запуски при высокой нагрузке. Полный обход каталога может занять больше 10 минут; concurrency не позволяет параллельным запускам пересекаться.
 
-## Проверка
+## 4. Безопасность и ограничения
 
-1. Открой **Actions → Huevo cloud collector and Cloudflare deploy**.
-2. Запусти **Run workflow** вручную для первой проверки.
-3. Убедись, что прошли шаги установки Chrome, сбора каталога, обновления снимка и деплоя Wrangler.
-4. Открой сайт Worker и проверь время генерации снимка.
-
-Cloudflare Worker обслуживает статические файлы. Python/Selenium работает в GitHub Actions, а не внутри Cloudflare Worker.
-
-## Ссылка на опубликованный сайт
-
-Панель: https://huevo-gift-analytics.monkeyzxc1437.workers.dev
-
-В блоке «Активные лоты» ссылка «Последний лот» ведёт к первой карточке первой страницы каталога Huevo. Панель проверяет опубликованный снимок каждую секунду; сбор каталога выполняется отдельно по расписанию GitHub Actions.
+- При 403/418/429, странице входа или неполном обходе сборщик не должен заменять последний корректный снимок данными неполного прохода.
+- При блокировке соблюдается `Retry-After` и локально настроенная пауза; не пытайся обходить ограничения сменой IP или маскировкой.
+- Cookies передаются только процессу сборщика через GitHub Secrets. Они не должны попадать в JSON снимка.
+- Cloudflare Worker обслуживает статику; он не запускает Python, Selenium, SQLite или Windows Task Scheduler.
+- Живая разметка Huevo и успешный реальный деплой необходимо проверять по результатам GitHub Actions. Успешные локальные тесты сами по себе не доказывают, что внешняя сессия Huevo ещё действительна.

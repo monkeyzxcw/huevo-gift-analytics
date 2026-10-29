@@ -15,15 +15,19 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from analytics import best_value, find_deals, market_summary, price_bins
+from analytics import best_value, find_deals, market_summary, price_bins, sales_by_title, sales_summary
 from cookies import ALLOWED_HUEVO_HOSTS
 from crawler import CrawlConfig, run_crawl
+from snapshot import (SnapshotError, category_distribution, compare, is_duplicate_snapshot, migrate,
+                      safe_write, snapshot_entry, top_expensive, validate, SCHEMA_VERSION)
 from storage import Store, utcnow
 
 OUT = ROOT / "cloudflare-site" / "data.json"
 # Local-only cooldown memory (gitignored). data.json is restored by the scheduled .bat after a
 # failed run, so the block time must not live only there.
 STATE = ROOT / ".collector-state.json"
+HISTORY_DB = ROOT / "history.db"
+MIN_PUBLISHED_SALES = 20      # below this the sample is not confirmed enough to publish anything
 LOG = logging.getLogger("huevo-static-collector")
 
 
@@ -36,11 +40,14 @@ def iso(dt):
 
 
 def load_previous():
+    """Previous published snapshot, migrated to the current schema; {} if missing/corrupt/invalid."""
     try:
         data = json.loads(OUT.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else {}
     except (OSError, json.JSONDecodeError):
         return {}
+    if not isinstance(data, dict) or validate(migrate(data)):
+        return {}
+    return migrate(data)
 
 
 def load_state():
@@ -76,10 +83,30 @@ def active_cooldown(*sources):
 
 
 def write_json(data):
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    temp = OUT.with_suffix(".json.tmp")
-    temp.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
-    temp.replace(OUT)
+    """Validated atomic write. Returns False (and leaves the published file untouched) if the
+    payload is not publishable, e.g. an empty or structurally broken previous snapshot."""
+    try:
+        safe_write(OUT, data)
+        return True
+    except SnapshotError as exc:
+        print(f"data.json не обновлён: проверка структуры не пройдена: {exc}", file=sys.stderr)
+        return False
+
+
+def sales_block():
+    """Aggregate-only sales statistics from the local history.db, or None.
+
+    Published only when `--with-sales` is given AND the local database holds at least
+    MIN_PUBLISHED_SALES rows with a known price. No names, no per-sale rows, no invented dates.
+    """
+    if not HISTORY_DB.exists():
+        return None
+    store = Store(str(HISTORY_DB))
+    rows = store.sales(limit=50000)
+    summary = sales_summary([r.get("price") for r in rows])
+    if summary["count"] < MIN_PUBLISHED_SALES:
+        return None
+    return {"summary": summary, "by_title": sales_by_title(rows), "generated_at": utcnow()}
 
 
 def write_action_output(name, value):
@@ -165,6 +192,10 @@ def main(argv=None):
     parser.add_argument(
         "--local-profile", action="store_true",
         help="Use the saved local Chrome profile headlessly for scheduled runs; no cookie export required.",
+    )
+    parser.add_argument(
+        "--with-sales", action="store_true",
+        help="Also publish aggregate sales statistics from the local history.db (only if it has enough confirmed rows).",
     )
     args = parser.parse_args(argv)
     local_login = args.local_login
@@ -253,7 +284,8 @@ def main(argv=None):
                 "http_status": result.http_status if result else None,
             }
             # Keep the last good market payload while recording the failure/cooldown.
-            write_json(previous)
+            if previous:
+                write_json(previous)
             print(f"Snapshot not updated: {status}: {message}", file=sys.stderr)
             return 2
 
@@ -286,8 +318,9 @@ def main(argv=None):
                 "lots": len(lots),
                 "http_status": result.http_status,
             }
-            write_json(previous)
-            print(previous["collector"]["message"], file=sys.stderr)
+            if previous:
+                write_json(previous)
+            print(previous.get("collector", {}).get("message", "incomplete"), file=sys.stderr)
             return 2
 
         gone_by_id = {}
@@ -304,16 +337,15 @@ def main(argv=None):
                 gone_by_id[lot_id] = gone
         gone_lots = list(gone_by_id.values())[-5000:]
 
+        changes = compare([l for l in old_lots if l.get("active", True)], lots) if old_lots else None
+        if changes:
+            changes["since"] = (previous.get("generated_at") or None)
+            changes["observed_at"] = observed_at
         snapshots = list(previous.get("snapshots") or [])
-        snapshots.append({
-            "observed_at": observed_at,
-            "active_lots": len(lots),
-            "priced": summary["priced"],
-            "min_price": summary["min"],
-            "max_price": summary["max"],
-            "avg_price": summary["avg"],
-            "median_price": summary["median"],
-        })
+        if is_duplicate_snapshot(snapshots, lots, now_iso=observed_at):
+            print("Состав лотов не изменился с прошлого снимка (<10 мин): новая точка истории не добавлена.")
+        else:
+            snapshots.append(snapshot_entry(observed_at, lots, summary, changes))
         snapshots = snapshots[-180:]
 
         drops = []
@@ -338,7 +370,7 @@ def main(argv=None):
             "rarities": sorted({str(r.get("rarity") or "") for r in lots if r.get("rarity")}),
         }
         data = {
-            "schema_version": 1,
+            "schema_version": SCHEMA_VERSION,
             "generated_at": observed_at,
             "source": base_url,
             "collector": {
@@ -360,8 +392,13 @@ def main(argv=None):
             "best": best[0] if best else None,
             "runner_up": best[1:],
             "drops": drops[:100],
+            "categories": category_distribution(lots),
+            "top_expensive": top_expensive(lots),
+            "changes": changes,
+            "sales": (sales_block() if args.with_sales else None) or previous.get("sales"),
         }
-        write_json(data)
+        if not write_json(data):
+            return 2
         write_action_output("deploy", "true")
         print(f"Snapshot created: {len(lots)} lots; pages={result.pages}; reached_end={result.reached_end}.")
         return 0

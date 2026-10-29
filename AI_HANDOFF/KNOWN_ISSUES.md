@@ -59,7 +59,7 @@ HTML https://huevo.su/market/history содержит таблицу .mk-table �
 Security: auth, CORS/CSRF, CSP/headers, rate limits, payment signature/replay/idempotency, logs, secrets.
 Storage: schema migrations, transactions, backup/restore, importer filters, atomic writes.
 Frontend: accessibility, responsive layout, safe DOM rendering/XSS, loading/error/empty states, sorting/filtering, performance.
-Deployment: Render vs Cloudflare, workflow triggers/permissions, secrets scope, deploy smoke tests.
+Deployment: Cloudflare workflow triggers/permissions, secrets scope, deploy smoke tests.
 Maintenance: dependency versions, Actions runtime warnings, log retention, health/diagnostics.
 
 
@@ -68,4 +68,10 @@ Maintenance: dependency versions, Actions runtime warnings, log retention, healt
 - `scripts/collect_snapshot.py`: `first_seen` теперь переносится из прошлого снимка; пауза после блокировки хранится в `.collector-state.json` и действует для всех режимов.
 - Добавлены `history_parser.py`, таблица `sales` (схема v3), `analytics.sales_summary`, `run_history_crawl`, `scripts/collect_history.py`, `GET /api/sales/summary`. Не проверено на живом Huevo.
 - Не сделано: показ подтверждённых сделок в `cloudflare-site`, публикация истории, автоматическая ротация/проверка сессии.
-- В репозитории лежит папка `Для Chatgpt/` с ZIP-архивами: это бинарные артефакты, лучше удалить её из репозитория.
+
+## Обновление (ветка feature/dashboard-snapshots)
+- Сделано: ограниченные повторы временных сетевых сбоев (`crawler.observe_with_retry`); `snapshot.py` (схема v2, проверка, миграция, `compare`, категории, топ дорогих, защита от дубля точки истории, атомарная запись с fsync); новый дашборд `cloudflare-site/` (фильтры, сортировка, пагинация, карточка лота с историей цены, графики, блок изменений, баннеры состояния данных, CSP через `_headers` и meta); проверка `data.json` перед деплоем в workflow; `permissions: contents: read` в CI; `--autostash` и явная обработка паузы в `run_scheduled_collector.bat`; опциональная публикация агрегатов продаж (`--with-sales`).
+- Папка `Для Chatgpt/` удалена из репозитория.
+- Не проверено на живых системах: селекторы Huevo, структура `/market/history`, реальный деплой в Cloudflare, Планировщик Windows.
+- Не сделано: сравнение произвольных пар снимков в UI (хранится только последнее сравнение `changes`), детализация продаж по названиям в UI (данные `sales.by_title` уже в файле), закрепление версий GitHub Actions по SHA.
+- Публикация статуса блокировки на сайт не делается: после неудачного запуска `git restore` откатывает `data.json`; сайт сам показывает предупреждение «данные устарели» по возрасту последнего успешного сбора.

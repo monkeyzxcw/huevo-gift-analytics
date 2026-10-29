@@ -115,11 +115,10 @@ def refuse_if_blocked():
 
 
 def persistence_info():
-    ephemeral = bool(os.getenv("RENDER")) and not os.path.abspath(DB_PATH).startswith("/var/data")
+    ephemeral = False
     return {"db_path_kind": "persistent-disk" if os.path.abspath(DB_PATH).startswith("/var/data") else "local",
             "ephemeral_warning": ephemeral,
-            "message": ("База лежит вне подключённого диска: на бесплатном плане Render данные пропадут при перезапуске/деплое. "
-                        "Подключите persistent disk и задайте HUEVO_DB=/var/data/huevo.db (платная опция, автоматически не включается).") if ephemeral else ""}
+            "message": ""}
 
 
 # ------------------------------------------------------------------ auth + limits
@@ -141,7 +140,7 @@ def _fail_count(key, now):
 
 def require_token(request):
     if not INGEST_TOKEN:
-        raise HTTPException(status_code=503, detail="На Render не задан INGEST_TOKEN")
+        raise HTTPException(status_code=503, detail="Не задан INGEST_TOKEN для FastAPI API")
     key, now = _client_key(request), time.monotonic()
     with _fail_lock:
         if _fail_count(key, now) >= FAIL_LIMIT or _fail_count("*", now) >= GLOBAL_FAIL_LIMIT:
