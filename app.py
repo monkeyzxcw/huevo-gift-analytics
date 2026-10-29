@@ -32,6 +32,9 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization"],
 )
 INGEST_TOKEN = os.getenv("INGEST_TOKEN", "")
+PROXY_CHECK_COOLDOWN_SECONDS = max(5, int(os.getenv("PROXY_CHECK_COOLDOWN_SECONDS", "30")))
+proxy_probe_lock = threading.Lock()
+proxy_probe_last_at = 0.0
 # Accept JSON cookie exports and Netscape cookies.txt; never commit these secrets.
 HUEVO_COOKIES_EXPORT = (os.getenv("HUEVO_COOKIES_JSON", "").strip()
                         or os.getenv("HUEVO_COOKIES", "").strip())
@@ -513,7 +516,19 @@ def check_vless_proxy():
     proxy_info = proxy_status()
     if not proxy_info.get("configured"):
         raise HTTPException(status_code=503, detail="VLESS_URL не задан в Environment")
+    global proxy_probe_last_at
+    if not proxy_probe_lock.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="Проверка прокси уже выполняется")
     try:
+        now = time.monotonic()
+        remaining = PROXY_CHECK_COOLDOWN_SECONDS - (now - proxy_probe_last_at)
+        if proxy_probe_last_at and remaining > 0:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Повтори проверку через {int(remaining) + 1} секунд",
+                headers={"Retry-After": str(int(remaining) + 1)},
+            )
+        proxy_probe_last_at = now
         proxy_url = ensure_vless_proxy()
         if not proxy_url:
             raise RuntimeError("VLESS-прокси не включён")
@@ -534,11 +549,15 @@ def check_vless_proxy():
             "egress_ip": egress_ip,
             "proxy": proxy_status(),
         }
+    except HTTPException:
+        raise
     except Exception as exc:
         error_type = type(exc).__name__
         # Do not return raw exception strings: they can include host/config details.
         detail = str(exc) if isinstance(exc, RuntimeError) else f"Проверка VLESS не прошла ({error_type}). Проверь VLESS_URL, формат транспорта и доступность узла."
         raise HTTPException(status_code=502, detail=detail) from exc
+    finally:
+        proxy_probe_lock.release()
 
 
 @app.get("/api/status")
