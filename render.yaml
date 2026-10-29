@@ -12,6 +12,8 @@ services:
         generateValue: true
       - key: CRAWL_DELAY
         value: "2.0"
+      - key: CRAWL_BLOCK_COOLDOWN_HOURS
+        value: "6"
       - key: MAX_PAGES
         value: "500"
       - key: AUTO_REFRESH_HOURS
