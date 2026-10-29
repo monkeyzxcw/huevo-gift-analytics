@@ -180,6 +180,28 @@ def main():
         lots = [snapshot_lot(row, old_by_id, observed_at) for row in current_rows]
         current_ids = {str(row["lot_id"]) for row in lots}
 
+        # Match the production app's completeness guard before declaring older lots gone.
+        previous_active_ids = {
+            str(row["lot_id"]) for row in old_lots
+            if row.get("lot_id") is not None and row.get("active", True)
+        }
+        missing_previous = previous_active_ids - current_ids
+        seen_previous = len(previous_active_ids & current_ids)
+        if len(missing_previous) >= 20 and seen_previous < (seen_previous + len(missing_previous)) * 0.5:
+            previous["collector"] = {
+                "status": "incomplete",
+                "message": (f"Неполный проход: найдено только {seen_previous} из "
+                            f"{len(previous_active_ids)} прежних активных лотов; старый снимок сохранён."),
+                "blocked_until": None,
+                "checked_at": observed_at,
+                "pages": result.pages,
+                "lots": len(lots),
+                "http_status": result.http_status,
+            }
+            write_json(previous)
+            print(previous["collector"]["message"], file=sys.stderr)
+            return 2
+
         gone_by_id = {}
         gone_fields = ("lot_id", "title", "serial", "rarity", "price", "status", "image_url", "lot_url", "first_seen", "last_seen", "active")
         for row in previous.get("gone_lots") or []:
