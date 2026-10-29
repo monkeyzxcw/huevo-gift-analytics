@@ -10,6 +10,15 @@ const CSP = fs.readFileSync(path.join(SITE, "_headers"), "utf8").match(/Content-
 const TYPES = { ".html": "text/html", ".css": "text/css", ".js": "application/javascript" };
 const XSS = '<img src=x onerror="window.__xss=1">';
 const NOW = new Date().toISOString();
+const OPEN_BROWSERS = new Set();
+
+test.afterEach(async () => {
+  // Ensure a failed assertion cannot leave Chromium alive and hang the CI job.
+  for (const browser of OPEN_BROWSERS) {
+    try { if (browser.isConnected()) await browser.close(); } catch (_) {}
+  }
+  OPEN_BROWSERS.clear();
+});
 
 function makeLots(n) {
   return Array.from({ length: n }, (_, i) => ({
@@ -39,6 +48,7 @@ function dataV2(extra = {}) {
 
 async function open(handler, viewport = { width: 1280, height: 900 }) {
   const browser = await chromium.launch();
+  OPEN_BROWSERS.add(browser);
   const ctx = await browser.newContext({ viewport });
   const page = await ctx.newPage();
   const problems = [];
