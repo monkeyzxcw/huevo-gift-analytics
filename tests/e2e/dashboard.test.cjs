@@ -10,6 +10,15 @@ const CSP = fs.readFileSync(path.join(SITE, "_headers"), "utf8").match(/Content-
 const TYPES = { ".html": "text/html", ".css": "text/css", ".js": "application/javascript" };
 const XSS = '<img src=x onerror="window.__xss=1">';
 const NOW = new Date().toISOString();
+const OPEN_BROWSERS = new Set();
+
+test.afterEach(async () => {
+  // Ensure a failed assertion cannot leave Chromium alive and hang the CI job.
+  for (const browser of OPEN_BROWSERS) {
+    try { if (browser.isConnected()) await browser.close(); } catch (_) {}
+  }
+  OPEN_BROWSERS.clear();
+});
 
 function makeLots(n) {
   return Array.from({ length: n }, (_, i) => ({
@@ -39,6 +48,7 @@ function dataV2(extra = {}) {
 
 async function open(handler, viewport = { width: 1280, height: 900 }) {
   const browser = await chromium.launch();
+  OPEN_BROWSERS.add(browser);
   const ctx = await browser.newContext({ viewport });
   const page = await ctx.newPage();
   const problems = [];
@@ -48,6 +58,12 @@ async function open(handler, viewport = { width: 1280, height: 900 }) {
   await ctx.route("https://huevo.su/**", (r) => r.fulfill({ status: 204, body: "" }));
   await ctx.route("http://site.test/**", async (route) => {
     const u = new URL(route.request().url());
+    if (u.pathname === "/api/support/config") {
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ enabled: false, amounts: [5000, 10000, 25000, 50000, 100000], sdk_url: "https://huevo.su/static/js/huevo-apps-v1.js", origins: ["huevo.su", "huevo.departament.site"] }) });
+    }
+    if (u.pathname === "/api/support/stats") {
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ enabled: false, supporters: 0, total: 0 }) });
+    }
     if (u.pathname === "/data.json") return handler(route);
     const file = path.join(SITE, u.pathname === "/" ? "index.html" : u.pathname.slice(1));
     if (!file.startsWith(SITE) || !fs.existsSync(file)) return route.fulfill({ status: 404, body: "" });
@@ -67,10 +83,12 @@ test("full v2 data: cards, charts, changes, top, table render with no errors", a
   assert.ok(await page.locator("#chartCount svg polyline").count() === 1, "lot-count dynamics line");
   assert.ok(await page.locator("#chartMedian svg polyline").count() === 1);
   assert.equal(await page.locator("#chartCats .hbar").count(), 2);
+  await page.click('#mainNav [data-view="analytics"]');
   assert.match(await page.textContent("#changeList"), /Новинка/);
   await page.click("#tabGone"); assert.match(await page.textContent("#changeList"), /Пропавший/);
   await page.click("#tabPrice"); assert.match(await page.textContent("#changeList"), /200 → 150/);
   assert.equal(await page.locator("#topList li").count(), 3);
+  await page.click('#mainNav [data-view="market"]');
   assert.equal(await page.locator("#rows tr").count(), 50, "first page only");
   assert.equal(await page.evaluate(() => window.__xss), undefined, "title markup must not execute");
   assert.equal(await page.locator("#salesPanel.hide").count(), 1, "no sales section without confirmed data");
@@ -81,6 +99,7 @@ test("full v2 data: cards, charts, changes, top, table render with no errors", a
 test("search, filters, sort, pagination and reset work", async () => {
   const { browser, page, problems } = await open(serve(dataV2()));
   await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="market"]');
   await page.fill("#search", "звезда");
   assert.match(await page.textContent("#rowCount"), /Найдено лотов: 17 из 120/);
   await page.fill("#search", "");
@@ -105,6 +124,7 @@ test("search, filters, sort, pagination and reset work", async () => {
 test("lot without a price sorts last and shows a dash, not zero", async () => {
   const { browser, page } = await open(serve(dataV2()));
   await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="market"]');
   await page.fill("#search", "1005");
   assert.equal((await page.textContent("#rows td.price")).trim(), "—");
   await browser.close();
@@ -113,6 +133,7 @@ test("lot without a price sorts last and shows a dash, not zero", async () => {
 test("detail dialog: price history, comparison, safe link, Escape closes", async () => {
   const { browser, page, problems } = await open(serve(dataV2()));
   await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="market"]');
   await page.fill("#search", "1003");
   await page.click("#rows button");
   assert.ok(await page.locator("#detail[open]").count());
@@ -186,6 +207,47 @@ test("page has no inline handlers/styles and fits a phone screen", async () => {
   const { browser, page, problems } = await open(serve(dataV2()), { width: 375, height: 800 });
   await page.waitForSelector("#content:not(.hide)");
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "no page-level horizontal scroll");
+  assert.deepEqual(problems, []);
+  await browser.close();
+});
+
+
+test("AMNYAM navigation renders all views and author support shows five levels", async () => {
+  const { browser, page, problems } = await open(serve(dataV2()), { width: 1280, height: 900 });
+  await page.waitForSelector("#content:not(.hide)");
+  for (const view of ["overview", "market", "deals", "cheap", "analytics", "favorites", "support"]) {
+    await page.click('#mainNav [data-view="' + view + '"]');
+    assert.equal(await page.getAttribute('#mainNav [data-view="' + view + '"]', "aria-selected"), "true", view + " tab selected");
+    assert.equal(await page.locator('[data-view-section="' + view + '"]:not(.view-hidden)').count() > 0, true, view + " view visible");
+  }
+  assert.equal(await page.locator("#supportAmounts [data-amount]").count(), 5);
+  assert.deepEqual(await page.locator("#supportAmounts [data-amount]").evaluateAll(nodes => nodes.map(n => n.dataset.amount)), ["5000", "10000", "25000", "50000", "100000"]);
+  assert.deepEqual(problems, []);
+  await browser.close();
+});
+
+test("value hunt compares similar gifts; smart search supports price, rarity and lot ID operators", async () => {
+  const data = dataV2();
+  data.lots.forEach((lot, index) => {
+    if (index % 7 === 0) {
+      lot.title = "Звезда";
+      lot.rarity = "Редкий";
+    }
+  });
+  const { browser, page, problems } = await open(serve(data), { width: 1280, height: 900 });
+  await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="deals"]');
+  assert.match(await page.textContent("#belowBest"), /Звезда/);
+  assert.match(await page.textContent("#belowBestMeta"), /медианы/);
+  assert.ok(await page.locator("#dealsList .deal-row").count() > 0);
+  await page.click('#mainNav [data-view="market"]');
+  await page.fill("#search", "price<200");
+  assert.match(await page.textContent("#rowCount"), /9 из 120/);
+  await page.fill("#search", "rarity:Редкий price<200");
+  assert.match(await page.textContent("#rowCount"), /5 из 120/);
+  await page.fill("#search", "#1007");
+  assert.match(await page.textContent("#rowCount"), /1 из 120/);
+  assert.match(await page.textContent("#rows"), /Звезда/);
   assert.deepEqual(problems, []);
   await browser.close();
 });

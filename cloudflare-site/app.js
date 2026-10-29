@@ -55,9 +55,25 @@
   }
 
   // ---------- state ----------
-  const state = { data: null, lots: [], view: [], page: 0, sort: { key: "price", dir: 1 }, changeKind: "new", liveFingerprint: null };
+  function readFavorites() {
+    try {
+      const stored = JSON.parse(localStorage.getItem("amnyam.favorites") || "[]");
+      return Array.isArray(stored) ? stored.map(String).filter((id) => /^\d{1,20}$/.test(id)).slice(0, 5000) : [];
+    } catch (_) { return []; }
+  }
+  function writeFavorites() {
+    try { localStorage.setItem("amnyam.favorites", JSON.stringify(state.favorites)); } catch (_) {}
+  }
+  const state = {
+    data: null, lots: [], view: [], page: 0,
+    sort: { key: "price", dir: 1 }, changeKind: "new", liveFingerprint: null,
+    activeView: "overview", favorites: readFavorites()
+  };
   let livePollRunning = false;
   let lastSnapshotSignature = "";
+  let supportConfig = { enabled: false, amounts: [5000, 10000, 25000, 50000, 100000] };
+  let supportSdkReady = false;
+  let supportInitRunning = false;
 
   // ---------- load & normalise (tolerates partial / old JSON) ----------
   function normalise(d) {
@@ -135,9 +151,18 @@
       if (changed) {
         // Replace the in-memory snapshot only when actual visible data changed.
         // render() mutates the current DOM in place; no navigation or page reload occurs.
+        const nextLiveFingerprint = n.raw.live && n.raw.live.fingerprint ? String(n.raw.live.fingerprint) : null;
+        const liveChanged = Boolean(nextLiveFingerprint && nextLiveFingerprint !== state.liveFingerprint);
         state.data = n.raw;
         state.lots = n.lots;
-        state.liveFingerprint = n.raw.live && n.raw.live.fingerprint ? String(n.raw.live.fingerprint) : null;
+        state.liveFingerprint = nextLiveFingerprint;
+        if (liveChanged) {
+          // Market-derived views must use newly refreshed first-page prices, not bins
+          // and categories calculated from the previous full snapshot.
+          state.data.price_bins = [];
+          state.data.categories = [];
+          state.data.top_expensive = n.lots.filter((lot) => isNum(lot.price)).sort((a, b) => b.price - a.price).slice(0, 10);
+        }
         lastSnapshotSignature = signature;
         render();
       } else {
@@ -347,23 +372,64 @@
     const uniq = (key) => Array.from(new Set(state.lots.map((l) => l[key]).filter(Boolean))).sort((a, b) => String(a).localeCompare(String(b), "ru"));
     fill("rarity", uniq("rarity"), "Все"); fill("status", uniq("status"), "Все");
   }
+  function parseSmartQuery(value) {
+    let rest = String(value || "").trim();
+    const rules = { terms: [], min: null, max: null, rarity: "", status: "", id: "" };
+    rest = rest.replace(/\bprice\s*(<=|>=|<|>)\s*([\d\s.,]+)/gi, (_, op, raw) => {
+      const amount = Number(String(raw).replace(/[\s,]/g, ""));
+      if (Number.isFinite(amount)) {
+        if (op === "<") rules.max = Math.min(rules.max == null ? Infinity : rules.max, amount - Math.max(Number.EPSILON, Math.abs(amount) * Number.EPSILON * 2));
+        if (op === "<=") rules.max = Math.min(rules.max == null ? Infinity : rules.max, amount);
+        if (op === ">") rules.min = Math.max(rules.min == null ? -Infinity : rules.min, amount + Math.max(Number.EPSILON, Math.abs(amount) * Number.EPSILON * 2));
+        if (op === ">=") rules.min = Math.max(rules.min == null ? -Infinity : rules.min, amount);
+      }
+      return " ";
+    });
+    rest = rest.replace(/(?:\bid:|#)([A-Za-z0-9_-]+)/gi, (_, id) => { rules.id = id; return " "; });
+    rest = rest.replace(/\b(rarity|status)\s*:\s*("[^"]+"|'[^']+'|.+?)(?=\s+(?:rarity|status)\s*:|\s+price\s*(?:<=|>=|<|>)|\s+(?:id:|#)[A-Za-z0-9_-]+|$)/gi,
+      (_, key, raw) => {
+        const val = String(raw).replace(/^["']|["']$/g, "").trim();
+        if (key.toLowerCase() === "rarity") rules.rarity = val;
+        else rules.status = val;
+        return " ";
+      });
+    rules.terms = rest.toLocaleLowerCase("ru").split(/\s+/).filter(Boolean);
+    return rules;
+  }
+
   function applyFilters() {
-    const q = $("search").value.trim().toLocaleLowerCase("ru"), rar = $("rarity").value, st = $("status").value;
-    const pmin = $("pmin").value === "" ? null : Number($("pmin").value), pmax = $("pmax").value === "" ? null : Number($("pmax").value);
+    const rawQuery = $("search").value.trim();
+    const q = parseSmartQuery(rawQuery);
+    const raritySelect = $("rarity").value, statusSelect = $("status").value;
+    const inputMin = $("pmin").value === "" ? null : Number($("pmin").value);
+    const inputMax = $("pmax").value === "" ? null : Number($("pmax").value);
+    const lower = Math.max(inputMin == null || !Number.isFinite(inputMin) ? -Infinity : inputMin, q.min == null ? -Infinity : q.min);
+    const upper = Math.min(inputMax == null || !Number.isFinite(inputMax) ? Infinity : inputMax, q.max == null ? Infinity : q.max);
+    const wantedRarity = raritySelect || q.rarity;
+    const wantedStatus = statusSelect || q.status;
     const { key, dir } = state.sort;
-    let rows = state.lots.filter((l) => (!q || l._text.includes(q)) && (!rar || l.rarity === rar) && (!st || l.status === st)
-      && (pmin == null || (l.price != null && l.price >= pmin)) && (pmax == null || (l.price != null && l.price <= pmax)));
+    let rows = state.lots.filter((l) => {
+      const id = String(l.lot_id);
+      const textMatch = q.terms.every((term) => l._text.includes(term));
+      const idMatch = !q.id || id.toLowerCase().includes(q.id.toLowerCase());
+      const rarityMatch = !wantedRarity || String(l.rarity || "").toLocaleLowerCase("ru").includes(wantedRarity.toLocaleLowerCase("ru"));
+      const statusMatch = !wantedStatus || String(l.status || "").toLocaleLowerCase("ru").includes(wantedStatus.toLocaleLowerCase("ru"));
+      return textMatch && idMatch && rarityMatch && statusMatch
+        && (lower === -Infinity || (l.price != null && l.price >= lower))
+        && (upper === Infinity || (l.price != null && l.price <= upper));
+    });
     const val = (l) => key === "price" ? l.price : key === "delta" ? l._delta : key === "first_seen" ? (l.first_seen ? Date.parse(l.first_seen) : null) : String(l[key] || "").toLocaleLowerCase("ru");
     rows.sort((a, b) => {
       const x = val(a), y = val(b);
       if (x == null && y == null) return 0;
-      if (x == null) return 1;                    // missing values always last
+      if (x == null) return 1;
       if (y == null) return -1;
       return (typeof x === "string" ? x.localeCompare(y, "ru") : x - y) * dir;
     });
     state.view = rows;
     state.page = Math.min(state.page, Math.max(0, Math.ceil(rows.length / PAGE) - 1));
     renderRows();
+    updateViewCounts();
   }
   function renderRows() {
     const body = clear($("rows")), total = state.view.length, pages = Math.max(1, Math.ceil(total / PAGE));
@@ -379,6 +445,9 @@
       const img = l.image_url && /^https:\/\//i.test(l.image_url) ? h("img", { class: "thumb", src: l.image_url, alt: "", loading: "lazy", referrerpolicy: "no-referrer" }) : h("span", { class: "thumb", text: "🎁", "aria-hidden": "true" });
       img.addEventListener("error", () => img.replaceWith(h("span", { class: "thumb", text: "🎁", "aria-hidden": "true" })));
       const delta = l._delta == null ? h("span", { class: "muted", text: "—" }) : h("span", { class: l._delta < 0 ? "good" : "bad", text: (l._delta > 0 ? "+" : "") + fmt(l._delta) + "%" });
+      const isFavorite = state.favorites.includes(String(l.lot_id));
+      const watch = h("button", { class: "watch-btn", type: "button", "aria-pressed": String(isFavorite), "aria-label": (isFavorite ? "Убрать из избранного " : "Добавить в избранное ") + (l.title || l.lot_id), text: isFavorite ? "★" : "☆" });
+      watch.addEventListener("click", () => toggleFavorite(l.lot_id));
       const btn = h("button", { class: "btn secondary", type: "button", "aria-label": "Подробнее о лоте " + (l.title || l.lot_id), text: "Подробнее" });
       btn.addEventListener("click", () => openDetail(l, btn));
       body.append(h("tr", {}, [
@@ -387,7 +456,7 @@
         h("td", {}, [h("span", { class: "chip", text: l.rarity || "Не указана" }), h("div", { class: "muted", text: l.status || "" })]),
         h("td", {}, [delta]),
         h("td", { text: l.first_seen ? when(l.first_seen) : "—" }),
-        h("td", {}, [btn]),
+        h("td", {}, [btn, watch]),
       ]));
     });
   }
@@ -420,6 +489,278 @@
     if (typeof dlg.showModal === "function") dlg.showModal(); else dlg.setAttribute("open", "");
   }
 
+  function switchView(view, focusSearch) {
+    const allowed = new Set(["overview", "market", "deals", "cheap", "analytics", "favorites", "support"]);
+    state.activeView = allowed.has(view) ? view : "overview";
+    document.querySelectorAll("[data-view-section]").forEach((section) => {
+      section.classList.toggle("view-hidden", section.getAttribute("data-view-section") !== state.activeView);
+    });
+    document.querySelectorAll("#mainNav [data-view]").forEach((button) => {
+      button.setAttribute("aria-selected", String(button.dataset.view === state.activeView));
+      button.tabIndex = button.dataset.view === state.activeView ? 0 : -1;
+    });
+    if (focusSearch && state.activeView === "market") $("search").focus({ preventScroll: true });
+    updateViewCounts();
+  }
+
+  function updateViewCounts() {
+    const set = (id, value) => { const el = $(id); if (el) el.textContent = value; };
+    set("navMarketCount", fmt(state.lots.length));
+    set("navDealsCount", fmt(buildDealSignals().length));
+    set("navCheapCount", fmt(state.lots.filter((lot) => isNum(lot.price) && lot.price > 0).length));
+    set("navFavoritesCount", fmt(state.favorites.length));
+    set("favoritesCount", fmt(state.favorites.length) + " лотов");
+    set("cheapCount", fmt(state.lots.filter((lot) => isNum(lot.price) && lot.price > 0).length) + " лотов");
+    set("marketStat", fmt(state.lots.length) + " лотов");
+    set("dealsCount", fmt(buildDealSignals().length) + " сигналов");
+    set("belowStat", fmt(buildDealSignals().length) + " сигналов");
+  }
+
+  function buildDealSignals() {
+    const groups = new Map();
+    const active = state.lots.filter((lot) => lot && lot.active !== false && isNum(lot.price) && lot.price > 0 && String(lot.title || "").trim());
+    for (const lot of active) {
+      const title = String(lot.title || "").trim().toLocaleLowerCase("ru").replace(/\s+/g, " ");
+      const rarity = String(lot.rarity || "").trim().toLocaleLowerCase("ru");
+      const key = title + "\u0000" + rarity;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(lot);
+    }
+    const signals = [];
+    for (const group of groups.values()) {
+      if (group.length < 3) continue;
+      const reference = median(group.map((lot) => lot.price));
+      if (!isNum(reference) || reference <= 0) continue;
+      for (const lot of group) {
+        if (lot.price >= reference * 0.85) continue;
+        const discount = Math.round((1 - lot.price / reference) * 1000) / 10;
+        signals.push({
+          ...lot,
+          reference_price: reference,
+          discount_pct: discount,
+          sample_size: group.length,
+          basis: "active",
+        });
+      }
+    }
+    signals.sort((a, b) => b.discount_pct - a.discount_pct || a.price - b.price || String(a.title).localeCompare(String(b.title), "ru"));
+    return signals;
+  }
+
+  function compactSignalItem(lot, sub, badge, linkLabel) {
+    const badgeEl = h("span", { class: "discount-tag", text: badge || price(lot.price) });
+    const actions = h("div", { class: "deal-actions" }, [
+      badgeEl,
+      h("a", { class: "btn secondary", href: safeUrl(lot.lot_url, lot.lot_id), target: "_blank", rel: "noopener noreferrer", text: linkLabel || "Открыть ↗" })
+    ]);
+    const row = lotItem(lot, actions, sub);
+    row.classList.add("deal-row");
+    return row;
+  }
+
+  function renderDeals() {
+    const deals = buildDealSignals();
+    const best = deals[0] || null;
+    const list = clear($("dealsList"));
+    $("dealsCount").textContent = fmt(deals.length) + " сигналов";
+    $("dealsNote").textContent = deals.length ? "Сравнение с медианой аналогов" : "Пока нет подтверждённой группы аналогов";
+    $("belowBest").classList.toggle("hide", !best);
+    if (best) {
+      $("belowBestTitle").textContent = best.title || ("Лот #" + best.lot_id);
+      $("belowBestPrice").textContent = price(best.price);
+      $("belowBestMeta").textContent = "На " + fmt(best.discount_pct) + "% ниже медианы " + price(best.reference_price) + " · " + fmt(best.sample_size) + " похожих лотов · #" + best.lot_id;
+      $("belowBestOpen").href = safeUrl(best.lot_url, best.lot_id);
+      $("overviewPickHint").textContent = "Лучшее текущее отклонение от медианы аналогов: −" + fmt(best.discount_pct) + "%.";
+      const pick = clear($("overviewPickLot"));
+      if (best.image_url && /^https:\/\//i.test(best.image_url)) {
+        const img = h("img", { class: "pick-img", src: best.image_url, alt: "", loading: "lazy", referrerpolicy: "no-referrer" });
+        img.addEventListener("error", () => img.replaceWith(h("span", { class: "pick-img", text: "🎁" })));
+        pick.append(img);
+      }
+      pick.append(h("div", {}, [
+        h("strong", { text: best.title || ("Лот #" + best.lot_id) }),
+        h("span", { class: "pick-price", text: price(best.price) }),
+        h("small", { text: "−" + fmt(best.discount_pct) + "% к медиане похожих лотов · #" + best.lot_id })
+      ]));
+      deals.slice(1, 31).forEach((lot) => list.append(compactSignalItem(
+        lot,
+        "#" + lot.lot_id + (lot.rarity ? " · " + lot.rarity : "") + " · ориентир " + price(lot.reference_price),
+        "−" + fmt(lot.discount_pct) + "%",
+        "Лот ↗"
+      )));
+    } else {
+      $("belowBestTitle").textContent = "Пока нет уверенного кандидата";
+      $("belowBestPrice").textContent = "—";
+      $("belowBestMeta").textContent = "Нужно минимум три похожих активных предложения и разница не менее 15%.";
+      $("belowBestOpen").href = "https://huevo.su/market/gifts";
+      $("overviewPickHint").textContent = "Когда в каталоге появится группа сопоставимых лотов, здесь отобразится лучший текущий ценовой разрыв.";
+      const pick = clear($("overviewPickLot"));
+      pick.append(h("span", { class: "muted", text: "Пока нет группы аналогов для честного сравнения." }));
+      list.append(h("li", { class: "empty", text: "Нет лотов, цена которых минимум на 15% ниже медианы трёх или более похожих активных предложений." }));
+    }
+    updateViewCounts();
+  }
+
+  function renderCheapest() {
+    const list = clear($("cheapestList"));
+    const cheap = state.lots.filter((lot) => lot && lot.active !== false && isNum(lot.price) && lot.price > 0)
+      .slice().sort((a, b) => a.price - b.price || String(a.title).localeCompare(String(b.title), "ru")).slice(0, 60);
+    $("cheapCount").textContent = fmt(cheap.length) + " показано";
+    if (!cheap.length) list.append(h("li", { class: "empty", text: "В снимке пока нет лотов с ценой." }));
+    cheap.forEach((lot, index) => list.append(compactSignalItem(
+      lot,
+      "#" + lot.lot_id + (lot.rarity ? " · " + lot.rarity : ""),
+      "#" + (index + 1) + " · " + price(lot.price),
+      "Открыть ↗"
+    )));
+  }
+
+  function renderFavorites() {
+    const list = clear($("favoritesList"));
+    const ids = new Set(state.favorites.map(String));
+    const found = state.lots.filter((lot) => ids.has(String(lot.lot_id)));
+    $("favoritesCount").textContent = fmt(state.favorites.length) + " лотов";
+    $("navFavoritesCount").textContent = fmt(state.favorites.length);
+    if (!found.length) {
+      list.append(h("li", { class: "empty", text: state.favorites.length ? "Сохранённые лоты не попали в текущий снимок. Они останутся в избранном и появятся при следующем обнаружении." : "Пока пусто. Нажми ☆ в каталоге, чтобы сохранить лот в этом браузере." }));
+      return;
+    }
+    found.slice().sort((a, b) => (a.price ?? Infinity) - (b.price ?? Infinity)).forEach((lot) => {
+      const actions = h("div", { class: "deal-actions" }, [
+        h("span", { class: "discount-tag", text: price(lot.price) }),
+        h("button", { class: "btn secondary", type: "button", text: "Убрать ☆", "aria-label": "Убрать из избранного " + lot.title })
+      ]);
+      actions.querySelector("button").addEventListener("click", () => toggleFavorite(lot.lot_id));
+      const row = lotItem(lot, actions, "#" + lot.lot_id + (lot.rarity ? " · " + lot.rarity : ""));
+      row.classList.add("deal-row");
+      list.append(row);
+    });
+  }
+
+  function toggleFavorite(lotId) {
+    const id = String(lotId);
+    state.favorites = state.favorites.includes(id) ? state.favorites.filter((value) => value !== id) : [...state.favorites, id].slice(-5000);
+    writeFavorites();
+    renderFavorites();
+    updateViewCounts();
+    renderRows();
+  }
+
+  async function requestSupportApi(path, options) {
+    const response = await fetch(path, { cache: "no-store", ...(options || {}) });
+    let data = {};
+    try { data = await response.json(); } catch (_) {}
+    if (!response.ok) throw new Error(data.detail || data.error || ("HTTP " + response.status));
+    return data;
+  }
+
+  function supportMessage(message, kind) {
+    const box = $("supportMsg");
+    box.textContent = message || "";
+    box.hidden = !message;
+    box.className = "support-message" + (kind ? " " + kind : "");
+  }
+
+  function renderSupportLevels() {
+    const box = clear($("supportAmounts"));
+    const labels = {
+      5000: "SCOUT",
+      10000: "BUILDER",
+      25000: "WORKER",
+      50000: "HARD MODE",
+      100000: "AMNYAM OG"
+    };
+    (supportConfig.amounts || [5000, 10000, 25000, 50000, 100000]).forEach((amount, index) => {
+      const button = h("button", { class: "support-level", type: "button", "data-amount": String(amount) }, [
+        h("span", { class: "support-tier-num", text: "LEVEL / 0" + (index + 1) }),
+        h("b", { text: fmt(amount) + " ◉" }),
+        h("small", { text: labels[amount] || "SUPPORT" })
+      ]);
+      box.append(button);
+    });
+  }
+
+  async function initSupport() {
+    if (supportInitRunning) return;
+    supportInitRunning = true;
+    renderSupportLevels();
+    const inHuevo = new URLSearchParams(location.search).has("hu_user_id");
+    try {
+      supportConfig = await requestSupportApi("./api/support/config");
+    } catch (_) {
+      supportConfig = { enabled: false, amounts: [5000, 10000, 25000, 50000, 100000], origins: ["https://huevo.su", "https://huevo.departament.site"] };
+    }
+    renderSupportLevels();
+    try {
+      const stats = await requestSupportApi("./api/support/stats");
+      $("supporters").textContent = fmt(Number(stats.supporters) || 0);
+      $("supportTotal").textContent = fmt(Number(stats.total) || 0);
+    } catch (_) {
+      $("supporters").textContent = "—";
+      $("supportTotal").textContent = "—";
+    }
+    if (!supportConfig.enabled) {
+      $("supportHint").textContent = "Поддержка временно недоступна: проверь настройки huEVO Apps и миграцию support_payments.";
+    } else if (!inHuevo) {
+      $("supportHint").textContent = "Выбери уровень поддержки, когда AMNYAM MODE открыт внутри huEVO как приложение. Только там доступен подтверждённый аккаунт и официальное окно платежа.";
+    } else {
+      $("supportHint").textContent = "Платёж будет создан на сервере и подтверждён официальным окном huEVO. Выбирай уровень ниже.";
+      try {
+        if (!window.huevo) {
+          await new Promise((resolve) => {
+            const script = document.createElement("script");
+            script.src = supportConfig.sdk_url || "https://huevo.su/static/js/huevo-apps-v1.js";
+            script.onload = resolve;
+            script.onerror = resolve;
+            document.head.appendChild(script);
+          });
+        }
+        if (window.huevo && typeof window.huevo.init === "function") {
+          await window.huevo.init({ origins: supportConfig.origins || ["https://huevo.su", "https://huevo.departament.site"] });
+          supportSdkReady = true;
+        }
+        if (!supportSdkReady) $("supportHint").textContent = "Не удалось подключить SDK huEVO. Открой панель через huEVO и попробуй ещё раз.";
+      } catch (_) {
+        $("supportHint").textContent = "Не удалось подключить SDK huEVO. Открой панель через huEVO и попробуй ещё раз.";
+      }
+    }
+    supportInitRunning = false;
+  }
+
+  async function makeSupportPayment(amount) {
+    const inHuevo = new URLSearchParams(location.search).has("hu_user_id");
+    if (!supportConfig.enabled) return supportMessage("Приём поддержки не настроен. Проверь настройки huEVO Apps.", "error");
+    if (!inHuevo || !supportSdkReady || !window.huevo) return supportMessage("Для оплаты открой AMNYAM MODE внутри huEVO как приложение.", "error");
+    const buttons = Array.from(document.querySelectorAll("#supportAmounts [data-amount]"));
+    buttons.forEach((button) => { button.disabled = true; });
+    try {
+      supportMessage("Создаём запрос на поддержку…");
+      const intent = await requestSupportApi("./api/support/intent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({ amount: Number(amount), launch_query: location.search })
+      });
+      supportMessage("Подтверди платёж в официальном окне huEVO" + (intent.test ? " (тестовый режим)." : "."));
+      try { await window.huevo.confirmPayment(intent.intent_id); } catch (_) {}
+      let status = "pending";
+      for (let attempt = 0; attempt < 40 && status === "pending"; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        const result = await requestSupportApi("./api/support/status/" + encodeURIComponent(intent.intent_id));
+        status = result.status;
+      }
+      if (status === "succeeded") supportMessage(intent.test ? "Тестовый платёж подтверждён. Спасибо!" : "Поддержка подтверждена сервером. Спасибо!", "good");
+      else if (status === "pending") supportMessage("Платёж пока не подтверждён. Статус проверяется отдельно; проверь окно huEVO.");
+      else supportMessage("Платёж завершился со статусом: " + status + ".", "error");
+      const stats = await requestSupportApi("./api/support/stats");
+      $("supporters").textContent = fmt(Number(stats.supporters) || 0);
+      $("supportTotal").textContent = fmt(Number(stats.total) || 0);
+    } catch (error) {
+      supportMessage(error && error.message ? error.message : "Не удалось создать платёж.", "error");
+    } finally {
+      buttons.forEach((button) => { button.disabled = false; });
+    }
+  }
+
   // ---------- main render ----------
   function render() {
     renderState();
@@ -428,17 +769,50 @@
       $("emptyText").textContent = c.status && c.status !== "ok"
         ? "Каталог пуст: " + (c.message || c.status) + ". Статистика не показывается, чтобы не выдавать пустые значения за реальные."
         : "Первый полный сбор ещё не опубликован. Статистика не показывается, чтобы не выдавать пустые значения за реальные.";
-      show("empty"); return;
+      show("empty");
+      switchView(state.activeView);
+      return;
     }
     show("content");
+    renderDeals(); renderCheapest(); renderFavorites();
     renderCards(); renderCharts(); renderChanges(); renderTop(); renderSales(); fillFacets(); applyFilters();
+    switchView(state.activeView);
   }
 
   // ---------- events ----------
-  ["search", "pmin", "pmax"].forEach((id) => $(id).addEventListener("input", () => { state.page = 0; applyFilters(); }));
+  document.querySelectorAll("#mainNav [data-view]").forEach((button) => {
+    button.addEventListener("click", () => switchView(button.dataset.view, true));
+  });
+  document.querySelectorAll("[data-go-view]").forEach((button) => {
+    button.addEventListener("click", () => switchView(button.dataset.goView, true));
+  });
+  $("globalSearch").addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    $("search").value = $("globalSearch").value.trim();
+    state.page = 0;
+    switchView("market", true);
+    applyFilters();
+  });
+  document.querySelectorAll("[data-search-token]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const token = button.dataset.searchToken || "";
+      const input = $("search");
+      input.value = (input.value.trim() + " " + token).trim();
+      $("globalSearch").value = input.value;
+      state.page = 0;
+      switchView("market", true);
+      applyFilters();
+    });
+  });
+  $("supportAmounts").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-amount]");
+    if (button && !button.disabled) makeSupportPayment(button.dataset.amount);
+  });
+  ["search", "pmin", "pmax"].forEach((id) => $(id).addEventListener("input", () => { state.page = 0; $("globalSearch").value = $("search").value; applyFilters(); }));
   ["rarity", "status"].forEach((id) => $(id).addEventListener("change", () => { state.page = 0; applyFilters(); }));
   $("filters").addEventListener("submit", (e) => e.preventDefault());
-  $("reset").addEventListener("click", () => { ["search", "pmin", "pmax", "rarity", "status"].forEach((id) => { $(id).value = ""; }); state.page = 0; applyFilters(); });
+  $("reset").addEventListener("click", () => { ["search", "pmin", "pmax", "rarity", "status", "globalSearch"].forEach((id) => { $(id).value = ""; }); state.page = 0; applyFilters(); });
   document.querySelectorAll(".sort").forEach((b) => b.addEventListener("click", () => {
     const key = b.dataset.key;
     state.sort = { key, dir: state.sort.key === key ? -state.sort.dir : (key === "title" || key === "rarity" ? 1 : key === "price" ? 1 : -1) };
@@ -452,7 +826,8 @@
   $("detail").addEventListener("close", () => { if (lastTrigger && document.contains(lastTrigger)) lastTrigger.focus(); });
   $("detail").addEventListener("click", (e) => { if (e.target === $("detail")) $("detail").close(); });
   load();
+  initSupport();
   pollLive();
   window.setInterval(pollLive, 3000);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) pollLive(); });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { pollLive(); } });
 })();

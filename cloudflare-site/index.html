@@ -5,24 +5,35 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' https://huevo.su https://huevo.departament.site data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
-<title>Huevo Gift Analytics</title>
-<link rel="stylesheet" href="./styles.css">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://huevo.su; style-src 'self'; img-src 'self' https://huevo.su https://huevo.departament.site data:; connect-src 'self' https://huevo.su https://*.huevo.su; base-uri 'none'; form-action 'none'">
+<title>AMNYAM MODE — Huevo Gift Intelligence</title>
+<link rel="stylesheet" href="./styles.css?v=amnyam-v2">
 </head>
 <body>
 <a class="skip" href="#catalog">К каталогу</a>
 <main class="wrap">
 <header class="top">
-  <div class="brand"><div class="logo" aria-hidden="true">H</div><div><h1>Huevo <span>Gift Analytics</span></h1><p>Аналитика маркета подарков</p></div></div>
+  <div class="brand"><div class="logo" aria-hidden="true">H</div><div><h1>AMNYAM <span>MODE</span></h1><p>WORKER EDITION · GIFT MARKET INTELLIGENCE</p></div></div>
   <div class="top-right">
     <span class="badge" role="status"><i class="dot" id="stateDot"></i><span id="stateText">Загружаю данные…</span></span>
-    <a class="btn secondary" href="https://huevo.su/market/gifts" target="_blank" rel="noopener noreferrer">Открыть Huevo ↗</a>
+    <a class="btn secondary" href="https://huevo.su/market/gifts" target="_blank" rel="noopener noreferrer">Войти в рынок ↗</a>
   </div>
 </header>
 
-<section class="hero" aria-labelledby="heroTitle">
-  <div><div class="eyebrow">Обзор рынка</div><h2 id="heroTitle">Каталог подарков и динамика цен</h2>
-  <p>Снимок публичных предложений. Везде показаны <b>цены объявлений</b>, а не цены завершённых сделок.</p></div>
+<nav class="main-nav" id="mainNav" role="tablist" aria-label="Разделы AMNYAM MODE">
+  <button role="tab" aria-selected="true" data-view="overview" type="button"><span>01</span> База</button>
+  <button role="tab" aria-selected="false" data-view="market" type="button"><span>02</span> Маркет <small id="navMarketCount">—</small></button>
+  <button role="tab" aria-selected="false" data-view="deals" type="button"><span>03</span> Ниже рынка <small id="navDealsCount">—</small></button>
+  <button role="tab" aria-selected="false" data-view="cheap" type="button"><span>04</span> Дешёвые <small id="navCheapCount">—</small></button>
+  <button role="tab" aria-selected="false" data-view="analytics" type="button"><span>05</span> Данные</button>
+  <button role="tab" aria-selected="false" data-view="favorites" type="button"><span>06</span> Избранное <small id="navFavoritesCount">0</small></button>
+  <button role="tab" aria-selected="false" data-view="support" type="button"><span>07</span> Поддержка</button>
+</nav>
+<div class="command-strip"><span class="command-mark">AMNYAM / WORKER EDITION</span><span>MARKET INTELLIGENCE <i></i> SILENT SYNC 3S</span><label class="command-search"><b>⌕</b><input id="globalSearch" type="search" placeholder="Быстрый поиск по рынку…" autocomplete="off" aria-label="Быстрый поиск"><kbd>ENTER</kbd></label></div>
+
+<section class="hero" id="hero" data-view-section="overview" aria-labelledby="heroTitle">
+  <div><div class="eyebrow">AMNYAM / ПОЛЕВОЙ СКАНЕР</div><h2 id="heroTitle">Поймай лот.<br><em>Не переплати.</em></h2>
+  <p>Цены маркета, история и выгодные входы. Работаем быстро: <b>собираем данные, сравниваем рынок, принимаем решение.</b></p></div>
   <dl class="freshness" id="freshness"><div><dt>Последний успешный сбор</dt><dd id="lastOk">—</dd></div><div><dt>Последняя попытка</dt><dd id="lastTry">—</dd></div></dl>
 </section>
 
@@ -33,19 +44,26 @@
 <div id="empty" class="panel state hide"><h3>Данных пока нет</h3><p id="emptyText">Первый полный сбор ещё не опубликован. Статистика не показывается, чтобы не выдавать пустые значения за реальные.</p></div>
 
 <div id="content" class="hide">
-<section class="cards" id="cards" aria-label="Ключевые показатели"></section>
 
-<section class="grid2">
+<section class="panel overview-pick" id="overviewPick" data-view-section="overview">
+  <div class="pick-stamp" aria-hidden="true">AM<br>NYAM</div>
+  <div class="pick-copy"><span class="section-index">/ CURRENT BEST PICK</span><h2>Лот дня <span>ниже ориентира</span></h2><p id="overviewPickHint">Ищем лучший лот относительно похожих предложений…</p></div>
+  <div id="overviewPickLot" class="pick-lot"><span class="muted">Рынок загружается</span></div>
+  <button class="btn secondary" type="button" data-go-view="deals">Все предложения ↗</button>
+</section>
+<section class="cards" id="cards" data-view-section="overview" aria-label="Ключевые показатели"></section>
+
+<section class="grid2" data-view-section="overview">
   <article class="panel"><div class="panel-head"><h3>Распределение цен</h3><span class="muted" id="binsNote"></span></div><div class="chart" id="chartBins"></div></article>
   <article class="panel"><div class="panel-head"><h3>Категории (редкость)</h3><span class="muted" id="catNote"></span></div><div id="chartCats" class="bars"></div></article>
 </section>
 
-<section class="grid2">
+<section class="grid2" data-view-section="analytics">
   <article class="panel"><div class="panel-head"><h3>Число активных лотов по снимкам</h3><span class="muted" id="countNote"></span></div><div class="chart" id="chartCount"></div></article>
   <article class="panel"><div class="panel-head"><h3>Медианная цена по снимкам</h3><span class="muted" id="medianNote"></span></div><div class="chart" id="chartMedian"></div></article>
 </section>
 
-<section class="grid2">
+<section class="grid2" data-view-section="analytics">
   <article class="panel">
     <div class="panel-head"><h3>Изменения каталога</h3><span class="muted" id="changesNote"></span></div>
     <div class="tabs" role="tablist" aria-label="Тип изменений">
@@ -59,21 +77,52 @@
   <article class="panel"><div class="panel-head"><h3>Самые дорогие лоты</h3><span class="muted">по цене объявления</span></div><ol class="list" id="topList"></ol></article>
 </section>
 
-<section class="panel hide" id="salesPanel" aria-labelledby="salesTitle">
+<section class="panel hide" id="salesPanel" data-view-section="analytics" aria-labelledby="salesTitle">
   <div class="panel-head"><h3 id="salesTitle">История продаж</h3><span class="muted" id="salesNote"></span></div>
   <div id="salesBody"></div>
 </section>
 
-<section class="panel" id="catalog" aria-labelledby="catTitle">
-  <div class="panel-head"><div><h3 id="catTitle">Каталог маркета</h3><div class="muted" id="rowCount" aria-live="polite">—</div></div></div>
+
+<section class="panel amnyam-deals-view" id="dealsPanel" data-view-section="deals">
+  <div class="section-heading"><div><span class="section-index">/ VALUE HUNT</span><h2>Ниже рынка</h2><p>Лоты дешевле ориентира похожих предложений. Ориентир объясняется в каждой карточке.</p></div><div class="view-heading-right"><span class="view-stat" id="dealsCount">— сигналов</span><span class="muted" id="dealsNote">Сравнение с медианой аналогов</span></div></div>
+  <article class="deal-hero" id="belowBest">
+    <div class="deal-hero-stamp">AMNYAM<br>SELECT</div>
+    <div class="deal-hero-content"><span class="eyebrow">BEST CURRENT PICK</span><h3 id="belowBestTitle">Сканируем каталог…</h3><strong id="belowBestPrice">—</strong><p id="belowBestMeta">Сравнение появится после загрузки рынка.</p><a id="belowBestOpen" class="btn" href="https://huevo.su/market/gifts" target="_blank" rel="noopener noreferrer">Открыть лот ↗</a></div>
+  </article>
+  <ol class="deal-list" id="dealsList"></ol>
+  <p class="muted foot">Сигнал ниже рынка — сравнительная оценка, а не обещание прибыли. Сверяй серию, редкость и данные лота перед покупкой.</p>
+</section>
+
+<section class="panel" id="cheapPanel" data-view-section="cheap">
+  <div class="section-heading"><div><span class="section-index">/ FLOOR PRICE</span><h2>Самые дешёвые</h2><p>Текущие предложения по возрастанию цены.</p></div><span class="view-stat" id="cheapCount">— лотов</span></div>
+  <ol class="deal-list cheap-list" id="cheapestList"></ol>
+</section>
+
+<section class="panel" id="favoritesPanel" data-view-section="favorites">
+  <div class="section-heading"><div><span class="section-index">/ PERSONAL WATCHLIST</span><h2>Избранное</h2><p>Отметь звёздочкой лоты, к которым хочешь вернуться. Избранное сохраняется в этом браузере.</p></div><span class="view-stat" id="favoritesCount">0 лотов</span></div>
+  <ol class="deal-list" id="favoritesList"></ol>
+</section>
+
+<section class="panel support-panel" id="supportPanel" data-view-section="support">
+  <div class="support-header"><div><span class="section-index">/ SUPPORT THE BUILDER</span><h2>Поддержать автора</h2><p>Для тех, кто хочет, чтобы AMNYAM MODE продолжал расти.</p></div><div class="support-mark" aria-hidden="true">◈</div></div>
+  <div class="support-levels" id="supportAmounts" aria-label="Уровень поддержки"></div>
+  <div class="support-message" id="supportMsg" role="status" hidden></div>
+  <p class="support-hint" id="supportHint">Проверяем доступность huEVO Apps…</p>
+  <div class="support-total"><span><small>Поддержали</small><b id="supporters">—</b></span><span><small>Собрано без тестовых платежей</small><b><i id="supportTotal">—</i> ◉</b></span></div>
+  <p class="muted foot">Платёж подтверждается в официальном окне huEVO. Пароль и данные аккаунта приложение не запрашивает.</p>
+</section>
+
+<section class="panel catalog-panel" id="catalog" data-view-section="market" aria-labelledby="catTitle">
+  <div class="panel-head"><div><span class="section-index">/ FULL MARKET SCAN</span><h3 id="catTitle">Каталог маркета</h3><div class="muted" id="rowCount" aria-live="polite">—</div></div><span class="mono-tag">SEARCH / FILTER / SORT</span></div>
   <form class="toolbar" id="filters" role="search" aria-label="Фильтры каталога">
-    <label class="f grow"><span>Поиск</span><input class="input" id="search" type="search" placeholder="Название, серия или ID" autocomplete="off"></label>
+    <label class="f grow"><span>Поиск</span><input class="input" id="search" type="search" placeholder='Название, ID, rarity:Редкий, price<100000' autocomplete="off"></label>
     <label class="f"><span>Редкость</span><select class="select" id="rarity"><option value="">Все</option></select></label>
     <label class="f"><span>Статус</span><select class="select" id="status"><option value="">Все</option></select></label>
     <label class="f num"><span>Цена от</span><input class="input" id="pmin" type="number" min="0" inputmode="numeric" placeholder="0"></label>
     <label class="f num"><span>Цена до</span><input class="input" id="pmax" type="number" min="0" inputmode="numeric" placeholder="∞"></label>
     <button class="btn secondary reset" id="reset" type="button">Сбросить</button>
   </form>
+  <div class="search-tips"><span>БЫСТРЫЕ ФИЛЬТРЫ</span><button type="button" data-search-token="price<100000">до 100k</button><button type="button" data-search-token="rarity:Редкий">редкие</button><button type="button" data-search-token="status:На продаже">на продаже</button><button type="button" data-search-token="price>500000">выше 500k</button></div>
   <div class="table-wrap">
     <table>
       <caption class="sr">Каталог подарков. Нажмите на заголовок столбца, чтобы отсортировать.</caption>
@@ -99,6 +148,6 @@
 
 <footer class="footer"><span>Huevo Gift Analytics · статическая версия</span><span>Данные собирает локальный сборщик на ПК владельца; блокировки источника не обходятся.</span></footer>
 </main>
-<script src="./app.js?v=live-refresh-v3" defer></script>
+<script src="./app.js?v=amnyam-v2" defer></script>
 </body>
 </html>

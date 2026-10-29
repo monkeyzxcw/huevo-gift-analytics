@@ -2,6 +2,14 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
   Permissions-Policy: camera=(), microphone=(), geolocation=()
-  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' https://huevo.su https://huevo.departament.site data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'self' https://huevo.su https://*.huevo.su https://huevo.departament.site https://*.huevo.departament.site
+  Content-Security-Policy: default-src 'none'; script-src 'self' https://huevo.su; style-src 'self'; img-src 'self' https://huevo.su https://*.huevo.su https://huevo.departament.site data:; connect-src 'self' https://huevo.su https://*.huevo.su; base-uri 'none'; form-action 'none'; frame-ancestors 'self' https://huevo.su https://*.huevo.su https://huevo.departament.site https://*.huevo.departament.site
 /data.json
+  Cache-Control: no-cache
+/
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+/app.js
+  Cache-Control: no-cache
+/styles.css
   Cache-Control: no-cache
