@@ -13,8 +13,8 @@ const lotUrl = x => safeHttps(x.lot_url) || ("https://huevo.su/market/lot/" + en
 const pic = x => safeHttps(x.image_url) ? `<img loading="lazy" referrerpolicy="no-referrer" alt="" src="${esc(x.image_url)}">` : "🎁";
 const ext = (url, label) => `<a class="btn mini" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${label}</a>`;
 
-async function api(path, options = {}) {
-  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 20000);
+async function api(path, options = {}, timeoutMs = 20000) {
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
     const r = await fetch(path, {...options, signal: ctl.signal});
     let data = {};
@@ -25,7 +25,7 @@ async function api(path, options = {}) {
     }
     return data;
   } catch (e) {
-    throw new Error(e.name === "AbortError" ? "Сервер не ответил за 20 секунд" : e.message);
+    throw new Error(e.name === "AbortError" ? `Сервер не ответил за ${Math.round(timeoutMs / 1000)} секунд` : e.message);
   } finally { clearTimeout(timer); }
 }
 async function busy(btn, fn) {
@@ -83,10 +83,10 @@ function askToken() {
     d.showModal(); i.focus();
   });
 }
-async function authed(path) {
+async function authed(path, timeoutMs = 20000) {
   const t = await askToken();
   if (!t) throw new Error("Токен не введён");
-  try { return await api(path, {method: "POST", headers: {Authorization: "Bearer " + t}}); }
+  try { return await api(path, {method: "POST", headers: {Authorization: "Bearer " + t}}, timeoutMs); }
   catch (e) { if (/токен/i.test(e.message)) adminToken = ""; throw e; }
 }
 
@@ -158,7 +158,7 @@ $("diagnostics").addEventListener("click", e => busy(e.currentTarget, renderStat
 $("probeHuevo").addEventListener("click", e => busy(e.currentTarget, async () => {
   const p = $("diagBox"); p.hidden = false; p.textContent = "Проверяем…";
   try {
-    const r = await authed("/api/diagnose-huevo");
+    const r = await authed("/api/diagnose-huevo", 90000);
     p.textContent = ["Проверка доступа к Huevo (" + r.base_url + ")", "Cookies на сервере: " + (r.cookies_configured ? "заданы" : "не заданы")]
       .concat((r.steps || []).map(x => `• ${x.step}: ${x.verdict}${x.http_status ? " · HTTP " + x.http_status + (x.status_source === "network" ? " (сеть)" : " (по тексту страницы)") : ""}${x.retry_after ? " · Retry-After " + x.retry_after + " с" : ""}${x.cards != null ? " · карточек: " + x.cards : ""}\n   ${x.hint || ""}`))
       .concat(r.error ? ["Ошибка: " + r.error] : []).join("\n");
