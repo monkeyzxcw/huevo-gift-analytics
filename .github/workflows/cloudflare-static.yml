@@ -22,6 +22,22 @@ jobs:
         with:
           ref: main
 
+      - name: Validate required secrets before crawling
+        env:
+          HUEVO_COOKIES_JSON: ${{ secrets.HUEVO_COOKIES_JSON }}
+          HUEVO_COOKIES: ${{ secrets.HUEVO_COOKIES }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$HUEVO_COOKIES_JSON" ] && [ -z "$HUEVO_COOKIES" ]; then
+            echo "Missing HUEVO_COOKIES_JSON GitHub secret." >&2
+            exit 1
+          fi
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID GitHub secrets before crawling." >&2
+            exit 1
+          fi
+
       - name: Build the existing Selenium image
         run: docker build -t huevo-static-collector .
 
