@@ -1,7 +1,8 @@
 (async () => {
   'use strict';
-  if (location.hostname !== 'huevo.su') {
-    alert('Сначала откройте https://huevo.su/market/gifts в авторизованном браузере.');
+  const allowedHosts = new Set(['huevo.su', 'www.huevo.su', 'huevo.departament.site', 'www.huevo.departament.site']);
+  if (!allowedHosts.has(location.hostname.toLowerCase())) {
+    alert('Откройте https://huevo.su/market/gifts или https://huevo.departament.site/market/gifts в уже авторизованном браузере.');
     return;
   }
   const dashboard = (prompt('Вставьте URL вашего Huevo Gift Analytics на Render (например, https://huevo-gift-analytics.onrender.com):', '') || '').trim().replace(/\/$/, '');
