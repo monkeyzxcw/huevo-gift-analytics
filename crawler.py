@@ -22,6 +22,8 @@ class CrawlConfig:
     max_pages: int = 500
     ready_timeout: float = 20.0
     settle: float = 1.5
+    network_retries: int = 2        # bounded retries, only for transient timeout/connect errors
+    retry_backoff: float = 5.0
     cookies_raw: str = ""
     sleep: callable = field(default=time.sleep, repr=False)
 
@@ -57,8 +59,11 @@ def _wait_ready(browser, timeout, sleep):
     return False
 
 
-def observe(browser, cfg, path):
-    """Load `path`, return (probe dict, rows, link_count, network_failures)."""
+def observe(browser, cfg, path, parser=None):
+    """Load `path`, return (probe dict, rows, link_count, network_failures).
+
+    `parser(html) -> (rows, count)` defaults to the catalog card parser.
+    """
     try:
         browser.get(cfg.base_url + path)
     except Exception as exc:
@@ -73,7 +78,7 @@ def observe(browser, cfg, path):
             state = browser.execute_script("return document.readyState")
         except Exception:
             return {"verdict": "network_error", "cause": "timeout"}, [], 0, []
-        if state not in ("interactive", "complete") and not _wait_ready(browser, 5, cfg.sleep):
+        if state not in ("interactive", "complete") and not _wait_ready(browser, min(5, cfg.ready_timeout), cfg.sleep):
             return {"verdict": "network_error", "cause": "timeout"}, [], 0, []
     if not _wait_ready(browser, cfg.ready_timeout, cfg.sleep):
         return {"verdict": "network_error", "cause": "timeout"}, [], 0, []
@@ -85,7 +90,10 @@ def observe(browser, cfg, path):
         pass     # performance log not enabled -> status stays "inferred"
     resp = main_response(parsed, path)
     body = browser.find_element("tag name", "body").text[:2000]
-    rows, links = parse_cards(browser.page_source, cfg.base_url, cfg.allowed_hosts)
+    if parser is None:
+        rows, links = parse_cards(browser.page_source, cfg.base_url, cfg.allowed_hosts)
+    else:
+        rows, links = parser(browser.page_source)
     password = any(e.is_displayed() for e in browser.find_elements("css selector", "input[type='password']"))
     probe = classify_page(browser.current_url, browser.title, body, links, expected_hosts=_hosts(cfg),
                           password_visible=password,
@@ -96,14 +104,41 @@ def observe(browser, cfg, path):
     return probe, rows, links, parsed.get("failures", [])
 
 
+
+
+def _cookie_expiry(value):
+    """Return a cookie expiry in Unix seconds, or None for a session/invalid expiry."""
+    if value in (None, ""):
+        return None
+    try:
+        return int(float(value))
+    except (TypeError, ValueError, OverflowError):
+        return None
+
 def install_session(browser, cfg, log):
     """Install cookies for the configured base host only. Returns (accepted, rejected)."""
     cookies = load_cookie_export(cfg.cookies_raw)
     if not cookies:
         raise ValueError("В экспорте не найдено cookies с полями name и value.")
     from urllib.parse import urlsplit
-    host = urlsplit(cfg.base_url).hostname
+    host = (urlsplit(cfg.base_url).hostname or "").lower()
     browser.get(cfg.base_url + "/")        # cookies can only be set once a page of the domain is open
+    now = int(time.time())
+    input_domains = sorted({str(c.get("domain", host)).strip().lower().lstrip(".") for c in cookies if isinstance(c, dict)})
+    # Cookie names and flags are metadata, not credentials; values are never logged.
+    cookie_metadata = sorted({
+        f"{str(c.get('name', '?'))}[secure={bool(c.get('secure', False))},httponly={bool(c.get('httpOnly', False))},samesite={str(c.get('sameSite', 'unset'))}]"
+        for c in cookies if isinstance(c, dict) and c.get("name")
+    })
+    expired = sum(
+        1 for c in cookies if isinstance(c, dict)
+        and c.get("expiry") not in (None, "")
+        and _cookie_expiry(c.get("expiry")) is not None
+        and _cookie_expiry(c.get("expiry")) <= now
+    )
+    log.info("cookie export summary: count=%d domains=%s expired=%d names_and_flags=%s (values never logged)",
+             len(cookies), ",".join(input_domains) if input_domains else "none", expired,
+             ",".join(cookie_metadata) if cookie_metadata else "none")
     accepted = rejected = 0
     for raw in cookies:
         if not isinstance(raw, dict):
@@ -112,13 +147,53 @@ def install_session(browser, cfg, log):
         if not cookie:
             rejected += 1
             continue
+        # A permitted Huevo domain is not necessarily the domain this run visits.
+        # Reject cross-domain cookies explicitly instead of treating add_cookie as proof of auth.
+        scope = str(cookie.get("domain", "")).lstrip(".").lower()
+        if host != scope and not host.endswith("." + scope):
+            rejected += 1
+            continue
+        expiry = _cookie_expiry(cookie.get("expiry"))
+        if expiry is not None and expiry <= now:
+            rejected += 1
+            continue
         try:
             browser.add_cookie(cookie)
             accepted += 1
         except Exception:
             rejected += 1
-    log.info("cookies accepted=%d rejected=%d (values never logged)", accepted, rejected)
+    try:
+        visible = len(browser.get_cookies())
+    except Exception:
+        visible = -1
+    log.info("cookie install summary: accepted=%d rejected=%d visible_on_base_host=%d (values never logged)",
+             accepted, rejected, visible)
     return accepted, rejected
+
+
+TRANSIENT_CAUSES = ("timeout", "connect")
+
+
+def observe_with_retry(browser, cfg, path, log, parser=None):
+    """`observe`, retried a bounded number of times and ONLY for transient network errors.
+
+    Blocks (403/418/429), login pages, 5xx and DNS/TLS failures are returned at once: retrying
+    them would just be pressure on the source. Waits grow 1x, 2x, ... of `retry_backoff`.
+    """
+    attempt = 0
+    while True:
+        result = observe(browser, cfg, path, parser)
+        probe = result[0]
+        if (probe.get("verdict") != "network_error" or probe.get("cause") not in TRANSIENT_CAUSES
+                or attempt >= max(0, int(cfg.network_retries))):
+            if attempt:
+                probe["attempts"] = attempt + 1
+            return result
+        attempt += 1
+        wait = max(0.0, cfg.retry_backoff) * attempt
+        log.warning("transient network error (%s) on %s; retry %d/%d in %.0fs",
+                    probe.get("cause"), path, attempt, cfg.network_retries, wait)
+        cfg.sleep(wait)
 
 
 def run_crawl(browser, store, cfg, log, progress=lambda page, found: None, should_stop=lambda: False):
@@ -139,10 +214,10 @@ def run_crawl(browser, store, cfg, log, progress=lambda page, found: None, shoul
         # Use the canonical catalog URL for page 1; page=1 may redirect to the profile.
         path = "/market/gifts" if page == 1 else f"/market/gifts?page={page}"
         t0 = time.monotonic()
-        probe, rows, links, _ = observe(browser, cfg, path)
+        probe, rows, links, _ = observe_with_retry(browser, cfg, path, log)
         verdict = probe["verdict"]
-        log.info("crawl page=%d verdict=%s http=%s(%s) host=%s title=%r body_len=%s cards=%s parsed=%d %.1fs", page, verdict,
-                 probe.get("http_status"), probe.get("status_source"), probe.get("final_host"), probe.get("title"),
+        log.info("crawl page=%d verdict=%s http=%s(%s) host=%s path=%s title=%r body_len=%s cards=%s parsed=%d %.1fs", page, verdict,
+                 probe.get("http_status"), probe.get("status_source"), probe.get("final_host"), probe.get("final_path"), probe.get("title"),
                  probe.get("body_length"), links, len(rows), time.monotonic() - t0)
         common = dict(pages=pages, unique_lots=len(seen), new_lots=new_total, changed_lots=changed_total,
                       http_status=probe.get("http_status") or probe.get("status_class_inferred"),
@@ -152,7 +227,7 @@ def run_crawl(browser, store, cfg, log, progress=lambda page, found: None, shoul
             src = "подтверждён сетевым журналом" if probe.get("status_source") == "network" else "определён по тексту страницы"
             return CrawlResult("blocked", f"Huevo ограничил доступ (HTTP {code}, {src}). Сбор остановлен без повторов.", stop_reason="блокировка", **common)
         if verdict == "network_error":
-            return CrawlResult("network_error", f"Сетевая ошибка ({probe.get('cause')}). Сбор остановлен без повторов.", cause=probe.get("cause"), stop_reason="сеть", **common)
+            return CrawlResult("network_error", f"Сетевая ошибка ({probe.get('cause')}), попыток: {probe.get('attempts', 1)}. Сбор остановлен.", cause=probe.get("cause"), stop_reason="сеть", **common)
         if verdict == "server_error":
             return CrawlResult("server_error", VERDICT_HINTS["server_error"], stop_reason="ошибка источника", **common)
         if not rows:
@@ -178,3 +253,50 @@ def _finish(pages, seen, new, changed, reached_end, reason):
     if not seen:
         return CrawlResult("no_cards", "Сбор завершился без единого лота; данные не сохранены.", stop_reason=reason)
     return CrawlResult("ok", f"Готово: {len(seen)} уникальных лотов, страниц {pages} ({reason})", pages, len(seen), new, changed, reached_end, stop_reason=reason)
+
+
+def run_history_crawl(browser, store, cfg, log, max_pages=5, should_stop=lambda: False):
+    """Collect confirmed sales from /market/history into `store.sales`.
+
+    Deliberately shallow by default (max_pages=5 of ~650): the same stop rules as the catalog crawl
+    apply (block / login / 5xx / network error end the run with no retry). `reached_end` is True only
+    when the pager says the last page was read or a later page has an empty table.
+    """
+    from history_parser import parse_history
+    meta = {}
+
+    def parser(html):
+        meta.update(parse_history(html))
+        return meta["rows"], len(meta["rows"])
+
+    pages = saved = new_total = 0
+    for page in range(1, max(1, max_pages) + 1):
+        if should_stop():
+            return CrawlResult("error", "Остановлено оператором", pages, saved, new_total, stop_reason="остановка")
+        meta.clear()
+        path = "/market/history" if page == 1 else f"/market/history?page={page}"
+        probe, rows, _, _ = observe_with_retry(browser, cfg, path, log, parser=parser)
+        verdict = probe["verdict"]
+        log.info("history page=%d verdict=%s http=%s(%s) rows=%d table=%s total_pages=%s", page, verdict, probe.get("http_status"),
+                 probe.get("status_source"), len(rows), meta.get("table_found"), meta.get("total_pages"))
+        common = dict(pages=pages, unique_lots=saved, new_lots=new_total, http_status=probe.get("http_status") or probe.get("status_class_inferred"),
+                      status_source=probe.get("status_source"), retry_after=probe.get("retry_after"))
+        if verdict == "blocked":
+            return CrawlResult("blocked", f"Huevo ограничил доступ к истории (HTTP {common['http_status']}). Остановлено без повторов.", stop_reason="блокировка", **common)
+        if verdict == "network_error":
+            return CrawlResult("network_error", f"Сетевая ошибка ({probe.get('cause')}).", cause=probe.get("cause"), stop_reason="сеть", **common)
+        if verdict == "server_error":
+            return CrawlResult("server_error", VERDICT_HINTS["server_error"], stop_reason="ошибка источника", **common)
+        if not rows:
+            if page > 1 and meta.get("table_found"):
+                return CrawlResult("ok", f"История: страница {page} пуста (конец).", pages, saved, new_total, reached_end=True, stop_reason="конец истории")
+            kind = "login" if verdict == "login" else "no_cards"
+            return CrawlResult(kind, "Таблица истории не найдена или пуста на первой странице: вход, разметка или пустая история. Данные не сохранены.", stop_reason=verdict, **common)
+        new_total += store.upsert_sales(rows, now=utcnow())
+        saved += len(rows)
+        pages = page
+        total = meta.get("total_pages")
+        if total and page >= total:
+            return CrawlResult("ok", f"История прочитана целиком: страниц {pages}.", pages, saved, new_total, reached_end=True, stop_reason="последняя страница")
+        cfg.sleep(cfg.delay)
+    return CrawlResult("ok", f"История: прочитано страниц {pages} (лимит {max_pages}), новых сделок {new_total}.", pages, saved, new_total, reached_end=False, stop_reason="лимит страниц")

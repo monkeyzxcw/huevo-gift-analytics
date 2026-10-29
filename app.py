@@ -25,7 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 
 import support
-from analytics import best_value, find_deals, market_summary, price_bins
+from analytics import best_value, find_deals, market_summary, price_bins, sales_by_title, sales_summary
 from cookies import ALLOWED_HUEVO_HOSTS, is_huevo_host, load_cookie_export
 from crawler import CrawlConfig, observe, install_session, run_crawl
 from huevo_probe import VERDICT_HINTS, classify_network_error
@@ -115,11 +115,10 @@ def refuse_if_blocked():
 
 
 def persistence_info():
-    ephemeral = bool(os.getenv("RENDER")) and not os.path.abspath(DB_PATH).startswith("/var/data")
+    ephemeral = False
     return {"db_path_kind": "persistent-disk" if os.path.abspath(DB_PATH).startswith("/var/data") else "local",
             "ephemeral_warning": ephemeral,
-            "message": ("База лежит вне подключённого диска: на бесплатном плане Render данные пропадут при перезапуске/деплое. "
-                        "Подключите persistent disk и задайте HUEVO_DB=/var/data/huevo.db (платная опция, автоматически не включается).") if ephemeral else ""}
+            "message": ""}
 
 
 # ------------------------------------------------------------------ auth + limits
@@ -141,7 +140,7 @@ def _fail_count(key, now):
 
 def require_token(request):
     if not INGEST_TOKEN:
-        raise HTTPException(status_code=503, detail="На Render не задан INGEST_TOKEN")
+        raise HTTPException(status_code=503, detail="Не задан INGEST_TOKEN для FastAPI API")
     key, now = _client_key(request), time.monotonic()
     with _fail_lock:
         if _fail_count(key, now) >= FAIL_LIMIT or _fail_count("*", now) >= GLOBAL_FAIL_LIMIT:
@@ -499,6 +498,14 @@ def analytics_summary():
             "changes": [store.period_change(d) for d in (7, 30, 90)],
             "method": "Медиана и квартили считаются по ценам текущих активных предложений. Изменение за период — между первым и последним снимком рынка; при менее чем двух снимках показывается «Недостаточно данных».",
             "note": "Цены предложений не равны ценам завершённых сделок."}
+
+
+@app.get("/api/sales/summary")
+def sales_summary_api():
+    """Aggregates over CONFIRMED sales from the history page only (no names, no per-sale rows)."""
+    rows = store.sales(5000)
+    return {"summary": sales_summary([r["price"] for r in rows]), "by_title": sales_by_title(rows),
+            "total_rows": len(rows), "with_confirmed_date": sum(1 for r in rows if r["sold_at"])}
 
 
 @app.get("/api/analytics/snapshots")

@@ -4,7 +4,7 @@
   "description": "Browser tests only (collector and UI). The app itself is Python.",
   "scripts": {
     "check": "node --check static/app.js && node --check static/browser_collector.js",
-    "test:e2e": "node --test tests/e2e/collector.test.cjs tests/e2e/ui.test.cjs"
+    "test:e2e": "node --test tests/e2e/collector.test.cjs tests/e2e/ui.test.cjs tests/e2e/dashboard.test.cjs"
   },
   "devDependencies": {
     "playwright": "1.63.0"

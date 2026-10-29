@@ -15,12 +15,19 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from analytics import best_value, find_deals, market_summary, price_bins
+from analytics import best_value, find_deals, market_summary, price_bins, sales_by_title, sales_summary
 from cookies import ALLOWED_HUEVO_HOSTS
 from crawler import CrawlConfig, run_crawl
+from snapshot import (SnapshotError, category_distribution, compare, is_duplicate_snapshot, migrate,
+                      safe_write, snapshot_entry, top_expensive, validate, SCHEMA_VERSION)
 from storage import Store, utcnow
 
 OUT = ROOT / "cloudflare-site" / "data.json"
+# Local-only cooldown memory (gitignored). data.json is restored by the scheduled .bat after a
+# failed run, so the block time must not live only there.
+STATE = ROOT / ".collector-state.json"
+HISTORY_DB = ROOT / "history.db"
+MIN_PUBLISHED_SALES = 20      # below this the sample is not confirmed enough to publish anything
 LOG = logging.getLogger("huevo-static-collector")
 
 
@@ -33,18 +40,73 @@ def iso(dt):
 
 
 def load_previous():
+    """Previous published snapshot, migrated to the current schema; {} if missing/corrupt/invalid."""
     try:
         data = json.loads(OUT.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(data, dict) or validate(migrate(data)):
+        return {}
+    return migrate(data)
+
+
+def load_state():
+    try:
+        data = json.loads(STATE.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
     except (OSError, json.JSONDecodeError):
         return {}
 
 
+def save_state(state):
+    temp = STATE.with_suffix(".json.tmp")
+    temp.write_text(json.dumps(state, ensure_ascii=False) + "\n", encoding="utf-8")
+    temp.replace(STATE)
+
+
+def active_cooldown(*sources):
+    """Latest future `blocked_until` among the given dicts, as an aware datetime, else None."""
+    latest = None
+    for src in sources:
+        value = (src or {}).get("blocked_until")
+        if not value:
+            continue
+        try:
+            until = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if until.tzinfo is None:
+            until = until.replace(tzinfo=timezone.utc)
+        if until > now_utc() and (latest is None or until > latest):
+            latest = until
+    return latest
+
+
 def write_json(data):
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    temp = OUT.with_suffix(".json.tmp")
-    temp.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
-    temp.replace(OUT)
+    """Validated atomic write. Returns False (and leaves the published file untouched) if the
+    payload is not publishable, e.g. an empty or structurally broken previous snapshot."""
+    try:
+        safe_write(OUT, data)
+        return True
+    except SnapshotError as exc:
+        print(f"data.json не обновлён: проверка структуры не пройдена: {exc}", file=sys.stderr)
+        return False
+
+
+def sales_block():
+    """Aggregate-only sales statistics from the local history.db, or None.
+
+    Published only when `--with-sales` is given AND the local database holds at least
+    MIN_PUBLISHED_SALES rows with a known price. No names, no per-sale rows, no invented dates.
+    """
+    if not HISTORY_DB.exists():
+        return None
+    store = Store(str(HISTORY_DB))
+    rows = store.sales(limit=50000)
+    summary = sales_summary([r.get("price") for r in rows])
+    if summary["count"] < MIN_PUBLISHED_SALES:
+        return None
+    return {"summary": summary, "by_title": sales_by_title(rows), "generated_at": utcnow()}
 
 
 def write_action_output(name, value):
@@ -54,7 +116,7 @@ def write_action_output(name, value):
             handle.write(f"{name}={value}\n")
 
 
-def make_browser(local_login=False):
+def make_browser(local_login=False, local_profile=False):
     from selenium import webdriver
     from selenium.webdriver.chrome.options import Options
 
@@ -67,15 +129,19 @@ def make_browser(local_login=False):
 
     # Use the same browser User-Agent for cookie-based and manual-login runs.
     # Can be overridden through HUEVO_USER_AGENT; cookie values are never logged.
-    user_agent = os.getenv(
-        "HUEVO_USER_AGENT",
+    default_user_agent = (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
-    ).strip()
-    if user_agent:
-        options.add_argument(f"--user-agent={user_agent}")
+        "(KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36"
+    )
+    configured_user_agent = os.getenv("HUEVO_USER_AGENT", "").strip()
+    # GitHub Actions exposes an unset secret as an empty environment variable.
+    # os.getenv(name, default) therefore does NOT apply its default in that case.
+    # Use the known browser-compatible fallback whenever the secret is empty.
+    user_agent = configured_user_agent or default_user_agent
+    LOG.info("browser user-agent source=%s", "HUEVO_USER_AGENT secret" if configured_user_agent else "built-in fallback")
+    options.add_argument(f"--user-agent={user_agent}")
 
-    if local_login:
+    if local_login or local_profile:
         # Dedicated local-only Chrome profile: the Huevo session stays on this PC.
         # This directory is gitignored and is never uploaded or committed.
         profile = ROOT / ".local-huevo-chrome-profile"
@@ -98,6 +164,10 @@ def snapshot_lot(row, old_by_id, observed_at):
     )}
     item["active"] = True
     old = old_by_id.get(str(item["lot_id"]), {})
+    # The crawl runs against a fresh temporary database, so its first_seen is just "this run".
+    # The real first observation is the one already published in the previous snapshot.
+    if old.get("first_seen"):
+        item["first_seen"] = old["first_seen"]
     history = list(old.get("history") or [])
     price = item.get("price")
     if price is not None and (not history or history[-1].get("price") != price):
@@ -123,27 +193,38 @@ def main(argv=None):
         "--local-login", action="store_true",
         help="Open visible Chrome on this PC and let the operator sign in manually; no cookie export required.",
     )
+    parser.add_argument(
+        "--local-profile", action="store_true",
+        help="Use the saved local Chrome profile headlessly for scheduled runs; no cookie export required.",
+    )
+    parser.add_argument(
+        "--with-sales", action="store_true",
+        help="Also publish aggregate sales statistics from the local history.db (only if it has enough confirmed rows).",
+    )
     args = parser.parse_args(argv)
     local_login = args.local_login
+    local_profile = args.local_profile
+    if local_login and local_profile:
+        parser.error("Use either --local-login or --local-profile, not both.")
+    local_session = local_login or local_profile
 
     previous = load_previous()
-    cookies = "" if local_login else (
+    cookies = "" if local_session else (
         os.getenv("HUEVO_COOKIES_JSON", "").strip()
         or os.getenv("HUEVO_COOKIES", "").strip()
     )
-    if not local_login and not cookies:
+    if not local_session and not cookies:
         print("Missing GitHub secret HUEVO_COOKIES_JSON (or HUEVO_COOKIES). Use --local-login on your own PC instead.", file=sys.stderr)
         return 2
 
     old_collector = previous.get("collector") or {}
-    if not local_login and old_collector.get("status") == "blocked" and old_collector.get("blocked_until"):
-        try:
-            until = datetime.fromisoformat(old_collector["blocked_until"].replace("Z", "+00:00"))
-            if until > now_utc():
-                print("Collector cooldown is still active; no request sent to Huevo.")
-                return 3
-        except (ValueError, TypeError):
-            pass
+    until = active_cooldown(load_state(), old_collector if old_collector.get("status") == "blocked" else None)
+    if until and not local_login:
+        print(f"Huevo ограничил доступ ранее; пауза до {until.isoformat()}. Запрос к Huevo не отправляется.", file=sys.stderr)
+        return 3
+    if until and local_login:
+        print(f"Внимание: пауза после ограничения Huevo действует до {until.isoformat()}. "
+              "Вы запускаете сбор вручную и осознанно; при повторном ограничении пауза продлится.", file=sys.stderr)
 
     base_url = os.getenv("HUEVO_BASE_URL", "https://huevo.su").strip().rstrip("/")
     if base_url not in ("https://huevo.su", "https://huevo.departament.site"):
@@ -162,7 +243,7 @@ def main(argv=None):
         store.migrate()
         browser = None
         try:
-            browser = make_browser(local_login=local_login)
+            browser = make_browser(local_login=local_login, local_profile=local_profile)
             if local_login:
                 print(f"Открываю отдельный Chrome-профиль на этом ПК: {base_url}")
                 browser.get(base_url + "/")
@@ -199,6 +280,7 @@ def main(argv=None):
             if result is not None and result.status == "blocked":
                 wait_seconds = max(cooldown_hours * 3600, int(result.retry_after or 0))
                 blocked_until = iso(now + timedelta(seconds=wait_seconds))
+                save_state({"blocked_until": blocked_until, "http_status": result.http_status, "checked_at": iso(now)})
             previous["collector"] = {
                 "status": status, "message": message, "blocked_until": blocked_until,
                 "checked_at": iso(now), "pages": result.pages if result else 0,
@@ -206,10 +288,12 @@ def main(argv=None):
                 "http_status": result.http_status if result else None,
             }
             # Keep the last good market payload while recording the failure/cooldown.
-            write_json(previous)
+            if previous:
+                write_json(previous)
             print(f"Snapshot not updated: {status}: {message}", file=sys.stderr)
             return 2
 
+        save_state({})      # a complete pass clears any earlier cooldown
         observed_at = utcnow()
         current_rows = store.active_lots(priced_only=False)
         current_prices = [r["price"] for r in current_rows
@@ -238,8 +322,9 @@ def main(argv=None):
                 "lots": len(lots),
                 "http_status": result.http_status,
             }
-            write_json(previous)
-            print(previous["collector"]["message"], file=sys.stderr)
+            if previous:
+                write_json(previous)
+            print(previous.get("collector", {}).get("message", "incomplete"), file=sys.stderr)
             return 2
 
         gone_by_id = {}
@@ -256,16 +341,15 @@ def main(argv=None):
                 gone_by_id[lot_id] = gone
         gone_lots = list(gone_by_id.values())[-5000:]
 
+        changes = compare([l for l in old_lots if l.get("active", True)], lots) if old_lots else None
+        if changes:
+            changes["since"] = (previous.get("generated_at") or None)
+            changes["observed_at"] = observed_at
         snapshots = list(previous.get("snapshots") or [])
-        snapshots.append({
-            "observed_at": observed_at,
-            "active_lots": len(lots),
-            "priced": summary["priced"],
-            "min_price": summary["min"],
-            "max_price": summary["max"],
-            "avg_price": summary["avg"],
-            "median_price": summary["median"],
-        })
+        if is_duplicate_snapshot(snapshots, lots, now_iso=observed_at):
+            print("Состав лотов не изменился с прошлого снимка (<10 мин): новая точка истории не добавлена.")
+        else:
+            snapshots.append(snapshot_entry(observed_at, lots, summary, changes))
         snapshots = snapshots[-180:]
 
         drops = []
@@ -290,7 +374,7 @@ def main(argv=None):
             "rarities": sorted({str(r.get("rarity") or "") for r in lots if r.get("rarity")}),
         }
         data = {
-            "schema_version": 1,
+            "schema_version": SCHEMA_VERSION,
             "generated_at": observed_at,
             "source": base_url,
             "collector": {
@@ -312,8 +396,13 @@ def main(argv=None):
             "best": best[0] if best else None,
             "runner_up": best[1:],
             "drops": drops[:100],
+            "categories": category_distribution(lots),
+            "top_expensive": top_expensive(lots),
+            "changes": changes,
+            "sales": (sales_block() if args.with_sales else None) or previous.get("sales"),
         }
-        write_json(data)
+        if not write_json(data):
+            return 2
         write_action_output("deploy", "true")
         print(f"Snapshot created: {len(lots)} lots; pages={result.pages}; reached_end={result.reached_end}.")
         return 0

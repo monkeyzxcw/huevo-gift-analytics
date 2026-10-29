@@ -25,7 +25,7 @@ class MigrationTests(StoreCase):
     def test_idempotent_and_versioned(self):
         self.s.migrate(); self.s.migrate()
         with self.s.connect() as c:
-            self.assertEqual(c.execute("PRAGMA user_version").fetchone()[0], 2)
+            self.assertEqual(c.execute("PRAGMA user_version").fetchone()[0], 3)
 
     def test_legacy_database_is_upgraded_without_data_loss(self):
         legacy = os.path.join(self.tmp.name, "legacy.sqlite3")
@@ -199,6 +199,26 @@ class SystemTests(StoreCase):
         rows = self.s.lots_by_ids(["1", "999"])
         self.assertEqual([(r["lot_id"], r["active"]) for r in rows], [("1", 0)])
         self.assertEqual(self.s.lots_by_ids([]), [])
+
+
+    def test_sales_are_idempotent_and_store_no_names(self):
+        row = {"sale_key": "k1", "lot_id": "5", "title": "Жидкость #4", "price": 10, "time_raw": "01:22", "sold_at": None}
+        self.assertEqual(self.s.upsert_sales([row, dict(row, sale_key="k2", price=None)]), 2)
+        self.assertEqual(self.s.upsert_sales([row]), 0, "re-importing the same page must not double count")
+        rows = self.s.sales()
+        self.assertEqual(len(rows), 2)
+        self.assertEqual({r["price"] for r in rows}, {10, None}, "unknown price stays NULL, not 0")
+        with self.s.connect() as c:
+            cols = [r[1] for r in c.execute("PRAGMA table_info(sales)")]
+        self.assertFalse({"seller", "buyer", "username", "name"} & set(cols))
+
+    def test_migration_from_v2_adds_sales_table(self):
+        import sqlite3
+        path = os.path.join(self.tmp.name, "old.db")
+        con = sqlite3.connect(path); con.execute("CREATE TABLE lots(lot_id TEXT PRIMARY KEY, title TEXT, serial TEXT, rarity TEXT, price INTEGER, status TEXT, image_url TEXT, lot_url TEXT, first_seen TEXT, last_seen TEXT, active INTEGER)")
+        con.execute("PRAGMA user_version=2"); con.commit(); con.close()
+        st = Store(path); st.migrate()
+        self.assertEqual(st.upsert_sales([{"sale_key": "a", "lot_id": "1"}]), 1)
 
 
 if __name__ == "__main__":

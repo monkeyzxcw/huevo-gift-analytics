@@ -16,6 +16,9 @@ huevo.db-wal
 *.sqlite
 *.sqlite3
 
+# Local scheduled collector logs
+logs/
+
 # OS / editor
 .DS_Store
 Thumbs.db
@@ -24,3 +27,11 @@ Thumbs.db
 
 # Local Chrome profile contains the private Huevo session; never commit it
 .local-huevo-chrome-profile/
+
+# Local collector cooldown memory
+.collector-state.json
+.collector-state.json.tmp
+
+# Local sales history database
+history.db
+history.db-*

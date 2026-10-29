@@ -1,4 +1,4 @@
-// Browser collector vs. fixtures. Real huevo.su / Render are never contacted: every request is routed locally.
+// Browser collector vs. fixtures. Real huevo.su is never contacted: every request is routed locally.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -7,7 +7,7 @@ const { chromium } = require("playwright");
 
 const ROOT = path.resolve(__dirname, "../..");
 const COLLECTOR = fs.readFileSync(path.join(ROOT, "static/browser_collector.js"), "utf8");
-const DASH = "https://huevo-gift-analytics.onrender.com";
+const DASH = "http://localhost:8000";
 const CORS = { "access-control-allow-origin": "https://huevo.su", "access-control-allow-headers": "authorization,content-type", "access-control-allow-methods": "POST,OPTIONS" };
 
 const card = (id, price, title = "Лот " + id) => `<a class="mk-gcard" href="/market/lot/${id}"><div class="mk-gtitle">${title}</div><div class="mk-gsub">Редкий</div><div class="mk-price">${price}</div></a>`;

@@ -129,3 +129,31 @@ def best_value(active, gone, min_group=MIN_GROUP, limit=5):
                        "suspicious": pct > SUSPICIOUS_DISCOUNT * 100})
     ranked.sort(key=lambda d: (d["suspicious"], d["basis"] != "gone", -d["discount_pct"], d["price"]))
     return ranked[:limit]
+
+
+def sales_summary(prices):
+    """Summary of CONFIRMED sale prices (history page). Unknown/zero/non-numeric prices are excluded and counted."""
+    raw = list(prices)
+    known = sorted(p for p in raw if _valid_price(p))
+    base = market_summary(known)
+    return {"count": len(known), "unknown": len(raw) - len(known), "min": base["min"], "max": base["max"], "median": base["median"],
+            "p25": base["p25"], "p75": base["p75"], "enough_data": len(known) >= 5,
+            "note": "Цены из истории сделок Huevo. Даты сделок не подтверждены (на странице только время), поэтому динамика по дням не считается."}
+
+
+def _sale_title(title):
+    import re
+    return _norm(re.sub(r"\s*#\s*\d+.*$", "", str(title or "")))
+
+
+def sales_by_title(rows, min_group=MIN_GROUP, limit=20):
+    """Median confirmed sale price per gift title (serial number stripped); groups below `min_group` are omitted."""
+    groups = {}
+    for r in rows:
+        key = _sale_title(r.get("title"))
+        if key and _valid_price(r.get("price")):
+            groups.setdefault(key, []).append(r["price"])
+    out = [{"title": k, "count": len(v), "median": median(v), "min": min(v), "max": max(v)}
+           for k, v in groups.items() if len(v) >= min_group]
+    out.sort(key=lambda g: (-g["count"], g["title"]))
+    return out[:limit]

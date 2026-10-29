@@ -1,71 +1,47 @@
-# Бесплатный Cloudflare-вариант Huevo Gift Analytics
+# Huevo Gift Analytics — Cloudflare Workers
 
-Эта схема не запускает FastAPI или Selenium внутри Cloudflare. GitHub Actions использует существующий Docker/Selenium-сборщик, собирает полный снимок маркета и публикует статический каталог в Cloudflare Worker. Текущий Render-сервис и его файлы остаются нетронутыми.
+Рабочий сайт: https://huevo-gift-analytics.monkeyzxcw.workers.dev
 
-## Что делает workflow
+## Архитектура
 
-- Запускается вручную или по расписанию раз в 6 часов.
-- Берёт cookies только из GitHub Actions Secrets.
-- Запускает существующий Selenium-сборщик в Docker.
-- Обновляет `cloudflare-site/data.json` только после полного прохода каталога.
-- При блокировке 403/418/429 не публикует частичный снимок; сохраняет последний успешный каталог и фиксирует время паузы.
-- Деплоит статические файлы через Wrangler.
+- GitHub Actions запускает сборщик Huevo по расписанию раз в 10 минут и по ручному запуску.
+- Сборщик использует headless Chrome, получает полный снимок каталога и обновляет `cloudflare-site/data.json` только после успешного полного прохода.
+- После сбора GitHub Actions сохраняет обновлённый снимок (или безопасный статус блокировки) в `main`.
+- Отдельный job проверяет JSON и публикует статический сайт через Wrangler на Cloudflare.
+- Render не используется.
+- Cookies не хранятся в исходниках, публичном JSON, артефактах или логах.
 
-Снимки и каталог в `cloudflare-site/data.json` публичны, потому что обслуживают публичный сайт. Cookie-значения туда никогда не записываются.
+## 1. GitHub Secrets
 
-## 1. Добавить GitHub Secrets
+Открой репозиторий → **Settings → Secrets and variables → Actions** и добавь:
 
-В репозитории открой **Settings → Secrets and variables → Actions → New repository secret** и создай:
-
-| Имя | Что поместить |
+| Secret | Назначение |
 |---|---|
-| `HUEVO_COOKIES_JSON` | Полный JSON-экспорт cookies из актуальной авторизованной сессии Huevo. Не вставляй его в файлы репозитория. |
-| `CLOUDFLARE_API_TOKEN` | API Token Cloudflare с правом деплоя Workers / Workers Scripts. |
-| `CLOUDFLARE_ACCOUNT_ID` | ID аккаунта Cloudflare из панели аккаунта. |
+| `HUEVO_COOKIES_JSON` | Актуальный экспорт cookies Huevo в JSON |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare API Token с минимальными правами для Workers Scripts/Static Assets |
+| `CLOUDFLARE_ACCOUNT_ID` | Account ID из Cloudflare Dashboard |
+| `HUEVO_USER_AGENT` | Необязательно: User-Agent браузера, экспортировавшего cookies |
 
-В Cloudflare API Token создай токен с минимальными необходимыми правами на деплой Workers. Не используй Global API Key.
+Можно использовать `HUEVO_COOKIES` вместо `HUEVO_COOKIES_JSON`, если уже настроен этот secret. Не используй Global API Key. При утечке cookies отзови сессию на Huevo и создай новый экспорт. Никогда не вставляй значения secrets в issue, PR, исходники или логи.
 
-## 2. Перенести старую историю из Render (необязательно)
+## 2. Проверить Cloudflare
 
-Если хочешь сохранить существующую историю из `huevo.db`, скачай бэкап с работающего Render-сервиса до отключения:
+Файл `wrangler.jsonc` содержит имя Worker `huevo-gift-analytics` и публикует только каталог `cloudflare-site/`. Не создавай второй Worker с другим именем.
 
-```powershell
-curl.exe -H "Authorization: Bearer YOUR_INGEST_TOKEN" -o huevo.db https://huevo-gift-analytics.onrender.com/api/backup
-```
+## 3. Автоматический сбор и деплой
 
-Замени `YOUR_INGEST_TOKEN` локально на значение `INGEST_TOKEN` из **Render → Environment**. Не отправляй токен в чат. Если старая история не нужна, пропусти этот шаг — она начнётся с первого успешного снимка на GitHub Actions.
+Workflow `.github/workflows/cloudflare-static.yml`:
+- запускается по расписанию каждые 10 минут (UTC);
+- поддерживает ручной запуск через **Actions → Huevo collector and Cloudflare deploy → Run workflow**;
+- останавливается при блокировке Huevo и сохраняет статус/период ожидания, чтобы следующий запуск не отправлял запросы раньше времени;
+- проверяет снимок перед публикацией и деплоит статические файлы на Cloudflare.
 
-Из корня репозитория запусти импортёр:
+GitHub может задерживать scheduled-запуски при высокой нагрузке. Полный обход каталога может занять больше 10 минут; concurrency не позволяет параллельным запускам пересекаться.
 
-```powershell
-python scripts/import_sqlite_snapshot.py "C:\path\to\huevo.db"
-```
+## 4. Безопасность и ограничения
 
-Импортёр обновит `cloudflare-site/data.json`: перенесёт только каталог, историю цен и снимки рынка. Он намеренно не читает таблицу `support_payments` и другие внутренние таблицы. Проверь размер и содержимое созданного JSON и включи его в PR до первого запуска workflow. **Не коммить и не загружай в публичный репозиторий сам файл `huevo.db`** — он может содержать внутренние записи.
-
-## 3. Сверить имя Worker
-
-Открой `wrangler.jsonc`. Сейчас имя задано как `huevo-gift-analytics`. Оно должно в точности совпадать с именем Worker, который уже создан в Cloudflare. Если твой Worker называется иначе, измени поле `name` и закоммить изменение.
-
-Этот Worker обслуживает только статические файлы, поэтому Cookies и Huevo-переменные в Runtime variables and secrets Cloudflare добавлять не нужно. Секрет cookies доступен только сборщику внутри GitHub Actions.
-
-## 4. Разрешить обновление снимка в репозитории
-
-Открой **Settings → Actions → General → Workflow permissions** и разреши **Read and write permissions**. Workflow сохраняет новый публичный снимок в `cloudflare-site/data.json`, чтобы история цен сохранялась между запусками.
-
-## 5. Первый запуск
-
-Открой вкладку **Actions → Cloudflare static market dashboard → Run workflow** и запусти workflow вручную. Затем проверь шаги в логе:
-
-1. Build the existing Selenium image
-2. Collect a complete market snapshot
-3. Commit public snapshot and history
-4. Deploy static assets to Cloudflare
-
-Если сбор завершится ошибкой, открой лог шага сбора. Значения cookies не выводятся. При блокировке доступа Huevo сбор остановится, а последний успешный каталог останется на сайте.
-
-## Не переносится в эту статическую версию
-
-Она показывает каталог, метрики, выгодные предложения и историю снимков. FastAPI-эндпоинты, браузерные админ-действия, huEVO Payments и другие серверные функции из Render этим деплоем не переносятся. Обычный Cloudflare Worker со статическими файлами не исполняет Selenium/Python-бэкенд.
-
-Если у Worker уже другое имя — обязательно поменяй его до первого деплоя, иначе Wrangler может создать отдельный Worker с именем из конфигурации.
+- При 403/418/429, странице входа или неполном обходе сборщик не должен заменять последний корректный снимок данными неполного прохода.
+- При блокировке соблюдается `Retry-After` и локально настроенная пауза; не пытайся обходить ограничения сменой IP или маскировкой.
+- Cookies передаются только процессу сборщика через GitHub Secrets. Они не должны попадать в JSON снимка.
+- Cloudflare Worker обслуживает статику; он не запускает Python, Selenium, SQLite или Windows Task Scheduler.
+- Живая разметка Huevo и успешный реальный деплой необходимо проверять по результатам GitHub Actions. Успешные локальные тесты сами по себе не доказывают, что внешняя сессия Huevo ещё действительна.
