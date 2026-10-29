@@ -299,11 +299,9 @@ def start_crawl(background: BackgroundTasks):
     return {"ok": True, "message": "Сбор запущен"}
 
 AUTO_REFRESH_HOURS = max(1, int(os.getenv("AUTO_REFRESH_HOURS", "2")))
-PAGE_ONE_REFRESH_SECONDS = max(5, int(os.getenv("PAGE_ONE_REFRESH_SECONDS", "5")))
 
 def scheduled_crawler():
-    # Full market scan at startup, then scan every two hours.
-    # Page-one refresh is scheduled separately below to keep the cadence explicit.
+    # Scan at startup, then respect the configured full-scan interval.
     time.sleep(5)
     while True:
         try:
