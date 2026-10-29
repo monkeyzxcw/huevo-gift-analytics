@@ -26,6 +26,23 @@ if [ "$code" -ne 0 ]; then
   exit "$code"
 fi
 
+# Prefer live D1 storage when configured; keep the repository snapshot as a fallback.
+WORKER_URL="${HUEVO_WORKER_URL:-https://huevo-gift-analytics.monkeyzxc1437.workers.dev}"
+SNAPSHOT_URL="${HUEVO_SNAPSHOT_INGEST_URL:-$WORKER_URL/api/snapshot}"
+if [ -n "${HUEVO_LIVE_INGEST_TOKEN:-}" ] && [ -f cloudflare-site/data.json ]; then
+  HEALTH="$(curl -fsS --max-time 10 "$WORKER_URL/api/health" || true)"
+  if printf '%s' "$HEALTH" | .venv/bin/python -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get("storage_configured") and d.get("schema_ready") and d.get("ingest_enabled") else 1)' 2>/dev/null; then
+    curl --fail --silent --show-error --max-time 30 \
+      -X POST "$SNAPSHOT_URL" \
+      -H "Authorization: Bearer $HUEVO_LIVE_INGEST_TOKEN" \
+      -H "Content-Type: application/json" \
+      --data-binary @cloudflare-site/data.json || exit 1
+    echo "snapshot stored in Cloudflare D1; no data.json commit created"
+    echo "=== $(date -Is) done ==="
+    exit 0
+  fi
+fi
+
 git add cloudflare-site/data.json
 if git diff --cached --quiet -- cloudflare-site/data.json; then
   echo "data unchanged"
