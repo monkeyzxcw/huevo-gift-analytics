@@ -56,28 +56,66 @@ def money(text):
 def parse_cards(html):
     soup = BeautifulSoup(html, "html.parser")
     cards = soup.select("a.mk-gcard[href*='/market/lot/']")
+    # Huevo's markup may change; fall back to numeric lot links rather than
+    # treating a renamed/missing CSS class as an empty market.
+    if not cards:
+        cards = soup.select("a[href*='/market/lot/']")
+
+    def field(card, selectors):
+        for selector in selectors:
+            element = card.select_one(selector)
+            if not element:
+                continue
+            value = element.get_text(" ", strip=True)
+            if not value:
+                for attr in ("data-price", "data-title", "content", "value", "aria-label"):
+                    value = str(element.get(attr) or "").strip()
+                    if value:
+                        break
+            if value:
+                return value
+        return ""
+
     rows = []
     now = datetime.now(timezone.utc).isoformat()
     for card in cards:
-        href = card.get("href", "")
-        m = re.search(r"/market/lot/(\d+)", href)
-        if not m: continue
-        lot_id = m.group(1)
-        title = (card.select_one(".mk-gtitle").get_text(" ", strip=True)
-                 if card.select_one(".mk-gtitle") else "")
-        serial = (card.select_one(".mk-gserial").get_text(" ", strip=True)
-                  if card.select_one(".mk-gserial") else "")
-        rarity = (card.select_one(".mk-gsub").get_text(" ", strip=True)
-                  if card.select_one(".mk-gsub") else "")
-        price_el = card.select_one(".mk-price, .mk-gprice")
-        price = money(price_el.get_text(" ", strip=True) if price_el else "")
-        status_el = card.select_one(".mk-status")
-        status = status_el.get_text(" ", strip=True) if status_el else "Неизвестно"
+        href = str(card.get("href", "")).strip()
+        match = re.search(r"/market/lot/(\\d+)", href)
+        if not match:
+            continue
+        lot_id = match.group(1)
+        title = field(card, [".mk-gtitle", "[class*='title']", "[class*='name']", "h2", "h3"])
+        serial = field(card, [".mk-gserial", "[class*='serial']", "[class*='number']"])
+        rarity = field(card, [".mk-gsub", "[class*='rarity']", "[class*='collection']"])
+        price = money(field(card, [".mk-price", ".mk-gprice", "[class*='price']", "[data-price]"]))
+        status = field(card, [".mk-status", "[class*='status']") or "Неизвестно"
         image = card.select_one("img")
-        image_url = urljoin(BASE_URL, image.get("src", "")) if image else ""
+        image_src = ""
+        if image:
+            for attr in ("src", "data-src", "data-original", "data-lazy-src"):
+                image_src = str(image.get(attr) or "").strip()
+                if image_src and not image_src.startswith("data:"):
+                    break
+            if image_src.startswith("data:"):
+                image_src = ""
+        image_url = urljoin(BASE_URL, image_src) if image_src else ""
+        try:
+            image_parts = urlsplit(image_url)
+            if image_parts.scheme != "https" or not image_parts.netloc or image_parts.username or image_parts.password:
+                image_url = ""
+        except ValueError:
+            image_url = ""
+        try:
+            candidate_url = urljoin(BASE_URL, href)
+            parts = urlsplit(candidate_url)
+            host = (parts.hostname or "").lower()
+            lot_url = candidate_url if parts.scheme == "https" and (host == "huevo.su" or host.endswith(".huevo.su")) else f"{BASE_URL}/market/lot/{lot_id}"
+        except ValueError:
+            lot_url = f"{BASE_URL}/market/lot/{lot_id}"
+        title = title or (str(image.get("alt") or "").strip() if image else "") or str(card.get("aria-label") or "").strip() or "Без названия"
         rows.append({"lot_id": lot_id, "title": title, "serial": serial,
                      "rarity": rarity, "price": price, "status": status,
-                     "image_url": image_url, "lot_url": urljoin(BASE_URL, href),
+                     "image_url": image_url, "lot_url": lot_url,
                      "observed_at": now})
     return rows, len(cards)
 
