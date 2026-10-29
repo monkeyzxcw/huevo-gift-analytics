@@ -75,10 +75,40 @@
   <div id="salesBody"></div>
 </section>
 
+
+<section class="panel amnyam-deals-view" id="dealsPanel" data-view-section="deals">
+  <div class="section-heading"><div><span class="section-index">/ VALUE HUNT</span><h2>Ниже рынка</h2><p>Лоты дешевле ориентира похожих предложений. Ориентир объясняется в каждой карточке.</p></div><span class="view-stat" id="dealsCount">— сигналов</span></div>
+  <article class="deal-hero" id="belowBest">
+    <div class="deal-hero-stamp">AMNYAM<br>SELECT</div>
+    <div class="deal-hero-content"><span class="eyebrow">BEST CURRENT PICK</span><h3 id="belowBestTitle">Сканируем каталог…</h3><strong id="belowBestPrice">—</strong><p id="belowBestMeta">Сравнение появится после загрузки рынка.</p><a id="belowBestOpen" class="btn" href="https://huevo.su/market/gifts" target="_blank" rel="noopener noreferrer">Открыть лот ↗</a></div>
+  </article>
+  <ol class="deal-list" id="dealsList"></ol>
+  <p class="muted foot">Сигнал ниже рынка — сравнительная оценка, а не обещание прибыли. Сверяй серию, редкость и данные лота перед покупкой.</p>
+</section>
+
+<section class="panel" id="cheapPanel" data-view-section="cheap">
+  <div class="section-heading"><div><span class="section-index">/ FLOOR PRICE</span><h2>Самые дешёвые</h2><p>Текущие предложения по возрастанию цены.</p></div><span class="view-stat" id="cheapCount">— лотов</span></div>
+  <ol class="deal-list cheap-list" id="cheapestList"></ol>
+</section>
+
+<section class="panel" id="favoritesPanel" data-view-section="favorites">
+  <div class="section-heading"><div><span class="section-index">/ PERSONAL WATCHLIST</span><h2>Избранное</h2><p>Отметь звёздочкой лоты, к которым хочешь вернуться. Избранное сохраняется в этом браузере.</p></div><span class="view-stat" id="favoritesCount">0 лотов</span></div>
+  <ol class="deal-list" id="favoritesList"></ol>
+</section>
+
+<section class="panel support-panel" id="supportPanel" data-view-section="support">
+  <div class="support-header"><div><span class="section-index">/ SUPPORT THE BUILDER</span><h2>Поддержать автора</h2><p>Для тех, кто хочет, чтобы AMNYAM MODE продолжал расти.</p></div><div class="support-mark" aria-hidden="true">◈</div></div>
+  <div class="support-levels" id="supportAmounts" aria-label="Уровень поддержки"></div>
+  <div class="support-message" id="supportMsg" role="status" hidden></div>
+  <p class="support-hint" id="supportHint">Проверяем доступность huEVO Apps…</p>
+  <div class="support-total"><span><small>Поддержали</small><b id="supporters">—</b></span><span><small>Собрано без тестовых платежей</small><b><i id="supportTotal">—</i> ◉</b></span></div>
+  <p class="muted foot">Платёж подтверждается в официальном окне huEVO. Пароль и данные аккаунта приложение не запрашивает.</p>
+</section>
+
 <section class="panel catalog-panel" id="catalog" data-view-section="market" aria-labelledby="catTitle">
-  <div class="panel-head"><div><h3 id="catTitle">Каталог маркета</h3><div class="muted" id="rowCount" aria-live="polite">—</div></div></div>
+  <div class="panel-head"><div><span class="section-index">/ FULL MARKET SCAN</span><h3 id="catTitle">Каталог маркета</h3><div class="muted" id="rowCount" aria-live="polite">—</div></div><span class="mono-tag">SEARCH / FILTER / SORT</span></div>
   <form class="toolbar" id="filters" role="search" aria-label="Фильтры каталога">
-    <label class="f grow"><span>Поиск</span><input class="input" id="search" type="search" placeholder="Название, серия или ID" autocomplete="off"></label>
+    <label class="f grow"><span>Поиск</span><input class="input" id="search" type="search" placeholder='Название, ID, rarity:Редкий, price<100000' autocomplete="off"></label>
     <label class="f"><span>Редкость</span><select class="select" id="rarity"><option value="">Все</option></select></label>
     <label class="f"><span>Статус</span><select class="select" id="status"><option value="">Все</option></select></label>
     <label class="f num"><span>Цена от</span><input class="input" id="pmin" type="number" min="0" inputmode="numeric" placeholder="0"></label>
