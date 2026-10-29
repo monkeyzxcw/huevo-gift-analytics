@@ -480,7 +480,7 @@
     if (typeof dlg.showModal === "function") dlg.showModal(); else dlg.setAttribute("open", "");
   }
 
-  function switchView(view) {
+  function switchView(view, focusSearch) {
     const allowed = new Set(["overview", "market", "deals", "cheap", "analytics", "favorites", "support"]);
     state.activeView = allowed.has(view) ? view : "overview";
     document.querySelectorAll("[data-view-section]").forEach((section) => {
@@ -490,7 +490,7 @@
       button.setAttribute("aria-selected", String(button.dataset.view === state.activeView));
       button.tabIndex = button.dataset.view === state.activeView ? 0 : -1;
     });
-    if (state.activeView === "market") $("search").focus({ preventScroll: true });
+    if (focusSearch && state.activeView === "market") $("search").focus({ preventScroll: true });
     updateViewCounts();
   }
 
@@ -772,17 +772,17 @@
 
   // ---------- events ----------
   document.querySelectorAll("#mainNav [data-view]").forEach((button) => {
-    button.addEventListener("click", () => switchView(button.dataset.view));
+    button.addEventListener("click", () => switchView(button.dataset.view, true));
   });
   document.querySelectorAll("[data-go-view]").forEach((button) => {
-    button.addEventListener("click", () => switchView(button.dataset.goView));
+    button.addEventListener("click", () => switchView(button.dataset.goView, true));
   });
   $("globalSearch").addEventListener("keydown", (event) => {
     if (event.key !== "Enter") return;
     event.preventDefault();
     $("search").value = $("globalSearch").value.trim();
     state.page = 0;
-    switchView("market");
+    switchView("market", true);
     applyFilters();
   });
   document.querySelectorAll("[data-search-token]").forEach((button) => {
@@ -792,7 +792,7 @@
       input.value = (input.value.trim() + " " + token).trim();
       $("globalSearch").value = input.value;
       state.page = 0;
-      switchView("market");
+      switchView("market", true);
       applyFilters();
     });
   });
