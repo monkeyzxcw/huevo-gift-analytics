@@ -182,7 +182,7 @@
         grid + labels + '<polygon points="' + area + '" fill="url(#marketTrendFill)"/>' +
         '<polyline points="' + line + '" fill="none" stroke="var(--gold)" stroke-width="2.8" ' +
         'stroke-linejoin="round" stroke-linecap="round"/>' + dots;
-      $("chartNote").textContent = coords.length + " дней с наблюдениями · среднее по сохранённым предложениям, не завершённые сделки.";
+      $("chartNote").textContent = coords.length + " дней с наблюдениями · среднее по сохранённым снимкам изменений, не полный дневной снимок рынка и не завершённые сделки.";
     } catch (error) {
       if (requestId === marketTrendRequest && marketMode) {
         svg.innerHTML = '<text x="350" y="95" text-anchor="middle" class="chart-label">Не удалось загрузить историю рынка</text>';
