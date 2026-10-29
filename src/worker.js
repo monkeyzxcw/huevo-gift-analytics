@@ -524,6 +524,11 @@ async function createSupportIntent(request, env) {
   if (!env.DB || !credentials.clientId || !credentials.clientSecret) {
     return jsonResponse(request, env, { ok: false, detail: "Поддержка автора пока не настроена." }, 503);
   }
+  try {
+    await env.DB.prepare("SELECT 1 FROM support_payments LIMIT 1").first();
+  } catch (_) {
+    return jsonResponse(request, env, { ok: false, detail: "Хранилище поддержки ещё не подготовлено; миграция не применена." }, 503);
+  }
   const parsed = await readJsonBody(request, 10000);
   if (parsed.error) return jsonResponse(request, env, { ok: false, detail: parsed.error }, parsed.status);
   const payload = parsed.value;
