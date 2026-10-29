@@ -369,9 +369,9 @@
     rest = rest.replace(/\bprice\s*(<=|>=|<|>)\s*([\d\s.,]+)/gi, (_, op, raw) => {
       const amount = Number(String(raw).replace(/[\s,]/g, ""));
       if (Number.isFinite(amount)) {
-        if (op === "<") rules.max = Math.min(rules.max == null ? Infinity : rules.max, amount - Number.EPSILON);
+        if (op === "<") rules.max = Math.min(rules.max == null ? Infinity : rules.max, amount - Math.max(Number.EPSILON, Math.abs(amount) * Number.EPSILON * 2));
         if (op === "<=") rules.max = Math.min(rules.max == null ? Infinity : rules.max, amount);
-        if (op === ">") rules.min = Math.max(rules.min == null ? -Infinity : rules.min, amount + Number.EPSILON);
+        if (op === ">") rules.min = Math.max(rules.min == null ? -Infinity : rules.min, amount + Math.max(Number.EPSILON, Math.abs(amount) * Number.EPSILON * 2));
         if (op === ">=") rules.min = Math.max(rules.min == null ? -Infinity : rules.min, amount);
       }
       return " ";
