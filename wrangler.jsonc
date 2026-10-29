@@ -1,9 +1,8 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
+  "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "huevo-gift-analytics",
   "compatibility_date": "2026-10-29",
   "assets": {
-    "directory": "./cloudflare-site",
-    "binding": "ASSETS"
+    "directory": "./cloudflare-site"
   }
 }
