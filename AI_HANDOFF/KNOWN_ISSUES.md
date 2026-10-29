@@ -61,3 +61,11 @@ Storage: schema migrations, transactions, backup/restore, importer filters, atom
 Frontend: accessibility, responsive layout, safe DOM rendering/XSS, loading/error/empty states, sorting/filtering, performance.
 Deployment: Render vs Cloudflare, workflow triggers/permissions, secrets scope, deploy smoke tests.
 Maintenance: dependency versions, Actions runtime warnings, log retention, health/diagnostics.
+
+
+## Обновление (исправления в ветке fix/crawler-ci-history)
+- P0 причина падения Python CI подтверждена по исходникам: в PR #4 строка `n = ...` в `FakeBrowser.get` оказалась внутри комментария (литеральный `\n` вместо перевода строки), поэтому каждый `get()` падал с `NameError`. Исправлено в `tests/test_crawler.py`; текст логов Actions из песочницы недоступен, результат CI нужно подтвердить на GitHub.
+- `scripts/collect_snapshot.py`: `first_seen` теперь переносится из прошлого снимка; пауза после блокировки хранится в `.collector-state.json` и действует для всех режимов.
+- Добавлены `history_parser.py`, таблица `sales` (схема v3), `analytics.sales_summary`, `run_history_crawl`, `scripts/collect_history.py`, `GET /api/sales/summary`. Не проверено на живом Huevo.
+- Не сделано: показ подтверждённых сделок в `cloudflare-site`, публикация истории, автоматическая ротация/проверка сессии.
+- В репозитории лежит папка `Для Chatgpt/` с ZIP-архивами: это бинарные артефакты, лучше удалить её из репозитория.
