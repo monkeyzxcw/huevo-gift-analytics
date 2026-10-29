@@ -8,6 +8,8 @@ services:
     envVars:
       - key: HUEVO_DB
         value: huevo.db
+      - key: HUEVO_BASE_URL
+        value: https://huevo.su
       - key: INGEST_TOKEN
         generateValue: true
       - key: CRAWL_DELAY
