@@ -55,9 +55,25 @@
   }
 
   // ---------- state ----------
-  const state = { data: null, lots: [], view: [], page: 0, sort: { key: "price", dir: 1 }, changeKind: "new", liveFingerprint: null };
+  function readFavorites() {
+    try {
+      const stored = JSON.parse(localStorage.getItem("amnyam.favorites") || "[]");
+      return Array.isArray(stored) ? stored.map(String).filter((id) => /^\d{1,20}$/.test(id)).slice(0, 5000) : [];
+    } catch (_) { return []; }
+  }
+  function writeFavorites() {
+    try { localStorage.setItem("amnyam.favorites", JSON.stringify(state.favorites)); } catch (_) {}
+  }
+  const state = {
+    data: null, lots: [], view: [], page: 0,
+    sort: { key: "price", dir: 1 }, changeKind: "new", liveFingerprint: null,
+    activeView: "overview", favorites: readFavorites()
+  };
   let livePollRunning = false;
   let lastSnapshotSignature = "";
+  let supportConfig = { enabled: false, amounts: [5000, 10000, 25000, 50000, 100000] };
+  let supportSdkReady = false;
+  let supportInitRunning = false;
 
   // ---------- load & normalise (tolerates partial / old JSON) ----------
   function normalise(d) {
