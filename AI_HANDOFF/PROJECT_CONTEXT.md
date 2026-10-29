@@ -19,7 +19,7 @@
 - support.py — платежи huEVO Apps, подпись запуска, callback и идемпотентность.
 - security.py — CSP.
 - static/ — интерфейс, включая browser_collector.js.
-- Dockerfile, docker-compose.yml, render.yaml — контейнеризация/вариант Render.
+- Dockerfile, docker-compose.yml — локальный/самостоятельный FastAPI-вариант; на Cloudflare публикуются только статические assets.
 
 ### Статическая Cloudflare панель
 - cloudflare-site/index.html и app.js — frontend.
@@ -61,6 +61,6 @@ tests/test_parser.py и tests/fixtures/market_page_*.html — parser contract.
 tests/test_probe.py — network/status classification.
 tests/e2e/collector.test.cjs и tests/e2e/ui.test.cjs — browser/collector/UI.
 tests/test_storage.py, tests/test_analytics.py, tests/test_app.py, tests/test_support.py — storage, analytics, API, payments.
-Проверь README_RU.md, CLOUDFLARE_FREE_SETUP_RU.md, .env.example, package.json, requirements.txt, Dockerfile, docker-compose.yml, render.yaml и wrangler.jsonc на соответствие фактическому deployment path.
+Проверь README_RU.md, CLOUDFLARE_FREE_SETUP_RU.md, .env.example, package.json, requirements.txt, Dockerfile, docker-compose.yml и wrangler.jsonc на соответствие Cloudflare-only deployment path.
 
 В корне также есть архивы в папке «Для Chatgpt», включая huevo-gift-analytics-v4.zip и huevo-v4-patches.zip. Сравни их с main и проверь происхождение; не заменяй ими текущий код без diff.
