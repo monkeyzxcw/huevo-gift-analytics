@@ -59,7 +59,7 @@ HTML https://huevo.su/market/history содержит таблицу .mk-table �
 Security: auth, CORS/CSRF, CSP/headers, rate limits, payment signature/replay/idempotency, logs, secrets.
 Storage: schema migrations, transactions, backup/restore, importer filters, atomic writes.
 Frontend: accessibility, responsive layout, safe DOM rendering/XSS, loading/error/empty states, sorting/filtering, performance.
-Deployment: Render vs Cloudflare, workflow triggers/permissions, secrets scope, deploy smoke tests.
+Deployment: Cloudflare workflow triggers/permissions, secrets scope, deploy smoke tests.
 Maintenance: dependency versions, Actions runtime warnings, log retention, health/diagnostics.
 
 
