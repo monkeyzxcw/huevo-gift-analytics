@@ -103,6 +103,7 @@ class IngestApiTests(unittest.TestCase):
     def test_access_block_status_recognizes_huevo_restrictions(self):
         self.assertEqual(app_module.access_block_status("HTTP Error 418: I'm a teapot"), 418)
         self.assertEqual(app_module.access_block_status("Access denied"), 403)
+        self.assertEqual(app_module.access_block_status("Too many requests"), 429)
         self.assertEqual(app_module.access_block_status("Обычная страница каталога"), None)
 
     def test_crawl_returns_retry_after_during_block_cooldown(self):
