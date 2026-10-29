@@ -1,4 +1,5 @@
 import os, re, time, sqlite3, threading, json, hmac
+import requests
 from datetime import datetime, timezone, timedelta
 from urllib.parse import urljoin, urlsplit
 from selenium import webdriver
@@ -505,6 +506,40 @@ def start_scheduler():
     else:
         with lock:
             state["message"] = "Ожидает браузерного сбора: серверная сессия Huevo не настроена"
+
+@app.post("/api/proxy-check")
+def check_vless_proxy():
+    """Verify that configured VLESS can carry a real HTTPS request without exposing its URI."""
+    proxy_info = proxy_status()
+    if not proxy_info.get("configured"):
+        raise HTTPException(status_code=503, detail="VLESS_URL не задан в Environment")
+    try:
+        proxy_url = ensure_vless_proxy()
+        if not proxy_url:
+            raise RuntimeError("VLESS-прокси не включён")
+        response = requests.get(
+            "https://api.ipify.org?format=json",
+            proxies={"http": proxy_url, "https": proxy_url},
+            timeout=(6, 15),
+            headers={"Accept": "application/json", "User-Agent": "Huevo-Gift-Analytics-proxy-check/1.0"},
+        )
+        response.raise_for_status()
+        data = response.json()
+        egress_ip = str(data.get("ip", "")).strip()
+        if not egress_ip:
+            raise RuntimeError("Проверочный endpoint не вернул IP")
+        return {
+            "ok": True,
+            "message": "VLESS connected; HTTPS request through SOCKS5 succeeded",
+            "egress_ip": egress_ip,
+            "proxy": proxy_status(),
+        }
+    except Exception as exc:
+        error_type = type(exc).__name__
+        # Do not return raw exception strings: they can include host/config details.
+        detail = str(exc) if isinstance(exc, RuntimeError) else f"Проверка VLESS не прошла ({error_type}). Проверь VLESS_URL, формат транспорта и доступность узла."
+        raise HTTPException(status_code=502, detail=detail) from exc
+
 
 @app.get("/api/status")
 def get_status():
