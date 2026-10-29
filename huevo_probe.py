@@ -4,7 +4,10 @@ No Selenium/FastAPI imports here so the logic is unit-testable anywhere.
 Nothing in this module stores or returns cookies or page bodies; callers get
 only coarse facts (host, title, body length, card count, verdict).
 """
+import json
 import re
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from urllib.parse import urlsplit
 
 LOGIN_WORDS = r"(войти|вход|авторизация|вход в аккаунт|sign in|log in|login)"
@@ -67,13 +70,65 @@ def classify_network_error(exc_or_text):
     return "other"
 
 
+def parse_retry_after(value, now=None, cap=24 * 3600):
+    """Retry-After as seconds (0..cap) from either delta-seconds or an HTTP date; None if absent/invalid."""
+    if value is None or str(value).strip() == "":
+        return None
+    text = str(value).strip()
+    if text.isdigit():
+        return min(int(text), cap)
+    try:
+        when = parsedate_to_datetime(text)
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        delta = (when - (now or datetime.now(timezone.utc))).total_seconds()
+        return int(min(max(delta, 0), cap))
+    except (TypeError, ValueError):
+        return None
+
+
+def parse_perf_log(entries):
+    """Extract real HTTP facts from Chrome performance-log entries (Selenium `get_log('performance')`).
+
+    Returns {"documents": [{"url","status","retry_after"}], "failures": [error_text]}.
+    Only main-document responses and failed requests are kept; no cookies or bodies.
+    Headers other than Retry-After are discarded.
+    """
+    documents, failures = [], []
+    for entry in entries or []:
+        try:
+            msg = json.loads(entry["message"])["message"] if isinstance(entry.get("message"), str) else entry["message"]["message"]
+            method, params = msg.get("method"), msg.get("params", {})
+        except (KeyError, TypeError, ValueError, AttributeError):
+            continue
+        if method == "Network.responseReceived" and params.get("type") == "Document":
+            resp = params.get("response", {})
+            headers = {str(k).lower(): v for k, v in (resp.get("headers") or {}).items()}
+            documents.append({"url": resp.get("url", ""), "status": resp.get("status"),
+                              "retry_after": parse_retry_after(headers.get("retry-after"))})
+        elif method == "Network.loadingFailed" and params.get("type") in (None, "Document"):
+            failures.append(str(params.get("errorText", "")))
+    return {"documents": documents, "failures": failures}
+
+
+def main_response(parsed, target_path):
+    """The last Document response whose path matches the page we asked for (after redirects), else the last one."""
+    docs = parsed.get("documents") or []
+    want = (urlsplit(target_path).path or "/").rstrip("/") or "/"
+    for d in reversed(docs):
+        if ((urlsplit(d["url"]).path or "/").rstrip("/") or "/") == want:
+            return d
+    return docs[-1] if docs else None
+
+
 def classify_page(final_url, title, body_text, card_count, *, expected_hosts,
-                  password_visible=False, heading=""):
+                  password_visible=False, heading="", http_status=None, retry_after=None):
     """Return a safe verdict about a loaded page.
 
     verdict is one of: blocked, login, wrong_host, empty, no_cards, ok.
-    The 'blocked' verdict is based on page text only: Selenium does not expose
-    the HTTP status, so the status class is inferred and flagged as such.
+    `http_status` (from the browser's network log) is authoritative when given
+    (status_source="network"); otherwise a block is inferred from page text
+    (status_source="inferred"). Extra verdicts with a real status: server_error, not_found.
     """
     parts = urlsplit(final_url or "")
     host = (parts.hostname or "").lower()
@@ -85,9 +140,17 @@ def classify_page(final_url, title, body_text, card_count, *, expected_hosts,
         "body_length": len(body_text),
         "cards": int(card_count),
         "status_class_inferred": None,
+        "http_status": http_status, "status_source": "network" if http_status else "inferred",
+        "retry_after": retry_after,
     }
     blocked = access_block_status((title or "") + " " + body_text[:1500])
-    if blocked:
+    if http_status in (403, 418, 429):
+        info.update(verdict="blocked", status_class_inferred=http_status)
+    elif isinstance(http_status, int) and http_status >= 500:
+        info["verdict"] = "server_error"
+    elif http_status == 404:
+        info["verdict"] = "not_found"
+    elif blocked:
         info.update(verdict="blocked", status_class_inferred=blocked)
     elif host and host not in expected_hosts:
         info["verdict"] = "wrong_host"
@@ -104,6 +167,8 @@ def classify_page(final_url, title, body_text, card_count, *, expected_hosts,
 
 
 VERDICT_HINTS = {
+    "server_error": "Сервер Huevo вернул ошибку 5xx: временная проблема источника, повтор позже.",
+    "not_found": "Huevo вернул 404: адрес каталога изменился или страница недоступна.",
     "blocked": "Источник ограничил доступ. Это ограничение стороны Huevo, а не формат cookies: сбор не повторяется, защита не обходится.",
     "login": "Открылась страница входа: сессия/cookies не подходят для этого домена. Используйте браузерный сборщик в авторизованной вкладке.",
     "wrong_host": "Редирект на другой хост. Проверьте HUEVO_BASE_URL и домен cookies.",

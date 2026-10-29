@@ -3,239 +3,196 @@ import os
 import tempfile
 import unittest
 from unittest.mock import patch
+from datetime import datetime, timedelta, timezone
 
 _TEST_DIR = tempfile.TemporaryDirectory(prefix="huevo-tests-")
 os.environ["HUEVO_DB"] = os.path.join(_TEST_DIR.name, "test.sqlite3")
 os.environ["INGEST_TOKEN"] = "test-token-not-for-production"
 os.environ["HUEVO_COOKIES_JSON"] = ""
+os.environ["HUEVO_COOKIES"] = ""
 os.environ["HUEVO_CLIENT_ID"] = "123"
 os.environ["HUEVO_CLIENT_SECRET"] = "unit-test-secret-not-real"
 
 from fastapi.testclient import TestClient
 import app as app_module
-
+import support
 
 AUTH = {"Authorization": "Bearer test-token-not-for-production"}
 
 
-class IngestApiTests(unittest.TestCase):
-    def setUp(self):
-        # The test module shares one temporary SQLite file. Clear rows between
-        # cases so a full-crawl test never deactivates fixtures from another test.
-        with app_module.db() as c:
-            c.execute("DELETE FROM lots")
-            c.execute("DELETE FROM price_history")
-            c.execute("DELETE FROM market_snapshots")
-            c.execute("DELETE FROM support_payments")
+def lot(i, price, title="Роза", rarity="Редкий", **kw):
+    return {"lot_id": str(i), "title": title, "rarity": rarity, "price": price, "status": "В продаже", **kw}
 
+
+class ApiTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.client = TestClient(app_module.app)
 
-    def test_health_endpoint(self):
-        response = self.client.get("/health")
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.json()["ok"])
+    def setUp(self):
+        with app_module.store.connect() as c:
+            for table in ("lots", "price_history", "market_snapshots", "support_payments", "kv"):
+                c.execute(f"DELETE FROM {table}")
+        app_module._fails.clear()
+        app_module._diag_last["at"] = 0.0
 
-    def test_parser_handles_card_without_mk_gcard_and_data_price(self):
-        html = '''
-        <a class="gift-card" href="/market/lot/900002" aria-label="Fallback Gift">
-          <img data-src="/images/gift.webp" alt="Fallback Gift">
-          <span class="serial">#2</span>
-          <span class="price" data-price="456"></span>
-          <span class="status">В продаже</span>
-        </a>
-        '''
-        rows, card_count = app_module.parse_cards(html)
-        self.assertEqual(card_count, 1)
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["lot_id"], "900002")
-        self.assertEqual(rows[0]["title"], "Fallback Gift")
-        self.assertEqual(rows[0]["price"], 456)
-        self.assertEqual(rows[0]["image_url"], "https://huevo.su/images/gift.webp")
-        self.assertEqual(rows[0]["lot_url"], "https://huevo.su/market/lot/900002")
+    def ingest(self, lots):
+        return self.client.post("/api/ingest", headers=AUTH, json={"lots": lots})
+
+    # ---- basics / security
+    def test_health_and_index(self):
+        self.assertTrue(self.client.get("/health").json()["ok"])
+        page = self.client.get("/")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("frame-ancestors", page.headers["content-security-policy"])
+        self.assertEqual(page.headers["x-content-type-options"], "nosniff")
+        self.assertEqual(self.client.get("/api/status").headers["cache-control"], "no-store")
+
+    def test_ingest_requires_bearer_and_ignores_query_token(self):
+        self.assertEqual(self.client.post("/api/ingest", json={"lots": []}).status_code, 403)
+        r = self.client.post("/api/ingest?token=test-token-not-for-production", json={"lots": []})
+        self.assertEqual(r.status_code, 403, "token in query string must not be accepted")
+        self.assertEqual(self.client.post("/api/ingest", headers={"Authorization": "Bearer wrong"}, json={"lots": []}).status_code, 403)
+
+    def test_failed_tokens_are_rate_limited(self):
+        for _ in range(app_module.FAIL_LIMIT):
+            self.client.post("/api/ingest", headers={"Authorization": "Bearer wrong"}, json={"lots": []})
+        r = self.client.post("/api/ingest", headers=AUTH, json={"lots": []})
+        self.assertEqual(r.status_code, 429)
+        self.assertIn("retry-after", r.headers)
+
+    def test_ingest_limits_and_validation(self):
+        self.assertEqual(self.ingest([lot(i, i) for i in range(1001)]).status_code, 400)
+        self.assertEqual(self.client.post("/api/ingest", headers=AUTH, content=b"{not json").status_code, 400)
+        self.assertEqual(self.client.post("/api/ingest", headers=AUTH, content=b"x" * 2_100_000).status_code, 413)
+        r = self.ingest([lot(1, 10), {"lot_id": "abc"}, "junk", lot("2; DROP TABLE lots", 5)])
+        self.assertEqual((r.json()["saved"], r.json()["rejected"]), (1, 3))
 
     def test_ingest_saves_history_and_sanitizes_urls(self):
-        response = self.client.post(
-            "/api/ingest",
-            headers={"Authorization": "Bearer test-token-not-for-production"},
-            json={"lots": [{
-                "lot_id": "900001",
-                "title": "Тестовый подарок",
-                "serial": "#1",
-                "rarity": "Редкий",
-                "price": 12345,
-                "status": "В продаже",
-                "image_url": "javascript:alert(1)",
-                "lot_url": "https://example.com/fake-lot"
-            }]}
-        )
-        self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(response.json()["saved"], 1)
-        lot = self.client.get("/api/lots?q=900001").json()[0]
-        self.assertEqual(lot["price"], 12345)
-        self.assertEqual(lot["lot_url"], "https://huevo.su/market/lot/900001")
-        self.assertEqual(lot["image_url"], "")
-        history = self.client.get("/api/history/900001").json()
-        self.assertEqual(len(history), 1)
-        self.assertEqual(history[0]["price"], 12345)
-        daily = self.client.get("/api/analytics/price-history?days=7&lot_id=900001")
-        self.assertEqual(daily.status_code, 200, daily.text)
-        self.assertEqual(len(daily.json()["points"]), 1)
-        self.assertEqual(daily.json()["points"][0]["avg_price"], 12345)
+        r = self.ingest([lot(900001, 12345, image_url="javascript:alert(1)", lot_url="https://example.com/fake")])
+        self.assertEqual(r.status_code, 200, r.text)
+        item = self.client.get("/api/catalog?q=900001").json()["items"][0]
+        self.assertEqual((item["price"], item["image_url"], item["lot_url"]), (12345, "", "https://huevo.su/market/lot/900001"))
+        self.ingest([lot(900001, 12345)])            # same data again: no new history row
+        self.assertEqual(len(self.client.get("/api/history/900001").json()), 1)
+        self.ingest([lot(900001, 10000)])
+        self.assertEqual(len(self.client.get("/api/history/900001").json()), 2)
+        self.assertEqual(self.client.get("/api/history/abc").status_code, 400)
 
-    def test_cookie_json_export_supports_common_extension_fields(self):
-        cookies = app_module.load_cookie_export(
-            '[{"name":"session","value":"example-only","domain":".huevo.su","expirationDate":1800000000,"httpOnly":true}]'
-        )
-        self.assertEqual(len(cookies), 1)
-        self.assertEqual(cookies[0]["expiry"], 1800000000)
-        self.assertTrue(cookies[0]["httpOnly"])
+    # ---- pass completion
+    def test_incomplete_pass_never_deactivates_or_snapshots(self):
+        self.ingest([lot(i, 100 + i) for i in range(1, 6)])
+        self.client.post("/api/ingest/complete", headers=AUTH, json={"reached_end": True})
+        self.ingest([lot(1, 101)])
+        r = self.client.post("/api/ingest/complete", headers=AUTH, json={"reached_end": False}).json()
+        self.assertFalse(r["complete"])
+        self.assertEqual(self.client.get("/api/catalog").json()["total"], 5)
+        self.assertEqual(len(self.client.get("/api/analytics/snapshots").json()["points"]), 1)
 
-    def test_cookie_netscape_export(self):
-        raw = "# Netscape HTTP Cookie File\n#HttpOnly_.huevo.departament.site\tTRUE\t/\tTRUE\t1800000000\tsession\texample-only\n"
-        cookies = app_module.load_cookie_export(raw)
-        self.assertEqual(len(cookies), 1)
-        self.assertEqual(cookies[0]["domain"], ".huevo.departament.site")
-        self.assertTrue(cookies[0]["httpOnly"])
-        self.assertEqual(cookies[0]["value"], "example-only")
+    def test_complete_pass_deactivates_missing_lots_and_snapshots(self):
+        self.ingest([lot(i, 100 + i) for i in range(1, 6)])
+        self.client.post("/api/ingest/complete", headers=AUTH, json={"reached_end": True})
+        self.ingest([lot(i, 100 + i) for i in range(1, 5)])
+        r = self.client.post("/api/ingest/complete", headers=AUTH, json={"reached_end": True}).json()
+        self.assertEqual((r["deactivated"], r["complete"]), (1, True))
+        self.assertEqual(self.client.get("/api/catalog").json()["total"], 4)
 
-    def test_alternate_huevo_host_is_allowed_but_unrelated_host_is_not(self):
-        self.assertTrue(app_module.is_huevo_host("huevo.su"))
-        self.assertTrue(app_module.is_huevo_host("huevo.departament.site"))
-        self.assertTrue(app_module.is_huevo_host("cdn.huevo.departament.site"))
-        self.assertFalse(app_module.is_huevo_host("not-huevo.departament.site"))
-        self.assertFalse(app_module.is_huevo_host("example.com"))
+    def test_suspiciously_small_pass_is_not_trusted(self):
+        self.ingest([lot(i, 100 + i) for i in range(1, 41)])
+        self.client.post("/api/ingest/complete", headers=AUTH, json={"reached_end": True})
+        self.ingest([lot(1, 101)])
+        r = self.client.post("/api/ingest/complete", headers=AUTH, json={"reached_end": True}).json()
+        self.assertEqual(r["deactivated"], 0)
+        self.assertIsNotNone(r["warning"])
+        self.assertEqual(self.client.get("/api/catalog").json()["total"], 40)
 
-    def test_crawl_returns_actionable_error_without_server_session(self):
-        response = self.client.post("/api/crawl", headers=AUTH)
-        self.assertEqual(response.status_code, 503)
-        detail = response.json()["detail"].lower()
-        self.assertIn("huevo_cookies_json", detail)
-        self.assertIn("huevo_cookies", detail)
+    # ---- catalog / analytics
+    def test_catalog_pagination_filters_and_search_escaping(self):
+        self.ingest([lot(i, i * 10, title="Звезда_%" if i == 1 else "Роза", rarity="Мифический" if i % 2 else "Редкий") for i in range(1, 31)])
+        page = self.client.get("/api/catalog?limit=10&offset=10&sort=price").json()
+        self.assertEqual((page["total"], len(page["items"]), page["items"][0]["price"]), (30, 10, 110))
+        self.assertEqual(self.client.get("/api/catalog?q=%25").json()["total"], 1)        # '%' is literal
+        self.assertEqual(self.client.get("/api/catalog?rarity=Мифический").json()["total"], 15)
+        self.assertEqual(self.client.get("/api/catalog?min_price=100&max_price=150").json()["total"], 6)
+        self.assertEqual(self.client.get("/api/catalog?q=' OR 1=1 --").json()["total"], 0)
+        self.assertEqual(self.client.get("/api/catalog?sort=price;drop").status_code, 400)
+        self.assertEqual(self.client.get("/api/catalog?limit=100000").status_code, 200)
+        self.assertEqual(self.client.get("/api/catalog?limit=abc").status_code, 422)
+        self.assertIn("Мифический", self.client.get("/api/facets").json()["rarities"])
 
-    def test_ingest_rejects_bad_token(self):
-        response = self.client.post(
-            "/api/ingest",
-            headers={"Authorization": "Bearer wrong-token"},
-            json={"lots": []}
-        )
-        self.assertEqual(response.status_code, 403)
+    def test_lots_by_ids_validates_input(self):
+        self.ingest([lot(5, 50)])
+        self.assertEqual(len(self.client.get("/api/lots/by-ids?ids=5,6").json()["items"]), 1)
+        self.assertEqual(self.client.get("/api/lots/by-ids?ids=5;drop").status_code, 400)
+        self.assertEqual(self.client.get("/api/lots/by-ids").json()["items"], [])
 
-    def test_ingest_rejects_more_than_one_thousand_lots(self):
-        response = self.client.post(
-            "/api/ingest",
-            headers={"Authorization": "Bearer test-token-not-for-production"},
-            json={"lots": [{"lot_id": str(i), "price": i} for i in range(1001)]}
-        )
-        self.assertEqual(response.status_code, 400)
+    def test_empty_database_responses_are_honest(self):
+        self.assertEqual(self.client.get("/api/catalog").json()["total"], 0)
+        h = self.client.get("/api/highlights").json()
+        self.assertEqual((h["latest"], h["best"], h["data_state"]), (None, None, "empty"))
+        a = self.client.get("/api/analytics/summary").json()
+        self.assertFalse(a["enough_data"])
+        self.assertEqual(a["bins"], [])
+        self.assertIsNone(a["changes"][0]["change_pct"])
+        self.assertEqual(self.client.get("/api/deals").json()["deals"], [])
 
-    def test_analytics_price_history_rejects_invalid_lot_id(self):
-        response = self.client.get("/api/analytics/price-history?days=30&lot_id=not-a-number")
-        self.assertEqual(response.status_code, 400)
+    def test_deals_and_best_value_are_labelled_as_offers(self):
+        self.ingest([lot(1, 50), lot(2, 100), lot(3, 110), lot(4, 120), lot(5, 130)])
+        d = self.client.get("/api/deals").json()
+        self.assertEqual(d["deals"][0]["lot_id"], "1")
+        self.assertIn("не цены завершённых продаж", d["note"])
+        b = self.client.get("/api/highlights").json()
+        self.assertEqual((b["best"]["lot_id"], b["best"]["basis"]), ("1", "active"))
+        self.assertGreaterEqual(b["best"]["sample_size"], 3)
 
-    def test_analytics_price_history_limits_requested_period(self):
-        response = self.client.get("/api/analytics/price-history?days=999")
-        self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(response.json()["days"], 90)
-        self.assertEqual(response.json()["points"], [])
+    def test_highlights_prefers_gone_lots_as_reference(self):
+        self.ingest([lot(i, 200) for i in range(10, 14)])
+        self.client.post("/api/ingest/complete", headers=AUTH, json={"reached_end": True})
+        self.ingest([lot(20, 120)])
+        self.client.post("/api/ingest/complete", headers=AUTH, json={"reached_end": True})
+        # lots 10-13 are gone now (4 of 5 previously active: guard needs >=20 so deactivation applies)
+        best = self.client.get("/api/highlights").json()["best"]
+        self.assertEqual((best["lot_id"], best["basis"], best["reference"]), ("20", "gone", 200))
 
-    def test_login_detection_uses_root_or_real_login_markers_not_nav_words(self):
-        self.assertTrue(app_module.looks_like_login_page(
-            "https://huevo.su/login", "Huevo", "", "Войдите в аккаунт",
-            password_visible=False, has_market_cards=False
-        ))
-        self.assertTrue(app_module.looks_like_login_page(
-            "https://huevo.su/", "Huevo", "Вход в аккаунт", "Добро пожаловать",
-            password_visible=False, has_market_cards=False
-        ))
-        self.assertTrue(app_module.looks_like_login_page(
-            "https://huevo.su/", "Huevo", "Главная", "Please log in to continue",
-            password_visible=False, has_market_cards=False
-        ))
-        self.assertFalse(app_module.looks_like_login_page(
-            "https://huevo.su/", "Huevo", "Маркет подарков", "Войти Подарки Каталог",
-            password_visible=False, has_market_cards=True
-        ))
+    def test_diagnostics_never_expose_secrets(self):
+        body = json.dumps(self.client.get("/api/diagnostics").json())
+        for secret in ("test-token-not-for-production", "unit-test-secret-not-real"):
+            self.assertNotIn(secret, body)
 
-    def test_access_block_status_recognizes_huevo_restrictions(self):
-        self.assertEqual(app_module.access_block_status("HTTP Error 418: I'm a teapot"), 418)
-        self.assertEqual(app_module.access_block_status("Access denied"), 403)
-        self.assertEqual(app_module.access_block_status("Too many requests"), 429)
-        self.assertEqual(app_module.access_block_status("Обычная страница каталога"), None)
-
-    def test_crawl_returns_retry_after_during_block_cooldown(self):
-        previous = app_module.state.get("blocked_until")
-        until = (app_module.datetime.now(app_module.timezone.utc) +
-                 app_module.timedelta(minutes=10)).isoformat()
-        app_module.state["blocked_until"] = until
-        try:
-            response = self.client.post("/api/crawl", headers=AUTH)
-            self.assertEqual(response.status_code, 429)
-            self.assertTrue(int(response.headers["Retry-After"]) > 0)
-        finally:
-            app_module.state["blocked_until"] = previous
-
-    def test_diagnose_huevo_requires_token(self):
-        self.assertEqual(self.client.post("/api/diagnose-huevo").status_code, 403)
-        response = self.client.post("/api/diagnose-huevo", headers={"Authorization": "Bearer wrong"})
-        self.assertEqual(response.status_code, 403)
-
-    def test_diagnose_huevo_respects_block_cooldown(self):
-        previous = app_module.state.get("blocked_until")
-        app_module.state["blocked_until"] = (app_module.datetime.now(app_module.timezone.utc) +
-                                             app_module.timedelta(minutes=10)).isoformat()
-        try:
-            response = self.client.post("/api/diagnose-huevo",
-                                        headers={"Authorization": "Bearer test-token-not-for-production"})
-            self.assertEqual(response.status_code, 429)
-        finally:
-            app_module.state["blocked_until"] = previous
-
-    def test_parser_dedupes_nothing_but_extracts_ids_in_order(self):
-        html = "".join(f'<a class="mk-gcard" href="/market/lot/{i}"><div class="mk-gtitle">G{i}</div><div class="mk-price">{i}00</div></a>' for i in (5, 6, 7))
-        rows, count = app_module.parse_cards(html)
-        self.assertEqual([r["lot_id"] for r in rows], ["5", "6", "7"])
-        self.assertEqual([r["price"] for r in rows], [500, 600, 700])
-
-    def test_crawl_requires_token(self):
+    # ---- crawl / block cooldown
+    def test_crawl_and_diagnose_require_token(self):
         self.assertEqual(self.client.post("/api/crawl").status_code, 403)
+        self.assertEqual(self.client.post("/api/diagnose-huevo").status_code, 403)
+        self.assertEqual(self.client.get("/api/backup").status_code, 403)
 
-    def test_ingest_complete_deactivates_only_after_complete_pass(self):
-        def post(lots):
-            return self.client.post("/api/ingest", headers=AUTH, json={"lots": lots})
-        app_module.state["ingest_run_started"] = None
-        post([{"lot_id": "910001", "title": "Roses", "price": 100}, {"lot_id": "910002", "title": "Roses", "price": 120}])
-        r = self.client.post("/api/ingest/complete", headers=AUTH, json={"reached_end": True})
-        self.assertEqual(r.json()["deactivated"], 0)
-        # next pass sees only one of them
-        post([{"lot_id": "910001", "title": "Roses", "price": 100}])
-        incomplete = self.client.post("/api/ingest/complete", headers=AUTH, json={"reached_end": False}).json()
-        self.assertEqual(incomplete["deactivated"], 0)
-        ids = {l["lot_id"] for l in self.client.get("/api/lots?q=91000").json()}
-        self.assertEqual(ids, {"910001", "910002"})
-        post([{"lot_id": "910001", "title": "Roses", "price": 100}])
-        done = self.client.post("/api/ingest/complete", headers=AUTH, json={"reached_end": True}).json()
-        self.assertGreaterEqual(done["deactivated"], 1)
-        ids = {l["lot_id"] for l in self.client.get("/api/lots?q=91000").json()}
-        self.assertEqual(ids, {"910001"})
-        snaps = self.client.get("/api/analytics/snapshots?days=1").json()["points"]
-        self.assertGreaterEqual(len(snaps), 2)
-        self.assertEqual(snaps[-1]["source"], "browser")
+    def test_crawl_without_server_session_is_actionable(self):
+        r = self.client.post("/api/crawl", headers=AUTH)
+        self.assertEqual(r.status_code, 503)
+        self.assertIn("HUEVO_COOKIES_JSON", r.json()["detail"])
 
-    def test_deals_endpoint_finds_cheap_lot(self):
-        self.client.post("/api/ingest", headers=AUTH, json={"lots": [
-            {"lot_id": "920001", "title": "DealGift", "price": 50},
-            {"lot_id": "920002", "title": "DealGift", "price": 100},
-            {"lot_id": "920003", "title": "DealGift", "price": 100},
-            {"lot_id": "920004", "title": "DealGift", "price": 110}]})
-        body = self.client.get("/api/deals").json()
-        self.assertIn("920001", [d["lot_id"] for d in body["deals"]])
-        self.assertIn("не цены завершённых продаж", body["note"])
+    def test_cooldown_is_persisted_and_blocks_crawl_and_diagnose(self):
+        app_module.start_block(418, 7200)
+        for path in ("/api/crawl", "/api/diagnose-huevo"):
+            r = self.client.post(path, headers=AUTH)
+            self.assertEqual(r.status_code, 429, path)
+            self.assertGreater(int(r.headers["retry-after"]), 3600)
+        self.assertIsNotNone(self.client.get("/api/status").json()["blocked_until"])
+        app_module.store.kv_set("blocked_until", (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat())
+        self.assertIsNone(self.client.get("/api/status").json()["blocked_until"])
 
-    # ---- support the author (huEVO Apps payments)
-    def _launch_query(self, mode="live", user="1001"):
-        import time, support
+    def test_retry_after_longer_than_default_is_respected(self):
+        until = app_module.start_block(429, 10 * 3600)
+        self.assertGreater((until - datetime.now(timezone.utc)).total_seconds(), 9.9 * 3600)
+
+    def test_backup_is_a_valid_sqlite_file(self):
+        self.ingest([lot(1, 10)])
+        r = self.client.get("/api/backup", headers=AUTH)
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.content.startswith(b"SQLite format 3"))
+
+    # ---- support payments
+    def launch_query(self, mode="live", user="1001"):
+        import time
         from urllib.parse import urlencode
         p = {"hu_app_id": "123", "hu_user_id": user, "hu_mode": mode, "hu_ts": str(int(time.time()))}
         p["hu_hash"] = support.sign_launch(p, "unit-test-secret-not-real")
@@ -244,56 +201,47 @@ class IngestApiTests(unittest.TestCase):
     def test_support_intent_rejects_unsigned_launch_and_bad_amount(self):
         r = self.client.post("/api/support/intent", json={"amount": 5, "launch_query": "?hu_user_id=1"})
         self.assertEqual(r.status_code, 401)
-        r = self.client.post("/api/support/intent", json={"amount": 0, "launch_query": self._launch_query()})
+        r = self.client.post("/api/support/intent", json={"amount": 0, "launch_query": self.launch_query()})
         self.assertEqual(r.status_code, 400)
 
     def test_support_intent_uses_verified_user_and_test_flag(self):
         captured = {}
+
         def fake(method, path, body=None):
             captured.update(method=method, path=path, body=body)
             return 200, {"ok": True, "intent_id": "pi_unit1", "status": "pending"}
         with patch("app.huevo_api", fake):
-            r = self.client.post("/api/support/intent", json={"amount": 10, "launch_query": self._launch_query(mode="test")})
+            r = self.client.post("/api/support/intent", json={"amount": 10, "launch_query": self.launch_query(mode="test")})
         self.assertEqual(r.status_code, 200, r.text)
-        self.assertEqual(captured["body"]["user_id"], 1001)
-        self.assertIs(captured["body"]["test"], True)
-        self.assertEqual(captured["path"], "/payments")
-        self.assertEqual(r.json()["intent_id"], "pi_unit1")
+        self.assertEqual((captured["body"]["user_id"], captured["body"]["test"], captured["path"]), (1001, True, "/payments"))
 
-    def test_support_callback_requires_valid_signature_and_is_idempotent(self):
-        import hashlib, hmac, json as _json
-        with patch("app.huevo_api", lambda *a, **k: (200, {"ok": True, "intent_id": "pi_unit2", "status": "pending"})):
-            self.client.post("/api/support/intent", json={"amount": 5, "launch_query": self._launch_query()})
-        body = _json.dumps({"event": "payment", "intent_id": "pi_unit2", "status": "succeeded", "test": False}).encode()
+    def test_support_callback_requires_valid_signature_and_final_status_never_changes(self):
+        import hashlib
+        import hmac
+        now = "2026-01-01T00:00:00+00:00"
+        with app_module.store.connect() as c:
+            c.execute("INSERT INTO support_payments(intent_id,user_id,amount,test,status,created_at,updated_at) VALUES('pi_x',1,10,0,'pending',?,?)", (now, now))
         key = hashlib.sha256(b"unit-test-secret-not-real").digest()
-        sig = hmac.new(key, body, hashlib.sha256).hexdigest()
-        self.assertEqual(self.client.post("/api/support/callback", content=body, headers={"X-Huevo-Signature": "0" * 64}).status_code, 401)
-        self.assertEqual(self.client.post("/api/support/callback", content=body, headers={"X-Huevo-Signature": sig}).status_code, 204)
-        failed = _json.dumps({"event": "payment", "intent_id": "pi_unit2", "status": "failed"}).encode()
-        sig2 = hmac.new(key, failed, hashlib.sha256).hexdigest()
-        self.assertEqual(self.client.post("/api/support/callback", content=failed, headers={"X-Huevo-Signature": sig2}).status_code, 204)
-        st = self.client.get("/api/support/status/pi_unit2").json()
-        self.assertEqual(st["status"], "succeeded")  # a final status never changes
-        self.assertGreaterEqual(self.client.get("/api/support/stats").json()["supporters"], 1)
 
-    def test_support_status_validates_id(self):
-        self.assertEqual(self.client.get("/api/support/status/not-an-intent").status_code, 400)
+        def post(payload, sig=None):
+            body = json.dumps(payload).encode()
+            sig = sig or hmac.new(key, body, hashlib.sha256).hexdigest()
+            return self.client.post("/api/support/callback", content=body, headers={"X-Huevo-Signature": sig})
+        self.assertEqual(post({"intent_id": "pi_x", "status": "succeeded"}, sig="0" * 64).status_code, 401)
+        self.assertEqual(post({"intent_id": "pi_x", "status": "succeeded"}).status_code, 204)
+        self.assertEqual(post({"intent_id": "pi_x", "status": "succeeded"}).status_code, 204)     # duplicate delivery
+        self.assertEqual(post({"intent_id": "pi_x", "status": "failed"}).status_code, 204)
+        with patch("app.huevo_api", lambda *a, **k: (0, {})):
+            self.assertEqual(self.client.get("/api/support/status/pi_x").json()["status"], "succeeded")
+        self.assertEqual(self.client.get("/api/support/stats").json(), {"supporters": 1, "total": 10})
+
+    def test_support_status_validates_id_and_stats_hide_test_payments(self):
         self.assertEqual(self.client.get("/api/support/status/pi_missing").status_code, 404)
-
-    def test_highlights_and_drops_work_on_data(self):
-        self.client.post("/api/ingest", headers=AUTH, json={"lots": [{"lot_id": "930001", "title": "HiGift", "price": 100}]})
-        self.client.post("/api/ingest", headers=AUTH, json={"lots": [{"lot_id": "930001", "title": "HiGift", "price": 80}]})
-        h = self.client.get("/api/highlights").json()
-        self.assertIsNotNone(h["latest"])
-        self.assertIn("не цены завершённых", h["best_note"])
-        drops = self.client.get("/api/drops").json()
-        self.assertIn("930001", [d["lot_id"] for d in drops])
-
-    def test_diagnostics_never_exposes_ingest_token(self):
-        response = self.client.get("/api/diagnostics")
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.json()["ingest_token_configured"])
-        self.assertNotIn("test-token-not-for-production", response.text)
+        self.assertEqual(self.client.get("/api/support/status/bad id").status_code, 400)
+        now = "2026-01-01T00:00:00+00:00"
+        with app_module.store.connect() as c:
+            c.execute("INSERT INTO support_payments VALUES('pi_t',1,50,1,'succeeded',NULL,?,?)", (now, now))
+        self.assertEqual(self.client.get("/api/support/stats").json(), {"supporters": 0, "total": 0})
 
 
 if __name__ == "__main__":
