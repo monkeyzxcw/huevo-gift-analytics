@@ -8,9 +8,15 @@ services:
     envVars:
       - key: HUEVO_DB
         value: huevo.db
+      - key: HUEVO_BASE_URL
+        value: https://huevo.su
       - key: INGEST_TOKEN
         generateValue: true
       - key: CRAWL_DELAY
-        value: "2.2"
+        value: "2.0"
+      - key: CRAWL_BLOCK_COOLDOWN_HOURS
+        value: "6"
       - key: MAX_PAGES
         value: "500"
+      - key: AUTO_REFRESH_HOURS
+        value: "2"
