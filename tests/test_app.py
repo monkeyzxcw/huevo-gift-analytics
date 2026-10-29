@@ -168,6 +168,24 @@ class IngestApiTests(unittest.TestCase):
         self.assertEqual(response.json()["days"], 90)
         self.assertEqual(response.json()["points"], [])
 
+    def test_login_detection_uses_root_or_real_login_markers_not_nav_words(self):
+        self.assertTrue(app_module.looks_like_login_page(
+            "https://huevo.su/login", "Huevo", "", "Войдите в аккаунт",
+            password_visible=False, has_market_cards=False
+        ))
+        self.assertTrue(app_module.looks_like_login_page(
+            "https://huevo.su/", "Huevo", "Вход в аккаунт", "Добро пожаловать",
+            password_visible=False, has_market_cards=False
+        ))
+        self.assertTrue(app_module.looks_like_login_page(
+            "https://huevo.su/", "Huevo", "Главная", "Please log in to continue",
+            password_visible=False, has_market_cards=False
+        ))
+        self.assertFalse(app_module.looks_like_login_page(
+            "https://huevo.su/", "Huevo", "Маркет подарков", "Войти Подарки Каталог",
+            password_visible=False, has_market_cards=True
+        ))
+
     def test_access_block_status_recognizes_huevo_restrictions(self):
         self.assertEqual(app_module.access_block_status("HTTP Error 418: I'm a teapot"), 418)
         self.assertEqual(app_module.access_block_status("Access denied"), 403)
