@@ -151,9 +151,18 @@
       if (changed) {
         // Replace the in-memory snapshot only when actual visible data changed.
         // render() mutates the current DOM in place; no navigation or page reload occurs.
+        const nextLiveFingerprint = n.raw.live && n.raw.live.fingerprint ? String(n.raw.live.fingerprint) : null;
+        const liveChanged = Boolean(nextLiveFingerprint && nextLiveFingerprint !== state.liveFingerprint);
         state.data = n.raw;
         state.lots = n.lots;
-        state.liveFingerprint = n.raw.live && n.raw.live.fingerprint ? String(n.raw.live.fingerprint) : null;
+        state.liveFingerprint = nextLiveFingerprint;
+        if (liveChanged) {
+          // Market-derived views must use newly refreshed first-page prices, not bins
+          // and categories calculated from the previous full snapshot.
+          state.data.price_bins = [];
+          state.data.categories = [];
+          state.data.top_expensive = n.lots.filter((lot) => isNum(lot.price)).sort((a, b) => b.price - a.price).slice(0, 10);
+        }
         lastSnapshotSignature = signature;
         render();
       } else {
