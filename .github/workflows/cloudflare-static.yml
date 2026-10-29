@@ -31,22 +31,22 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Python
-        if: ${{ github.event_name != 'push' }}
+        if: ${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'chore: refresh Huevo market snapshot') }}
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
 
       - name: Install Chrome
-        if: ${{ github.event_name != 'push' }}
+        if: ${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'chore: refresh Huevo market snapshot') }}
         uses: browser-actions/setup-chrome@v1
 
       - name: Install Python dependencies
-        if: ${{ github.event_name != 'push' }}
+        if: ${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'chore: refresh Huevo market snapshot') }}
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
 
       - name: Collect all Huevo market pages
-        if: ${{ github.event_name != 'push' }}
+        if: ${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'chore: refresh Huevo market snapshot') }}
         env:
           HUEVO_COOKIES_JSON: ${{ secrets.HUEVO_COOKIES_JSON }}
           HUEVO_COOKIES: ${{ secrets.HUEVO_COOKIES }}
@@ -56,7 +56,7 @@ jobs:
         run: python scripts/collect_snapshot.py
 
       - name: Validate collected snapshot
-        if: ${{ github.event_name != 'push' }}
+        if: ${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'chore: refresh Huevo market snapshot') }}
         run: |
           python - <<'PY'
           import json
@@ -83,7 +83,7 @@ jobs:
           PY
 
       - name: Commit updated public snapshot
-        if: ${{ github.event_name != 'push' }}
+        if: ${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'chore: refresh Huevo market snapshot') }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
