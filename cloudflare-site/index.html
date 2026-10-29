@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' https://huevo.su https://huevo.departament.site data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://huevo.su; style-src 'self'; img-src 'self' https://huevo.su https://huevo.departament.site data:; connect-src 'self' https://huevo.su https://*.huevo.su; base-uri 'none'; form-action 'none'">
 <title>Huevo Gift Analytics</title>
-<link rel="stylesheet" href="./styles.css">
+<link rel="stylesheet" href="./styles.css?v=amnyam-v1">
 </head>
 <body>
 <a class="skip" href="#catalog">К каталогу</a>
@@ -20,7 +20,18 @@
   </div>
 </header>
 
-<section class="hero" aria-labelledby="heroTitle">
+<nav class="main-nav" id="mainNav" role="tablist" aria-label="Разделы AMNYAM MODE">
+  <button role="tab" aria-selected="true" data-view="overview" type="button"><span>01</span> База</button>
+  <button role="tab" aria-selected="false" data-view="market" type="button"><span>02</span> Маркет <small id="navMarketCount">—</small></button>
+  <button role="tab" aria-selected="false" data-view="deals" type="button"><span>03</span> Ниже рынка <small id="navDealsCount">—</small></button>
+  <button role="tab" aria-selected="false" data-view="cheap" type="button"><span>04</span> Дешёвые <small id="navCheapCount">—</small></button>
+  <button role="tab" aria-selected="false" data-view="analytics" type="button"><span>05</span> Данные</button>
+  <button role="tab" aria-selected="false" data-view="favorites" type="button"><span>06</span> Избранное <small id="navFavoritesCount">0</small></button>
+  <button role="tab" aria-selected="false" data-view="support" type="button"><span>07</span> Поддержка</button>
+</nav>
+<div class="command-strip"><span class="command-mark">AMNYAM / WORKER EDITION</span><span>MARKET INTELLIGENCE <i></i> SILENT SYNC 3S</span><label class="command-search"><b>⌕</b><input id="globalSearch" type="search" placeholder="Быстрый поиск по рынку…" autocomplete="off" aria-label="Быстрый поиск"><kbd>ENTER</kbd></label></div>
+
+<section class="hero" id="hero" data-view-section="overview" aria-labelledby="heroTitle">
   <div><div class="eyebrow">Обзор рынка</div><h2 id="heroTitle">Каталог подарков и динамика цен</h2>
   <p>Снимок публичных предложений. Везде показаны <b>цены объявлений</b>, а не цены завершённых сделок.</p></div>
   <dl class="freshness" id="freshness"><div><dt>Последний успешный сбор</dt><dd id="lastOk">—</dd></div><div><dt>Последняя попытка</dt><dd id="lastTry">—</dd></div></dl>
@@ -99,6 +110,6 @@
 
 <footer class="footer"><span>Huevo Gift Analytics · статическая версия</span><span>Данные собирает локальный сборщик на ПК владельца; блокировки источника не обходятся.</span></footer>
 </main>
-<script src="./app.js?v=live-refresh-v3" defer></script>
+<script src="./app.js?v=amnyam-v1" defer></script>
 </body>
 </html>
