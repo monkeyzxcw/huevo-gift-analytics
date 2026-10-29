@@ -67,10 +67,12 @@ test("full v2 data: cards, charts, changes, top, table render with no errors", a
   assert.ok(await page.locator("#chartCount svg polyline").count() === 1, "lot-count dynamics line");
   assert.ok(await page.locator("#chartMedian svg polyline").count() === 1);
   assert.equal(await page.locator("#chartCats .hbar").count(), 2);
+  await page.click('#mainNav [data-view="analytics"]');
   assert.match(await page.textContent("#changeList"), /Новинка/);
   await page.click("#tabGone"); assert.match(await page.textContent("#changeList"), /Пропавший/);
   await page.click("#tabPrice"); assert.match(await page.textContent("#changeList"), /200 → 150/);
   assert.equal(await page.locator("#topList li").count(), 3);
+  await page.click('#mainNav [data-view="market"]');
   assert.equal(await page.locator("#rows tr").count(), 50, "first page only");
   assert.equal(await page.evaluate(() => window.__xss), undefined, "title markup must not execute");
   assert.equal(await page.locator("#salesPanel.hide").count(), 1, "no sales section without confirmed data");
@@ -81,6 +83,7 @@ test("full v2 data: cards, charts, changes, top, table render with no errors", a
 test("search, filters, sort, pagination and reset work", async () => {
   const { browser, page, problems } = await open(serve(dataV2()));
   await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="market"]');
   await page.fill("#search", "звезда");
   assert.match(await page.textContent("#rowCount"), /Найдено лотов: 17 из 120/);
   await page.fill("#search", "");
@@ -105,6 +108,7 @@ test("search, filters, sort, pagination and reset work", async () => {
 test("lot without a price sorts last and shows a dash, not zero", async () => {
   const { browser, page } = await open(serve(dataV2()));
   await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="market"]');
   await page.fill("#search", "1005");
   assert.equal((await page.textContent("#rows td.price")).trim(), "—");
   await browser.close();
@@ -113,6 +117,7 @@ test("lot without a price sorts last and shows a dash, not zero", async () => {
 test("detail dialog: price history, comparison, safe link, Escape closes", async () => {
   const { browser, page, problems } = await open(serve(dataV2()));
   await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="market"]');
   await page.fill("#search", "1003");
   await page.click("#rows button");
   assert.ok(await page.locator("#detail[open]").count());
