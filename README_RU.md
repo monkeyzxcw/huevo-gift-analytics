@@ -26,7 +26,7 @@
 
 ## Источники данных и честность статуса
 
-1. **Браузерный сбор (рекомендуется).** Скрипт запускается в DevTools уже авторизованной вкладки `huevo.su`, читает страницы вашей сессией и шлёт лоты на панель с `INGEST_TOKEN`. Cookies никуда не уходят. Адрес панели жёстко ограничен (`*.onrender.com` или `localhost`), токен нигде не сохраняется.
+1. **Браузерный сбор (рекомендуется).** Скрипт запускается в DevTools уже авторизованной вкладки `huevo.su`, читает страницы вашей сессией и шлёт лоты на панель с `INGEST_TOKEN`. Cookies никуда не уходят. Этот DevTools-сборщик относится к старому FastAPI API-режиму; статический Cloudflare-дашборд читает только публичный `cloudflare-site/data.json`.
 2. **Серверный Selenium** (только если заданы `HUEVO_COOKIES_JSON` / `HUEVO_COOKIES`). Реальный HTTP-статус берётся из сетевого журнала Chrome (`status_source: network`); если журнал недоступен, блокировка определяется по тексту страницы (`inferred`), и панель так и пишет.
 
 Полный проход — только если на странице после первой нет новых лотов. Лоты, не встреченные при полном проходе, помечаются неактивными; при неполном проходе (ошибка, блокировка, лимит страниц, подозрительно малая выборка — менее 50% прежних активных лотов) активность и снимки рынка **не меняются**.
@@ -68,17 +68,24 @@
 
 Для локального теста на компьютере команды те же; панель будет доступна по `http://localhost:8000`.
 
-## Развёртывание на Render
+## Публикация на Cloudflare
 
-1. Подключите репозиторий (Docker, ветка `main`). `render.yaml` создаёт `INGEST_TOKEN` автоматически.
-2. В **Render → Environment** задайте секреты (только там): при необходимости `HUEVO_COOKIES_JSON`, для оплаты `HUEVO_CLIENT_ID` и `HUEVO_CLIENT_SECRET`.
-3. Откройте панель → «Сборщик» → скачайте сборщик, откройте маркет в авторизованной вкладке, вставьте код в консоль и введите токен в окне запроса.
+Рабочий сайт: **https://huevo-gift-analytics.monkeyzxcw.workers.dev**.
 
-**Постоянное хранение.** На бесплатном плане Render диск временный: `huevo.db` теряется при деплое и перезапуске (панель покажет предупреждение). Для долговременной истории подключите persistent disk (платная опция, автоматически не включается) и задайте `HUEVO_DB=/var/data/huevo.db`. Копия базы: `curl -H "Authorization: Bearer $INGEST_TOKEN" -o huevo-backup.db https://ВАШ-СЕРВИС.onrender.com/api/backup`. PostgreSQL не реализован.
+Cloudflare Worker обслуживает только статические файлы из `cloudflare-site/`. Имя Worker уже задано в `wrangler.jsonc` как `huevo-gift-analytics`. Python/Selenium и вход в Huevo в Cloudflare и GitHub Actions не запускаются.
+
+Сбор идёт на твоём Windows-ПК:
+1. Один раз запусти `run_local_collector.bat`: откроется отдельный локальный Chrome-профиль, в котором нужно войти на Huevo. Сессия хранится только на этом компьютере.
+2. Для автоматического запуска раз в 6 часов запусти `install_auto_schedule.bat`. Планировщик Windows работает, пока пользователь вошёл в систему, а ПК включён.
+3. Сборщик обновляет `cloudflare-site/data.json` и отправляет commit в GitHub. Workflow `.github/workflows/cloudflare-static.yml` проверяет JSON и публикует статический сайт в Cloudflare.
+
+Для деплоя нужны только GitHub Secrets `CLOUDFLARE_API_TOKEN` и `CLOUDFLARE_ACCOUNT_ID`. **Cookies Huevo не добавляй в GitHub Secrets**: версия v6 использует локальный профиль Chrome. Настройка описана в `CLOUDFLARE_FREE_SETUP_RU.md`.
+
+Если каталог не удалось собрать полностью или Huevo ограничил доступ, последний корректный снимок остаётся без изменений. Блокировки не обходятся.
 
 ## Переменные окружения
 
-`INGEST_TOKEN`, `HUEVO_BASE_URL` (`https://huevo.su` или `https://huevo.departament.site`), `HUEVO_COOKIES_JSON` / `HUEVO_COOKIES`, `HUEVO_DB`, `CRAWL_DELAY`, `MAX_PAGES`, `CRAWL_BLOCK_COOLDOWN_HOURS`, `AUTO_REFRESH_HOURS`, `DIAG_COOLDOWN_SECONDS`, `LOG_LEVEL`, `HUEVO_CLIENT_ID`, `HUEVO_CLIENT_SECRET`. Шаблон — `.env.example`. Секреты не коммитятся и не пишутся в логи.
+`INGEST_TOKEN`, `HUEVO_BASE_URL`, `HUEVO_COOKIES_JSON` / `HUEVO_COOKIES`, `HUEVO_DB`, `CRAWL_DELAY`, `MAX_PAGES`, `CRAWL_BLOCK_COOLDOWN_HOURS`, `AUTO_REFRESH_HOURS`, `DIAG_COOLDOWN_SECONDS`, `LOG_LEVEL`, `HUEVO_CLIENT_ID`, `HUEVO_CLIENT_SECRET` относятся к дополнительному локальному FastAPI/Docker-режиму. **Статическому Cloudflare Worker они не нужны**. Для публикации нужны только `CLOUDFLARE_API_TOKEN` и `CLOUDFLARE_ACCOUNT_ID` в GitHub Secrets.
 
 ## API
 
