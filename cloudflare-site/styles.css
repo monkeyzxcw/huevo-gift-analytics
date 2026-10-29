@@ -54,7 +54,7 @@ dialog{max-width:min(720px,94vw);width:100%;border:1px solid var(--line);border-
 .kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:12px 0}.kv div{background:#171c2a;border:1px solid var(--line);border-radius:10px;padding:10px}.kv dt{color:var(--muted);font-size:11px}.kv dd{margin:4px 0 0;font-weight:700;font-size:13px}.kv{}
 .dl-top{display:flex;gap:14px;align-items:center}.dl-top img,.dl-top .thumb{height:72px;width:72px;border-radius:14px;flex:none}
 .hist{width:100%;border-collapse:collapse;min-width:0;margin-top:8px}.hist td,.hist th{padding:6px 8px;font-size:12px;border-top:1px solid #252b3d}
-.hide{display:none!important}
+.hide{display:none!important}.view-hidden{display:none!important}
 @media(max-width:900px){.grid2{grid-template-columns:1fr}.hero{align-items:start;flex-direction:column}}
 @media(max-width:520px){.wrap{padding:16px 10px 30px}.panel{padding:13px}.f.num{width:calc(50% - 5px)}.hbar{grid-template-columns:90px 1fr auto}.freshness{flex-direction:column;gap:10px}}
 
