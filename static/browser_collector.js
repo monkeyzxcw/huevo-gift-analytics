@@ -18,8 +18,7 @@
     try {
       const x = new URL(u);
       const local = x.protocol === 'http:' && (x.hostname === 'localhost' || x.hostname === '127.0.0.1');
-      const https = x.protocol === 'https:' && x.hostname !== 'huevo-gift-analytics.monkeyzxcw.workers.dev';
-      return (local || https) && !x.username && !x.password && x.pathname === '/' ? x.origin : '';
+      return local && !x.username && !x.password && x.pathname === '/' ? x.origin : '';
     } catch (_) { return ''; }
   };
   const dashboard = dashboardOk(opts.dashboard || DEFAULT_DASHBOARD);
