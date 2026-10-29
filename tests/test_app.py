@@ -19,6 +19,15 @@ AUTH = {"Authorization": "Bearer test-token-not-for-production"}
 
 
 class IngestApiTests(unittest.TestCase):
+    def setUp(self):
+        # The test module shares one temporary SQLite file. Clear rows between
+        # cases so a full-crawl test never deactivates fixtures from another test.
+        with app_module.db() as c:
+            c.execute("DELETE FROM lots")
+            c.execute("DELETE FROM price_history")
+            c.execute("DELETE FROM market_snapshots")
+            c.execute("DELETE FROM support_payments")
+
     @classmethod
     def setUpClass(cls):
         cls.client = TestClient(app_module.app)
