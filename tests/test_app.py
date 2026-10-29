@@ -88,7 +88,7 @@ class IngestApiTests(unittest.TestCase):
         self.assertEqual(cookies[0]["value"], "example-only")
 
     def test_proxy_check_requires_vless_configuration(self):
-        with patch("app_module.proxy_status", return_value={"configured": False, "running": False}):
+        with patch("app.proxy_status", return_value={"configured": False, "running": False}):
             response = self.client.post("/api/proxy-check")
         self.assertEqual(response.status_code, 503)
         self.assertIn("VLESS_URL", response.json()["detail"])
