@@ -5,12 +5,14 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from bs4 import BeautifulSoup
-from analytics import market_summary, find_deals
+import urllib.request, urllib.error
+from analytics import market_summary, find_deals, best_value
+import support
 from huevo_probe import (looks_like_login_page, access_block_status, classify_page,
                          classify_network_error, next_page_is_new, VERDICT_HINTS)
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 ALLOWED_HUEVO_HOSTS = ("huevo.su", "huevo.departament.site")
@@ -115,6 +117,9 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT, observed_at TEXT NOT NULL, source TEXT,
             active_lots INTEGER, priced INTEGER, min_price REAL, max_price REAL,
             avg_price REAL, median_price REAL)""")
+        c.execute("""CREATE TABLE IF NOT EXISTS support_payments(
+            intent_id TEXT PRIMARY KEY, user_id INTEGER, amount INTEGER, test INTEGER,
+            status TEXT, error TEXT, created_at TEXT, updated_at TEXT)""")
         c.execute("CREATE INDEX IF NOT EXISTS idx_snapshots_date ON market_snapshots(observed_at)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_history_lot_date ON price_history(lot_id, observed_at)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_lots_active_price ON lots(active, price)")
@@ -756,7 +761,7 @@ def stats():
 @app.get("/api/lots")
 def lots(q: str = "", sort: str = "price", limit: int = 500):
     # Keep lots without a parsed price at the end, not ahead of priced offers.
-    allowed = {"price":"price IS NULL ASC, price ASC", "price_desc":"price IS NULL ASC, price DESC", "title":"title COLLATE NOCASE ASC", "recent":"last_seen DESC"}
+    allowed = {"price":"price IS NULL ASC, price ASC", "price_desc":"price IS NULL ASC, price DESC", "title":"title COLLATE NOCASE ASC", "recent":"last_seen DESC", "new":"first_seen DESC, CAST(lot_id AS INTEGER) DESC"}
     order = allowed.get(sort, allowed["price"])
     limit = max(1, min(limit, 2000))
     with db() as c:
@@ -800,5 +805,164 @@ def analytics_price_history(days: int = 7, lot_id: str = ""):
 def history(lot_id: str):
     with db() as c:
         return [dict(r) for r in c.execute("SELECT price,status,observed_at FROM price_history WHERE lot_id=? ORDER BY observed_at", (lot_id,))]
+
+
+# ---------------------------------------------------------------- highlights
+
+def _public_lot(row):
+    return {k: row[k] for k in ("lot_id", "title", "serial", "rarity", "price", "status", "image_url", "lot_url", "first_seen", "last_seen")}
+
+@app.get("/api/highlights")
+def highlights():
+    """Two headline cards: newest observed lot and best value versus the market reference."""
+    with db() as c:
+        latest = c.execute("""SELECT * FROM lots WHERE active=1
+                              ORDER BY first_seen DESC, CAST(lot_id AS INTEGER) DESC LIMIT 1""").fetchone()
+        runs = c.execute("SELECT COUNT(*) FROM market_snapshots").fetchone()[0]
+        active = [dict(r) for r in c.execute("SELECT * FROM lots WHERE active=1 AND price IS NOT NULL")]
+        gone = [dict(r) for r in c.execute("SELECT title,price FROM lots WHERE active=0 AND price IS NOT NULL")]
+    best = best_value(active, gone, limit=3)
+    return {
+        "latest": _public_lot(latest) if latest else None,
+        "latest_note": ("Время выставления сайт не отдаёт: показан лот, замеченный сборщиком последним "
+                        "(при равенстве — с наибольшим ID). Точность растёт с каждым проходом."
+                        + ("" if runs >= 2 else " Пока был один проход, все лоты замечены одновременно.")),
+        "best": best[0] if best else None,
+        "runner_up": best[1:] if len(best) > 1 else [],
+        "best_note": ("Эталон — медиана последних цен лотов того же названия, ушедших с рынка (вероятно проданы или сняты: "
+                      "сайт не раскрывает причину). Если таких меньше трёх, берётся медиана активных предложений; "
+                      "основа указана в карточке. Это не цены завершённых сделок."),
+    }
+
+@app.get("/api/drops")
+def price_drops(limit: int = 12):
+    """Active lots whose latest recorded price is lower than the previous recorded one."""
+    limit = max(1, min(limit, 100))
+    with db() as c:
+        rows = c.execute("""
+            WITH ranked AS (
+              SELECT lot_id, price, observed_at,
+                     ROW_NUMBER() OVER (PARTITION BY lot_id ORDER BY observed_at DESC, id DESC) rn
+              FROM price_history WHERE price IS NOT NULL)
+            SELECT l.lot_id, l.title, l.price, l.lot_url, l.image_url, p.price AS previous_price, r.observed_at AS changed_at
+            FROM ranked r JOIN ranked p ON p.lot_id=r.lot_id AND p.rn=2
+            JOIN lots l ON l.lot_id=r.lot_id
+            WHERE r.rn=1 AND l.active=1 AND r.price < p.price
+            ORDER BY (p.price - r.price) * 1.0 / p.price DESC LIMIT ?""", (limit,)).fetchall()
+    return [{**dict(r), "drop_pct": round((1 - r["price"] / r["previous_price"]) * 100, 1)} for r in rows]
+
+# ---------------------------------------------------------------- support the author (huEVO Apps payments)
+# Flow from https://huevo-docs.lunnaholy.workers.dev/apps/monetization/payments/ :
+# server creates intent -> frontend huevo.confirmPayment(intent_id) -> server verifies status
+# via GET /payments/{id} or a signed callback. Nothing is granted from the frontend result.
+
+HUEVO_CLIENT_ID = os.getenv("HUEVO_CLIENT_ID", "").strip()
+HUEVO_CLIENT_SECRET = os.getenv("HUEVO_CLIENT_SECRET", "").strip()
+SUPPORT_AMOUNTS = [5, 10, 50, 100]
+
+def support_enabled():
+    return bool(HUEVO_CLIENT_ID and HUEVO_CLIENT_SECRET)
+
+def huevo_api(method, path, body=None):
+    """Documented Apps API call (Basic auth). Returns (http_status, json_dict)."""
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(
+        support.API_BASE + path, data=data, method=method,
+        headers={"Authorization": support.basic_auth_header(HUEVO_CLIENT_ID, HUEVO_CLIENT_SECRET),
+                 "Content-Type": "application/json", "Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.status, json.loads(resp.read() or b"{}")
+    except urllib.error.HTTPError as exc:
+        try:
+            return exc.code, json.loads(exc.read() or b"{}")
+        except ValueError:
+            return exc.code, {}
+    except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+        log.warning("huevo api %s %s failed: %s", method, path, type(exc).__name__)
+        return 0, {}
+
+def _store_payment(intent_id, status, error=None):
+    """Idempotent status update; a final status is never overwritten (docs: it cannot change)."""
+    now = datetime.now(timezone.utc).isoformat()
+    with db() as c:
+        row = c.execute("SELECT status FROM support_payments WHERE intent_id=?", (intent_id,)).fetchone()
+        if not row or row["status"] in support.FINAL_STATUSES:
+            return False
+        c.execute("UPDATE support_payments SET status=?, error=?, updated_at=? WHERE intent_id=?",
+                  (status, error, now, intent_id))
+    return True
+
+@app.get("/api/support/config")
+def support_config():
+    return {"enabled": support_enabled(), "amounts": SUPPORT_AMOUNTS, "sdk_url": "https://huevo.su/static/js/huevo-apps-v1.js",
+            "origins": list(ALLOWED_HUEVO_HOSTS)}
+
+@app.post("/api/support/intent")
+async def support_intent(request: Request):
+    if not support_enabled():
+        raise HTTPException(status_code=503, detail="Приём поддержки не настроен (нужны HUEVO_CLIENT_ID и HUEVO_CLIENT_SECRET).")
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Ожидается JSON")
+    amount = support.clean_amount(payload.get("amount") if isinstance(payload, dict) else None)
+    if amount is None:
+        raise HTTPException(status_code=400, detail=f"Сумма — целое число от {support.MIN_AMOUNT} до {support.MAX_AMOUNT}.")
+    launch = support.verify_launch(str(payload.get("launch_query", "")), HUEVO_CLIENT_SECRET)
+    if not launch or not str(launch.get("hu_user_id", "")).isdigit():
+        raise HTTPException(status_code=401, detail="Откройте приложение внутри huEVO: подпись запуска не подтверждена.")
+    test = support.is_test_session(launch)
+    body = support.payment_body(launch["hu_user_id"], amount, test)
+    status, data = huevo_api("POST", "/payments", body)
+    if status != 200 or not data.get("ok") or not data.get("intent_id"):
+        code = (data.get("error") or {}).get("code") if isinstance(data.get("error"), dict) else None
+        log.warning("create intent failed http=%s code=%s", status, code)
+        raise HTTPException(status_code=502, detail=f"huEVO не создал платёж ({code or 'нет ответа'}).")
+    now = datetime.now(timezone.utc).isoformat()
+    with db() as c:
+        c.execute("INSERT OR IGNORE INTO support_payments(intent_id,user_id,amount,test,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
+                  (data["intent_id"], int(launch["hu_user_id"]), amount, int(test), "pending", now, now))
+    return {"ok": True, "intent_id": data["intent_id"], "amount": amount, "test": test}
+
+@app.get("/api/support/status/{intent_id}")
+def support_status(intent_id: str):
+    if not re.fullmatch(r"pi_[A-Za-z0-9_-]{1,80}", intent_id):
+        raise HTTPException(status_code=400, detail="Некорректный intent_id")
+    with db() as c:
+        row = c.execute("SELECT * FROM support_payments WHERE intent_id=?", (intent_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Платёж не найден")
+    status = row["status"]
+    if status == "pending" and support_enabled():
+        http, data = huevo_api("GET", "/payments/" + intent_id)
+        if http == 200 and data.get("status") in ("pending", "succeeded", "failed", "cancelled", "expired"):
+            status = data["status"]
+            if status != "pending":
+                _store_payment(intent_id, status, data.get("error"))
+    return {"intent_id": intent_id, "status": status, "test": bool(row["test"])}
+
+@app.post("/api/support/callback")
+async def support_callback(request: Request):
+    """Signed payment callback. Any 2xx counts as delivered; duplicates are deduplicated by intent_id."""
+    raw = await request.body()
+    if len(raw) > 20_000 or not support.verify_callback(raw, request.headers.get("x-huevo-signature", ""), HUEVO_CLIENT_SECRET):
+        raise HTTPException(status_code=401, detail="bad signature")
+    try:
+        data = json.loads(raw)
+        intent_id, status = str(data["intent_id"]), str(data["status"])
+    except (ValueError, KeyError, TypeError):
+        raise HTTPException(status_code=400, detail="bad payload")
+    if status in support.FINAL_STATUSES:
+        changed = _store_payment(intent_id, status, data.get("error"))
+        log.info("support callback intent=%s status=%s test=%s applied=%s", intent_id, status, data.get("test"), changed)
+    return Response(status_code=204)
+
+@app.get("/api/support/stats")
+def support_stats():
+    """Public thank-you counter: live (non-test) successful payments only. No user data."""
+    with db() as c:
+        row = c.execute("SELECT COUNT(*) n, COALESCE(SUM(amount),0) total FROM support_payments WHERE status='succeeded' AND test=0").fetchone()
+    return {"supporters": row["n"], "total": row["total"]}
 
 app.mount("/static", StaticFiles(directory=os.path.join(APP_DIR, "static")), name="static")

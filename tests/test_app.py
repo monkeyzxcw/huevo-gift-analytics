@@ -8,6 +8,8 @@ _TEST_DIR = tempfile.TemporaryDirectory(prefix="huevo-tests-")
 os.environ["HUEVO_DB"] = os.path.join(_TEST_DIR.name, "test.sqlite3")
 os.environ["INGEST_TOKEN"] = "test-token-not-for-production"
 os.environ["HUEVO_COOKIES_JSON"] = ""
+os.environ["HUEVO_CLIENT_ID"] = "123"
+os.environ["HUEVO_CLIENT_SECRET"] = "unit-test-secret-not-real"
 
 from fastapi.testclient import TestClient
 import app as app_module
@@ -221,6 +223,62 @@ class IngestApiTests(unittest.TestCase):
         body = self.client.get("/api/deals").json()
         self.assertIn("920001", [d["lot_id"] for d in body["deals"]])
         self.assertIn("не цены завершённых продаж", body["note"])
+
+    # ---- support the author (huEVO Apps payments)
+    def _launch_query(self, mode="live", user="1001"):
+        import time, support
+        from urllib.parse import urlencode
+        p = {"hu_app_id": "123", "hu_user_id": user, "hu_mode": mode, "hu_ts": str(int(time.time()))}
+        p["hu_hash"] = support.sign_launch(p, "unit-test-secret-not-real")
+        return "?" + urlencode(p)
+
+    def test_support_intent_rejects_unsigned_launch_and_bad_amount(self):
+        r = self.client.post("/api/support/intent", json={"amount": 5, "launch_query": "?hu_user_id=1"})
+        self.assertEqual(r.status_code, 401)
+        r = self.client.post("/api/support/intent", json={"amount": 0, "launch_query": self._launch_query()})
+        self.assertEqual(r.status_code, 400)
+
+    def test_support_intent_uses_verified_user_and_test_flag(self):
+        captured = {}
+        def fake(method, path, body=None):
+            captured.update(method=method, path=path, body=body)
+            return 200, {"ok": True, "intent_id": "pi_unit1", "status": "pending"}
+        with patch("app.huevo_api", fake):
+            r = self.client.post("/api/support/intent", json={"amount": 10, "launch_query": self._launch_query(mode="test")})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(captured["body"]["user_id"], 1001)
+        self.assertIs(captured["body"]["test"], True)
+        self.assertEqual(captured["path"], "/payments")
+        self.assertEqual(r.json()["intent_id"], "pi_unit1")
+
+    def test_support_callback_requires_valid_signature_and_is_idempotent(self):
+        import hashlib, hmac, json as _json
+        with patch("app.huevo_api", lambda *a, **k: (200, {"ok": True, "intent_id": "pi_unit2", "status": "pending"})):
+            self.client.post("/api/support/intent", json={"amount": 5, "launch_query": self._launch_query()})
+        body = _json.dumps({"event": "payment", "intent_id": "pi_unit2", "status": "succeeded", "test": False}).encode()
+        key = hashlib.sha256(b"unit-test-secret-not-real").digest()
+        sig = hmac.new(key, body, hashlib.sha256).hexdigest()
+        self.assertEqual(self.client.post("/api/support/callback", content=body, headers={"X-Huevo-Signature": "0" * 64}).status_code, 401)
+        self.assertEqual(self.client.post("/api/support/callback", content=body, headers={"X-Huevo-Signature": sig}).status_code, 204)
+        failed = _json.dumps({"event": "payment", "intent_id": "pi_unit2", "status": "failed"}).encode()
+        sig2 = hmac.new(key, failed, hashlib.sha256).hexdigest()
+        self.assertEqual(self.client.post("/api/support/callback", content=failed, headers={"X-Huevo-Signature": sig2}).status_code, 204)
+        st = self.client.get("/api/support/status/pi_unit2").json()
+        self.assertEqual(st["status"], "succeeded")  # a final status never changes
+        self.assertGreaterEqual(self.client.get("/api/support/stats").json()["supporters"], 1)
+
+    def test_support_status_validates_id(self):
+        self.assertEqual(self.client.get("/api/support/status/not-an-intent").status_code, 400)
+        self.assertEqual(self.client.get("/api/support/status/pi_missing").status_code, 404)
+
+    def test_highlights_and_drops_work_on_data(self):
+        self.client.post("/api/ingest", headers=AUTH, json={"lots": [{"lot_id": "930001", "title": "HiGift", "price": 100}]})
+        self.client.post("/api/ingest", headers=AUTH, json={"lots": [{"lot_id": "930001", "title": "HiGift", "price": 80}]})
+        h = self.client.get("/api/highlights").json()
+        self.assertIsNotNone(h["latest"])
+        self.assertIn("не цены завершённых", h["best_note"])
+        drops = self.client.get("/api/drops").json()
+        self.assertIn("930001", [d["lot_id"] for d in drops])
 
     def test_diagnostics_never_exposes_ingest_token(self):
         response = self.client.get("/api/diagnostics")
