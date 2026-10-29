@@ -70,7 +70,7 @@ def load_cookie_export(raw):
             continue
         if http_only:
             line = line[len("#HttpOnly_"):]
-        parts = line.split("\\t")
+        parts = line.split("\t")
         if len(parts) != 7:
             continue
         domain, _include_subdomains, path, secure, expiry, name, value = parts
