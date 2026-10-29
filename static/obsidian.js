@@ -12,6 +12,9 @@
   }[c]));
   let refreshInFlight = false;
   let lastLots = [];
+  let marketMode = true;
+  let selectedTrendLot = "";
+  let marketTrendRequest = 0;
   async function api(path) {
     const response = await fetch(path, { headers: { Accept: "application/json" } });
     let payload = {};
@@ -119,6 +122,74 @@
         '%"></div></div></div>';
     }).join("") : '<div class="empty">Нужны несколько лотов с одинаковым названием.</div>';
   }
+  async function renderMarketTrend() {
+    const requestId = ++marketTrendRequest;
+    const svg = $("chart");
+    const periodSelect = $("marketTrendPeriod");
+    const days = Math.max(1, Math.min(90, Number(periodSelect && periodSelect.value) || 30));
+    if (!marketMode || !svg) return;
+    $("historyLabel").textContent = "Общая история · " + days + " дней";
+    $("chartNote").textContent = "Загрузка сохранённых наблюдений цены…";
+    svg.innerHTML = '<text x="350" y="95" text-anchor="middle" class="chart-label">Загрузка истории рынка…</text>';
+    try {
+      const response = await api("/api/analytics/price-history?days=" + days);
+      if (requestId !== marketTrendRequest || !marketMode) return;
+      const points = (response.points || []).filter(point =>
+        point.avg_price !== null && point.avg_price !== undefined && Number.isFinite(Number(point.avg_price))
+      );
+      if (!points.length) {
+        svg.innerHTML = '<text x="350" y="83" text-anchor="middle" class="chart-label">История рынка пока не накоплена</text>' +
+          '<text x="350" y="105" text-anchor="middle" class="chart-label">Нужно несколько сохранённых снимков цены.</text>';
+        $("chartNote").textContent = "График появится, когда сборщик сохранит изменения цены.";
+        return;
+      }
+      const values = points.map(point => Number(point.avg_price));
+      const low = Math.min(...values), high = Math.max(...values);
+      const span = high - low || Math.max(1, Math.abs(high) * .04);
+      const width = 700, height = 190, pad = 25;
+      const coords = points.map((point, index) => ({
+        x: pad + index * (width - pad * 2) / Math.max(1, points.length - 1),
+        y: height - pad - (Number(point.avg_price) - low) / span * (height - pad * 2),
+        date: point.day,
+        value: Number(point.avg_price),
+        snapshots: point.snapshots
+      }));
+      const line = coords.map(point => point.x.toFixed(2) + "," + point.y.toFixed(2)).join(" ");
+      const area = pad + "," + (height - pad) + " " + line + " " + (width - pad) + "," + (height - pad);
+      const grid = [0,.25,.5,.75,1].map(t =>
+        '<line x1="' + pad + '" y1="' + (pad + t * (height - pad * 2)) +
+        '" x2="' + (width - pad) + '" y2="' + (pad + t * (height - pad * 2)) +
+        '" stroke="var(--line)" stroke-dasharray="4 5"/>'
+      ).join("");
+      const short = n => Math.abs(n) >= 1000000
+        ? (n / 1000000).toLocaleString("ru-RU",{maximumFractionDigits:1}) + "м"
+        : Math.abs(n) >= 1000
+          ? (n / 1000).toLocaleString("ru-RU",{maximumFractionDigits:1}) + "к"
+          : format(n);
+      const labels = '<g class="chart-label"><text x="1" y="' + (pad + 3) + '">' + esc(short(high)) +
+        '</text><text x="1" y="' + (height - pad) + '">' + esc(short(low)) +
+        '</text><text x="' + pad + '" y="' + (height - 3) + '">' + esc(coords[0].date) +
+        '</text><text x="' + (width - pad) + '" y="' + (height - 3) + '" text-anchor="end">' +
+        esc(coords[coords.length - 1].date) + "</text></g>";
+      const dots = coords.map(point =>
+        '<circle cx="' + point.x + '" cy="' + point.y + '" r="3.2" fill="var(--gold)" stroke="var(--panel)" stroke-width="1.5">' +
+        "<title>" + esc(point.date) + " · " + esc(format(point.value)) + " монет · " +
+        esc(point.snapshots) + " снимков</title></circle>"
+      ).join("");
+      svg.innerHTML = '<defs><linearGradient id="marketTrendFill" x1="0" y1="0" x2="0" y2="1">' +
+        '<stop offset="0%" stop-color="var(--gold)" stop-opacity=".24"/>' +
+        '<stop offset="100%" stop-color="var(--gold)" stop-opacity="0"/></linearGradient></defs>' +
+        grid + labels + '<polygon points="' + area + '" fill="url(#marketTrendFill)"/>' +
+        '<polyline points="' + line + '" fill="none" stroke="var(--gold)" stroke-width="2.8" ' +
+        'stroke-linejoin="round" stroke-linecap="round"/>' + dots;
+      $("chartNote").textContent = coords.length + " дней с наблюдениями · среднее по сохранённым предложениям, не завершённые сделки.";
+    } catch (error) {
+      if (requestId === marketTrendRequest && marketMode) {
+        svg.innerHTML = '<text x="350" y="95" text-anchor="middle" class="chart-label">Не удалось загрузить историю рынка</text>';
+        $("chartNote").textContent = error.message;
+      }
+    }
+  }
   async function refresh() {
     if (refreshInFlight) return;
     refreshInFlight = true;
@@ -138,6 +209,7 @@
       renderPriceBins(lots);
       renderRarity(lots);
       renderDeviations(lots);
+      if (marketMode) renderMarketTrend();
       const imported = Number(diagnostic.lots_in_database || 0);
       const history = Number(diagnostic.price_history_rows || 0);
       if (imported) {
@@ -152,8 +224,26 @@
       refreshInFlight = false;
     }
   }
-  window.HuevoObsidianAnalytics = { refresh };
+  window.HuevoObsidianAnalytics = { refresh, get marketMode() { return marketMode; } };
   document.addEventListener("DOMContentLoaded", refresh);
+  const trendButton = $("marketTrendButton");
+  if (trendButton) trendButton.addEventListener("click", () => {
+    marketMode = true;
+    selectedTrendLot = "";
+    try { selectedId = null; } catch (_) {}
+    renderMarketTrend();
+  });
+  const trendPeriod = $("marketTrendPeriod");
+  if (trendPeriod) trendPeriod.addEventListener("change", () => {
+    if (marketMode) renderMarketTrend();
+  });
+  document.addEventListener("click", event => {
+    const button = event.target && event.target.closest ? event.target.closest("[data-history]") : null;
+    if (button) {
+      selectedTrendLot = String(button.getAttribute("data-history") || "");
+      marketMode = false;
+    }
+  });
   const refreshButton = document.getElementById("refresh");
   if (refreshButton) refreshButton.addEventListener("click", () => setTimeout(refresh, 1200));
   window.addEventListener("focus", refresh);
