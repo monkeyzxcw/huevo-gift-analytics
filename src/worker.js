@@ -304,6 +304,7 @@ async function loadPublishedSnapshot(request, env) {
     last_poll_at: live ? live.last_poll_at : null,
     item_count: live ? live.item_count : 0,
     age_seconds: liveAge,
+    fingerprint: live ? live.fingerprint : null,
     message: !liveEnabled ? "Cloudflare D1 не подключена." :
       !live ? "Ожидается первый локальный опрос Huevo." :
       live.fresh ? "Первая страница Huevo обновляется в реальном времени." :
