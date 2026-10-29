@@ -5,6 +5,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from bs4 import BeautifulSoup
+from vless_proxy import ensure_vless_proxy, proxy_status
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
@@ -224,6 +225,10 @@ def crawl():
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
         options.add_argument("--window-size=1440,1000")
+        proxy_url = ensure_vless_proxy()
+        if proxy_url:
+            options.add_argument(f"--proxy-server={proxy_url}")
+            options.add_argument("--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1")
         browser = webdriver.Chrome(options=options)
         try:
             if not HUEVO_COOKIES_EXPORT:
@@ -360,6 +365,7 @@ def diagnostics():
         "huevo_cookies_configured": bool(HUEVO_COOKIES_EXPORT),
         "huevo_base_url": BASE_URL,
         "cookie_export_format": "JSON or Netscape" if HUEVO_COOKIES_EXPORT else None,
+        "vless_proxy": proxy_status(),
         "lots_in_database": lots_count,
         "price_history_rows": history_count,
         "collector": crawl_state,
