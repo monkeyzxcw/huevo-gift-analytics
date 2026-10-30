@@ -271,7 +271,7 @@ test("gift instance metadata and history feed render in the detail and catalog c
   const detail = await page.textContent("#dBody");
   assert.match(detail, /№ 4/);
   assert.match(detail, /111/);
-  assert.match(detail, /5555/);
+  assert.ok(detail.replace(/\\s/g, "").includes("5555"), "grouped drop price must still be checked");
   assert.match(detail, /Продан в Маркете/);
   assert.match(detail, /teeth/);
   assert.match(detail, /не содержит сумму каждой сделки/);
