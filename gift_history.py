@@ -69,7 +69,7 @@ def history_event_record(lot, event, observed_at):
         "lot_id": str(lot.get("lot_id") or ""),
         "gift_id": gift_id,
         "serial": serial_label,
-        "price": lot.get("price"),
+        "last_listing_price": lot.get("price"),
         "from_user": str(event.get("from_user") or "")[:80],
         "to_user": str(event.get("to_user") or "")[:80],
         "time_raw": str(event.get("time_raw") or "")[:80],
