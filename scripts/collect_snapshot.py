@@ -40,11 +40,11 @@ def iso(dt):
 
 
 def retention_hours():
-    """How long to remember gone lots and price/market history (default 72 h, 1..720)."""
+    """How long to remember gone lots and price/market history (default 30 days, 1..720)."""
     try:
-        return max(1, min(int(os.getenv("HUEVO_RETENTION_HOURS", "72")), 720))
+        return max(1, min(int(os.getenv("HUEVO_RETENTION_HOURS", "720")), 720))
     except ValueError:
-        return 72
+        return 720
 
 
 def parse_ts(value):
@@ -218,7 +218,7 @@ def main(argv=None):
         help="Use the saved local Chrome profile headlessly for scheduled runs; no cookie export required.",
     )
     parser.add_argument("--detail-limit", type=int,
-                        default=max(0, min(int(os.getenv("HUEVO_DETAIL_LIMIT", "12")), 50)),
+                        default=max(0, min(int(os.getenv("HUEVO_DETAIL_LIMIT", "8")), 50)),
                         help="Maximum individual gift pages inspected after a complete catalog pass (0 disables).")
     parser.add_argument(
         "--with-sales", action="store_true",
@@ -327,7 +327,14 @@ def main(argv=None):
             print(f"Snapshot not updated: {status}: {message}", file=sys.stderr)
             return 2
 
-        # A complete catalog pass clears prior cooldown, unless the optional detail crawl itself hit a block.\n        if details_result.get("status") == "blocked":\n            detail_pause = max(cooldown_hours * 3600, 0)\n            save_state({"blocked_until": iso(now_utc() + timedelta(seconds=detail_pause)),\n                        "http_status": 429, "checked_at": iso(now_utc()), "source": "gift_detail"})\n        else:\n            save_state({})
+        # A complete catalog pass clears prior cooldown, unless the optional detail crawl itself hit a block.
+        if details_result.get("status") == "blocked":
+            detail_pause = max(cooldown_hours * 3600, int(details_result.get("retry_after") or 0))
+            save_state({"blocked_until": iso(now_utc() + timedelta(seconds=detail_pause)),
+                        "http_status": details_result.get("http_status"), "checked_at": iso(now_utc()),
+                        "source": "gift_detail"})
+        else:
+            save_state({})
         observed_at = utcnow()
         current_rows = store.active_lots(priced_only=False)
         current_prices = [r["price"] for r in current_rows
