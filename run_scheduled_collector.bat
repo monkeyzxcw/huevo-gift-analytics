@@ -26,8 +26,15 @@ REM Sync source and any previous local commit before collecting.
 git pull --rebase --autostash origin main
 if errorlevel 1 goto failed
 
+REM Read a small recent slice of completed sales first. This stores only aggregate-safe data locally.
+REM A failure here is non-fatal; the catalog collector will still enforce any shared Huevo cooldown.
+".venv\Scripts\python.exe" scripts\collect_history.py --local-profile --pages 3
+set HISTORY_RC=%ERRORLEVEL%
+if not "%HISTORY_RC%"=="0" echo Sales history pass skipped or failed (exit %HISTORY_RC%); continuing to catalog check.
+
 REM Reuse the dedicated local Chrome profile; cookies never leave this PC.
-".venv\Scripts\python.exe" scripts\collect_snapshot.py --local-profile
+REM Inspect at most 8 uncached lot detail pages per run; cached metadata is refreshed every 60 days.
+".venv\Scripts\python.exe" scripts\collect_snapshot.py --local-profile --with-sales
 set COLLECT_RC=%ERRORLEVEL%
 if "%COLLECT_RC%"=="3" (
   echo Collection skipped: Huevo access is paused after an earlier limit. No request was sent.
