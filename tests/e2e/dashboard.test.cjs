@@ -347,3 +347,36 @@ test("appearance settings switch themes, mascot and motion and persist locally",
   assert.deepEqual(problems, []);
   await browser.close();
 });
+
+
+test("AMNYAM atmosphere: daily picks wrap, seasonal themes persist, and mascot celebrates confirmed purchases", async () => {
+  const { browser, page, problems } = await open(serve(dataV2()), { width: 390, height: 844 });
+  await page.waitForSelector("#content:not(.hide)");
+  await page.waitForTimeout(760);
+  const cards = page.locator("#dayPicks .day-pick-card");
+  assert.equal(await cards.count(), 3);
+  const layout = await cards.first().evaluate((el) => {
+    const rect = el.getBoundingClientRect();
+    const title = el.querySelector(".t").getBoundingClientRect();
+    const actions = el.querySelector(".deal-actions").getBoundingClientRect();
+    return { width: rect.width, titleRight: title.right, cardRight: rect.right, actionsRight: actions.right };
+  });
+  assert.ok(layout.width > 0 && layout.titleRight <= layout.cardRight + 1, "long title stays inside its card");
+  assert.ok(layout.actionsRight <= layout.cardRight + 1, "action controls stay inside their card");
+  const heroTitle = await page.locator("#heroTitle").boundingBox();
+  await page.mouse.move(heroTitle.x + heroTitle.width / 2, heroTitle.y + heroTitle.height / 2);
+  assert.ok((await page.locator("body").getAttribute("class") || "").includes("cursor-glow-active"), "cursor glow appears over decoration");
+  const buyButton = await page.locator("#dayPicks .purchase-confirm").first().boundingBox();
+  await page.mouse.move(buyButton.x + buyButton.width / 2, buyButton.y + buyButton.height / 2);
+  assert.ok(!(await page.locator("body").getAttribute("class") || "").includes("cursor-glow-active"), "cursor glow stays off interactive purchase controls");
+  await page.selectOption("#seasonTheme", "halloween");
+  assert.equal(await page.locator("body").getAttribute("data-season"), "halloween");
+  await page.reload();
+  await page.waitForSelector("#content:not(.hide)");
+  assert.equal(await page.locator("body").getAttribute("data-season"), "halloween", "season theme persists");
+  await page.locator("#dayPicks .purchase-confirm").first().click();
+  assert.equal(await page.locator("#amnyamMascot").getAttribute("data-mood"), "happy");
+  assert.match(await page.textContent("#mascotSpeech"), /Лот куплен/);
+  assert.deepEqual(problems, []);
+  await browser.close();
+});
