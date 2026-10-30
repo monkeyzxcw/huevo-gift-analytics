@@ -230,7 +230,7 @@
     applySeasonTheme(savedTheme, false);
     $("seasonTheme").addEventListener("change", () => applySeasonTheme($("seasonTheme").value, true));
 
-    const decorative = ".top .brand,.hero,.overview-pick,.day-picks,.deal-hero";
+    const decorative = ".top .brand,.hero,.day-picks > .panel-head,.overview-pick .pick-stamp,.deal-hero .deal-hero-stamp";
     document.addEventListener("pointermove", (event) => {
       const overDecoration = event.target && event.target.closest && event.target.closest(decorative);
       if (!overDecoration) { document.body.classList.remove("cursor-glow-active"); return; }
