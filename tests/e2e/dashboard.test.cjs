@@ -95,7 +95,7 @@ async function open(handler, viewport = { width: 1280, height: 900 }, options = 
     if (!file.startsWith(SITE) || !fs.existsSync(file)) return route.fulfill({ status: 404, body: "" });
     return route.fulfill({ status: 200, headers: { "content-type": TYPES[path.extname(file)] || "text/plain", "content-security-policy": CSP }, body: fs.readFileSync(file) });
   });
-  const destination = options.path ? String(options.path).replace(/^\\/+/, "") : "";
+  const destination = options.path ? String(options.path).replace(/^[/]+/, "") : "";
   await page.goto("http://site.test/" + destination + (options.query || ""));
   return { browser, page, problems };
 }
