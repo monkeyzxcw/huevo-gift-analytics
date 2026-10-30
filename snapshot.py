@@ -10,10 +10,10 @@ import os
 import statistics
 from pathlib import Path
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 LOT_REQUIRED = ("lot_id", "title", "price")
 TOP_LEVEL_LISTS = ("lots", "gone_lots", "snapshots", "price_bins", "deals", "drops", "runner_up",
-                   "categories", "top_expensive")
+                   "categories", "top_expensive", "catalog_events")
 MAX_DETAIL = 50
 
 
