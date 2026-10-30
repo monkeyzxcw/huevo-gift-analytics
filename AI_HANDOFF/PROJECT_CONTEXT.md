@@ -29,7 +29,7 @@ ZIP v5: HuevoDualScan_app.py, start_dual_scan.bat, README_RU.txt, requirements.t
 PR #38: https://github.com/monkeyzxcw/huevo-gift-analytics/pull/38
 Ветка: audit/cloudflare-runtime-cleanup. В ней исправлены сетевые тайм-ауты, обработка malformed snapshot, валидация целевых цен на frontend и Worker, сериализация profile saves с backoff, auth duplicate guard, payment busy/timeout state и отображение target validation внутри detail dialog. Также удалена старая FastAPI/SQLite/Docker/cookie collection ветка.
 
-Не заявлять deploy новой версии, пока PR не merged и Cloudflare deploy workflow после merge не завершился success.
+Deploy новой версии после merge подтверждён GitHub Actions run 41118429757. Прямой запрос к /api/health из среды разработки не подтвердился из-за DNS-ограничения окружения; это не отменяет успешный deploy workflow.
 
 ## Остаточные неизвестные
 - Live Huevo login/DOM and page selectors in both Chrome windows.

@@ -14,8 +14,11 @@
 - Ошибка target price отображается в открытой карточке, не под modal overlay.
 - Устаревший FastAPI/SQLite/Docker runtime, старый static frontend, headless cookie collector и связанные тесты удалены.
 
-## CI evidence
-Успешный CI: https://github.com/monkeyzxcw/huevo-gift-analytics/actions/runs/41117341599 (коммит a4555da3ba812462a314197bccb49d3e251694eb). Snapshot validation и browser/Worker tests прошли. При каждом новом коммите перепроверяй самый свежий run.
+## CI / deploy evidence
+- PR #38 merged в main: https://github.com/monkeyzxcw/huevo-gift-analytics/pull/38; squash commit d8ba0799e63371689a745f84a02b6ca6f8133267.
+- CI на main: https://github.com/monkeyzxcw/huevo-gift-analytics/actions/runs/41118429759 — success; snapshot job success, browser/Worker suite 32/32 passed.
+- Cloudflare deploy: https://github.com/monkeyzxcw/huevo-gift-analytics/actions/runs/41118429757 — success; D1 migrations и Wrangler deploy completed.
+- При каждом новом коммите перепроверяй самый свежий run. Успешный deploy workflow не равен проверке живой Huevo-сессии.
 Windows ZIP HuevoDualScan v5: py_compile -Werror и 8 offline tests прошли. Live Huevo не запускался.
 
 ## Остаточные риски
