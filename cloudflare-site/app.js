@@ -129,7 +129,32 @@
   let supportConfig = { enabled: false, amounts: [5000, 10000, 25000, 50000, 100000] };
   let supportSdkReady = false;
   let supportInitRunning = false;
-  let supportStatusIntentId = null;
+  const SUPPORT_INTENT_STORAGE_PREFIX = "amnyam.pending-support.v1";
+  function supportIntentStorageKey() {
+    const userId = new URLSearchParams(location.search).get("hu_user_id") || "";
+    return SUPPORT_INTENT_STORAGE_PREFIX + "." + (/^\d{1,20}$/.test(userId) ? userId : "guest");
+  }
+  function readPendingSupportIntent() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(supportIntentStorageKey()) || "null");
+      if (!raw || typeof raw.intent_id !== "string" || !/^pi_[A-Za-z0-9_-]{1,80}$/.test(raw.intent_id) ||
+          !Number.isFinite(raw.saved_at) || Date.now() - raw.saved_at > 7 * 24 * 60 * 60 * 1000) {
+        localStorage.removeItem(supportIntentStorageKey());
+        return null;
+      }
+      return raw.intent_id;
+    } catch (_) { return null; }
+  }
+  function persistPendingSupportIntent(intentId) {
+    supportStatusIntentId = intentId || null;
+    try {
+      if (supportStatusIntentId) localStorage.setItem(supportIntentStorageKey(), JSON.stringify({
+        intent_id: supportStatusIntentId, saved_at: Date.now()
+      }));
+      else localStorage.removeItem(supportIntentStorageKey());
+    } catch (_) {}
+  }
+  let supportStatusIntentId = readPendingSupportIntent();
   let supportStatusLookupRunning = false;
 
   // ---------- load & normalise (tolerates partial / old JSON) ----------
@@ -1401,7 +1426,7 @@
       );
       const status = String(result.status || "pending");
       if (status === "succeeded") {
-        supportStatusIntentId = null;
+        persistPendingSupportIntent(null);
         supportMessage(result.test
           ? "Тестовый платёж подтверждён. Спасибо!"
           : "Поддержка подтверждена сервером. Спасибо!", "good");
@@ -1413,7 +1438,7 @@
       } else if (status === "pending") {
         supportMessage("Платёж уже создан и пока ожидает подтверждения. Не создавай повторный платёж. ID: " + intentId, "pending");
       } else {
-        supportStatusIntentId = null;
+        persistPendingSupportIntent(null);
         supportMessage("Платёж завершился со статусом: " + status + ".", "error");
       }
     } catch (_) {
@@ -1489,6 +1514,9 @@
         $("supportHint").textContent = "Не удалось подключить SDK huEVO. Открой панель через huEVO и попробуй ещё раз.";
       }
     }
+    if (supportStatusIntentId) {
+      supportMessage("Найден ранее созданный платёж без окончательного статуса. Не создавай новый; проверь текущий. ID: " + supportStatusIntentId, "pending");
+    }
     supportInitRunning = false;
   }
 
@@ -1518,7 +1546,7 @@
         body: JSON.stringify({ amount: numericAmount, launch_query: location.search })
       });
       if (!intent.intent_id) throw new Error("Сервер не вернул ID платёжного запроса.");
-      supportStatusIntentId = String(intent.intent_id);
+      persistPendingSupportIntent(String(intent.intent_id));
       supportMessage("Платёж создан. Подтверди его в официальном окне huEVO" + (intent.test ? " (тестовый режим)." : "."));
       let confirmationTimedOut = false;
       try {
@@ -1556,7 +1584,7 @@
       }
 
       if (status === "succeeded") {
-        supportStatusIntentId = null;
+        persistPendingSupportIntent(null);
         supportMessage(intent.test ? "Тестовый платёж подтверждён. Спасибо!" : "Поддержка подтверждена сервером. Спасибо!", "good");
         try {
           const stats = await requestSupportApi("./api/support/stats", {}, 8000);
@@ -1571,7 +1599,7 @@
             : "Платёж всё ещё ожидает подтверждения.";
         supportMessage(reason + " Платёж уже создан; не создавай повторный. Проверь статус кнопкой ниже. ID: " + supportStatusIntentId, "pending");
       } else {
-        supportStatusIntentId = null;
+        persistPendingSupportIntent(null);
         supportMessage("Платёж завершился со статусом: " + status + ".", "error");
       }
     } catch (error) {
