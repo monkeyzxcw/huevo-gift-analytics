@@ -907,7 +907,7 @@
 
   function normaliseSaleTitle(value) {
     return String(value || "").trim().toLocaleLowerCase("ru")
-      .replace(/\s*#\s*\\d+.*$/, "").replace(/\s+/g, " ").trim();
+      .replace(/\s*#\s*\d+.*$/, "").replace(/\s+/g, " ").trim();
   }
 
   function salesProfileForGift(lot) {
