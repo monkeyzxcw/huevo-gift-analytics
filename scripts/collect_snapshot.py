@@ -289,10 +289,17 @@ def main(argv=None):
                     str(row.get("lot_id")): row for row in (previous.get("lots") or [])
                     if row.get("lot_id") is not None
                 }
-                details_result = run_gift_detail_crawl(
-                    browser, config, store.active_lots(priced_only=False), old_detail_index,
-                    LOG, limit=args.detail_limit, max_age_days=60,
-                )
+                try:
+                    details_result = run_gift_detail_crawl(
+                        browser, config, store.active_lots(priced_only=False), old_detail_index,
+                        LOG, limit=args.detail_limit, max_age_days=60,
+                    )
+                except Exception as detail_error:
+                    # Detail parsing is enrichment only: never discard a complete catalog snapshot
+                    # because one optional lot page changed its markup or failed to render.
+                    LOG.warning("gift detail pass skipped: %s", type(detail_error).__name__)
+                    details_result = {"details": {}, "status": "error", "pages": 0,
+                                      "message": "Дополнительный анализ карточек не удался; основной каталог сохранён."}
         except Exception as exc:
             LOG.error("collector failed: %s", type(exc).__name__)
             result = None
