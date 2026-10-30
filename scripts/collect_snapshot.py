@@ -509,8 +509,11 @@ def main(argv=None):
                 row["gift_instance"] = merged
             if fresh_instance and fresh_instance.get("history_found"):
                 row["history_checked_at"] = fresh_instance.get("checked_at")
-            if is_gone and fresh_instance:
+            if is_gone and fresh_instance and fresh_instance.get("history_found"):
                 row["disappearance_status"] = classify_disappearance(old_instance, merged)
+            elif is_gone and fresh_instance and not fresh_instance.get("history_found"):
+                # A page without a recognisable history block is not an empty history.
+                row["disappearance_status"] = row.get("disappearance_status") or "pending_history"
             elif is_gone and not row.get("disappearance_status"):
                 row["disappearance_status"] = "pending_history"
 
