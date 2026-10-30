@@ -500,15 +500,19 @@
   function renderChanges() {
     const raw = state.data && state.data.changes;
     const list = clear($("changeList"));
-    document.querySelectorAll(".tabs [role=tab]").forEach((t) => t.setAttribute("aria-selected", String(t.dataset.kind === state.changeKind)));
+    document.querySelectorAll(".tabs [role=tab]").forEach((t) => {
+      t.setAttribute("aria-selected", String(t.dataset.kind === state.changeKind));
+    });
 
-    // Worker responses can be older or partial while the live snapshot is being refreshed.
-    // Normalize optional arrays and fall back to the snapshot's own gone-lot/history data.
     const ch = raw && typeof raw === "object" ? raw : {};
     const counts = ch.counts && typeof ch.counts === "object" ? ch.counts : {};
     const goneFallback = Array.isArray(state.data.gone_lots) ? state.data.gone_lots : [];
+    const goneById = new Map(goneFallback.map((item) => [String(item.lot_id), item]));
     const newRows = Array.isArray(ch.new) ? ch.new : [];
-    const goneRows = Array.isArray(ch.gone) ? ch.gone : goneFallback;
+    const goneSource = Array.isArray(ch.gone) ? ch.gone : goneFallback;
+    const goneRows = goneSource.map((item) => ({ ...item, ...(goneById.get(String(item.lot_id)) || {}) }));
+    const eventRows = (Array.isArray(state.data.catalog_events) ? state.data.catalog_events : [])
+      .slice().sort((a, b) => Date.parse(b.observed_at || "") - Date.parse(a.observed_at || ""));
     let priceRows = Array.isArray(ch.price_changes) ? ch.price_changes : [];
     if (!priceRows.length) {
       priceRows = state.lots.flatMap((lot) => {
@@ -520,32 +524,54 @@
       });
     }
     const available = Boolean(raw && (raw.counts || raw.new || raw.gone || raw.price_changes)) ||
-      goneFallback.length > 0 || priceRows.length > 0 || (Array.isArray(state.data.snapshots) && state.data.snapshots.length > 1);
+      goneFallback.length > 0 || eventRows.length > 0 || priceRows.length > 0 ||
+      (Array.isArray(state.data.snapshots) && state.data.snapshots.length > 1);
     if (!available) {
       $("changesNote").textContent = "";
-      list.append(h("li", { class: "empty", text: "Пока нет данных для сравнения. После двух успешных снимков здесь появятся новые, исчезнувшие лоты и изменения цен." }));
+      list.append(h("li", { class: "empty", text: "Пока нет данных для сравнения. После успешных сборов здесь появятся новые, исчезнувшие лоты, изменения цен и события истории." }));
       return;
     }
-    $("changesNote").textContent = ch.since ? "относительно " + when(ch.since) : (Array.isArray(state.data.snapshots) && state.data.snapshots.length > 1 ? "по последним снимкам" : "история каталога");
+    $("changesNote").textContent = ch.since ? "относительно " + when(ch.since) :
+      (Array.isArray(state.data.snapshots) && state.data.snapshots.length > 1 ? "по последним снимкам" : "история каталога");
     const k = state.changeKind;
-    const rows = k === "new" ? newRows : k === "gone" ? goneRows : priceRows;
+    const rows = k === "new" ? newRows : k === "gone" ? goneRows : k === "events" ? eventRows : priceRows;
     const inferredNew = k === "new" && !Array.isArray(ch.new);
     const total = k === "new" ? (Number.isFinite(Number(counts.new)) ? Number(counts.new) : rows.length)
       : k === "gone" ? (Number.isFinite(Number(counts.gone)) ? Number(counts.gone) : rows.length)
+      : k === "events" ? eventRows.length
       : (Number.isFinite(Number(counts.price_up)) || Number.isFinite(Number(counts.price_down))
         ? (Number(counts.price_up) || 0) + (Number(counts.price_down) || 0) : rows.length);
     if (!rows.length) {
       const message = k === "new" ? (inferredNew ? "Список новых лотов отсутствует в ответе источника." : "Новых лотов не обнаружено.")
         : k === "gone" ? "Исчезнувших лотов нет в текущем сравнении."
+        : k === "events" ? "Новых событий истории экземпляров пока нет. Первичная загрузка истории формирует базу для дальнейшего сравнения."
         : "Изменений цен по доступной истории нет.";
       list.append(h("li", { class: "empty", text: message }));
       return;
     }
+    const disappearanceLabels = {
+      pending_history: "История экземпляра проверяется",
+      history_baseline: "История загружена — ожидаем следующих изменений",
+      sold: "Продан в Маркете",
+      transferred: "Передан другому владельцу",
+      delisted: "Вероятно снят продавцом"
+    };
     rows.slice(0, 50).forEach((r) => {
       if (k === "price") {
         const up = Number(r.to) > Number(r.from);
         list.append(lotItem(r, [h("span", { class: up ? "bad" : "good", text: fmt(r.from) + " → " + fmt(r.to) + " ◉" }), h("div", { class: "m", text: (r.pct != null ? (r.pct > 0 ? "+" : "") + fmt(r.pct) + "%" : "") })], "#" + r.lot_id));
-      } else list.append(lotItem(r, price(r.price), "#" + r.lot_id + (r.rarity ? " · " + r.rarity : "")));
+      } else if (k === "events") {
+        const flow = [r.from_user, r.to_user].filter(Boolean).join(" → ");
+        const detail = [ "#" + (r.lot_id || "—"), r.serial, flow, r.time_raw ].filter(Boolean).join(" · ");
+        list.append(lotItem(r, h("span", { text: r.label || "Изменение истории" }), detail));
+      } else if (k === "gone") {
+        const stateLabel = disappearanceLabels[r.disappearance_status] || "Причина исчезновения пока не установлена";
+        const instance = r.gift_instance || {};
+        const serial = instance.serial ? "№ " + instance.serial + (instance.supply ? " из " + instance.supply : "") : "";
+        list.append(lotItem(r, h("span", { text: price(r.price) }), "#" + r.lot_id + (serial ? " · " + serial : "") + " · " + stateLabel));
+      } else {
+        list.append(lotItem(r, price(r.price), "#" + r.lot_id + (r.rarity ? " · " + r.rarity : "")));
+      }
     });
     if (total > rows.length) list.append(h("li", { class: "m", text: "Показано " + Math.min(rows.length, 50) + " из " + fmt(total) + "." }));
   }
