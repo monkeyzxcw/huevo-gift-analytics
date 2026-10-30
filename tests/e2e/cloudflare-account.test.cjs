@@ -72,43 +72,54 @@ async function openApp() {
     if (!full.startsWith(SITE) || !fs.existsSync(full) || !fs.statSync(full).isFile()) return route.fulfill({ status: 404, body: "" });
     return route.fulfill({ status: 200, headers: { "content-type": TYPES[path.extname(full)] || "text/plain", "content-security-policy": CSP }, body: fs.readFileSync(full) });
   });
-  await page.goto("http://amnyam.test/");
-  await page.waitForSelector("#content:not(.hide)");
-  return { browser, page, state, problems };
+  try {
+    await page.goto("http://amnyam.test/");
+    await page.waitForSelector("#content:not(.hide)");
+    return { browser, page, state, problems };
+  } catch (error) {
+    await browser.close();
+    throw error;
+  }
 }
 
 test("all market tabs stay available without login and account dialog opens", async () => {
   const { browser, page, problems } = await openApp();
-  for (const view of ["overview", "market", "deals", "cheap", "analytics", "favorites", "support", "appearance"]) {
-    const tab = page.locator('#mainNav [data-view="' + view + '"]');
-    await tab.click();
-    assert.equal(await tab.getAttribute("aria-selected"), "true", view);
+  try {
+    for (const view of ["overview", "market", "deals", "cheap", "analytics", "favorites", "support", "appearance"]) {
+      const tab = page.locator('#mainNav [data-view="' + view + '"]');
+      await tab.click();
+      assert.equal(await tab.getAttribute("aria-selected"), "true", view);
+    }
+    await page.click("#accountButton");
+    await page.waitForSelector("#accountDialog[open]");
+    assert.equal(await page.isVisible("#loginForm"), true);
+    assert.deepEqual(problems, []);
+  } finally {
+    await browser.close();
   }
-  await page.click("#accountButton");
-  await page.waitForSelector("#accountDialog[open]");
-  assert.equal(await page.isVisible("#loginForm"), true);
-  assert.deepEqual(problems, []);
-  await browser.close();
 });
 
 test("registration imports guest favourites and saves account preferences to the Worker", async () => {
   const { browser, page, state, problems } = await openApp();
-  await page.click("#accountButton");
-  await page.click("#showRegister");
-  await page.fill("#registerDisplayName", "Gift Hunter");
-  await page.fill("#registerUsername", "gift_hunter");
-  await page.fill("#registerPassword", "a-unique-password-123");
-  await page.click('#registerForm button[type="submit"]');
-  await page.waitForFunction(() => document.getElementById("accountButton").textContent.includes("Gift Hunter"));
-  assert.deepEqual(state.registerPayload.profile.favorites, ["1000"]);
-  assert.equal(state.registerPayload.profile.targets["1000"], 75);
-  assert.equal(state.registerPayload.profile.preferences.alertSound, true);
-  await page.click('#mainNav [data-view="appearance"]');
-  await page.selectOption("#appearanceBackground", "nebula");
-  await page.waitForFunction(() => document.getElementById("accountSyncStatus").textContent.includes("сохранены"), null, { timeout: 5000 }).catch(() => {});
-  await page.waitForTimeout(800);
-  assert.ok(state.writes.length >= 1, "profile preferences should be persisted to the Worker");
-  assert.equal(state.writes[state.writes.length - 1].preferences.appearance.background, "nebula");
-  assert.deepEqual(problems, []);
-  await browser.close();
+  try {
+    await page.click("#accountButton");
+    await page.click("#showRegister");
+    await page.fill("#registerDisplayName", "Gift Hunter");
+    await page.fill("#registerUsername", "gift_hunter");
+    await page.fill("#registerPassword", "a-unique-password-123");
+    await page.click('#registerForm button[type="submit"]');
+    await page.waitForFunction(() => document.getElementById("accountButton").textContent.includes("Gift Hunter"));
+    assert.deepEqual(state.registerPayload.profile.favorites, ["1000"]);
+    assert.equal(state.registerPayload.profile.targets["1000"], 75);
+    assert.equal(state.registerPayload.profile.preferences.alertSound, true);
+    await page.click('#mainNav [data-view="appearance"]');
+    await page.selectOption("#appearanceBackground", "nebula");
+    await page.waitForFunction(() => document.getElementById("accountSyncStatus").textContent.includes("сохранены"), null, { timeout: 5000 }).catch(() => {});
+    await page.waitForTimeout(800);
+    assert.ok(state.writes.length >= 1, "profile preferences should be persisted to the Worker");
+    assert.equal(state.writes[state.writes.length - 1].preferences.appearance.background, "nebula");
+    assert.deepEqual(problems, []);
+  } finally {
+    await browser.close();
+  }
 });
