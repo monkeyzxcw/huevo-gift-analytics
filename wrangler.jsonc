@@ -3,6 +3,9 @@
   "name": "huevo-gift-analytics",
   "main": "./src/worker.js",
   "compatibility_date": "2026-10-29",
+  "vars": {
+    "HU_APP_ID": "5942947935d8eb30"
+  },
   "assets": {
     "directory": "./cloudflare-site",
     "binding": "ASSETS",
@@ -26,7 +29,8 @@
   },
   "secrets": {
     "required": [
-      "LIVE_INGEST_TOKEN"
+      "LIVE_INGEST_TOKEN",
+      "HU_SECRET"
     ]
   },
   "keep_vars": true
