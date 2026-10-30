@@ -1,6 +1,6 @@
 # AMNYAM MODE — Cloudflare Workers
 
-Рабочий сайт: https://huevo-gift-analytics.monkeyzxcw.workers.dev
+Рабочий сайт: https://huevo-gift-analytics.monkeyzxc1437.workers.dev
 
 ## Текущая архитектура
 

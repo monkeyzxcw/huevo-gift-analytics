@@ -39,9 +39,9 @@ GitHub deploy workflow применяет файлы из migrations/ до пу�
 
 ## 4. Проверка Worker
 
-- https://huevo-gift-analytics.monkeyzxcw.workers.dev/api/health — проверить D1, схему и ingest.
-- https://huevo-gift-analytics.monkeyzxcw.workers.dev/api/live/status — проверить время последнего live-опроса и число элементов.
-- https://huevo-gift-analytics.monkeyzxcw.workers.dev/data.json — получить объединённый снимок.
+- https://huevo-gift-analytics.monkeyzxc1437.workers.dev/api/health — проверить D1, схему и ingest.
+- https://huevo-gift-analytics.monkeyzxc1437.workers.dev/api/live/status — проверить время последнего live-опроса и число элементов.
+- https://huevo-gift-analytics.monkeyzxc1437.workers.dev/data.json — получить объединённый снимок.
 
 ## Частота и сохранение
 

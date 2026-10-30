@@ -25,11 +25,15 @@ ZIP v5: HuevoDualScan_app.py, start_dual_scan.bat, README_RU.txt, requirements.t
 
 Экспортированные Huevo cookies не нужны ни в одном из этих механизмов. Не использовать HUEVO_COOKIES_JSON, HUEVO_COOKIES или HUEVO_USER_AGENT; не возвращать headless GitHub scraper.
 
-## Последняя QA-ветка
-PR #38: https://github.com/monkeyzxcw/huevo-gift-analytics/pull/38
-Ветка: audit/cloudflare-runtime-cleanup. В ней исправлены сетевые тайм-ауты, обработка malformed snapshot, валидация целевых цен на frontend и Worker, сериализация profile saves с backoff, auth duplicate guard, payment busy/timeout state и отображение target validation внутри detail dialog. Также удалена старая FastAPI/SQLite/Docker/cookie collection ветка.
+## Последняя QA-работа
 
-Не заявлять deploy новой версии, пока PR не merged и Cloudflare deploy workflow после merge не завершился success.
+- PR #38: https://github.com/monkeyzxcw/huevo-gift-analytics/pull/38 — merged в main.
+- Squash commit: d8ba0799e63371689a745f84a02b6ca6f8133267.
+- Финальный CI на main: https://github.com/monkeyzxcw/huevo-gift-analytics/actions/runs/41118429759 — success, 32/32 browser/Worker tests и snapshot job success.
+- Cloudflare deploy: https://github.com/monkeyzxcw/huevo-gift-analytics/actions/runs/41118429757 — success; D1 migrations и Wrangler deployment завершились успешно.
+- В PR исправлены request timeouts, fail-closed malformed snapshot, validation для target prices, profile save backoff, duplicate auth guard, payment busy/timeout handling и detail modal validation UI.
+- Удалён старый FastAPI/SQLite/Docker/headless cookie collector stack, дублирующий static frontend и зависимые тесты.
+- Прямой запрос к /api/health из среды разработки не подтвердился из-за DNS-ограничения окружения; deploy workflow успешен, но live runtime health не объявляется проверенным.
 
 ## Остаточные неизвестные
 - Live Huevo login/DOM and page selectors in both Chrome windows.
