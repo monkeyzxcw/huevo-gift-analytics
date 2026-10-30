@@ -475,8 +475,13 @@ const HUEVO_APPS_API = "https://huevo.su/api/apps/v1";
 const HUEVO_APPS_SDK = "https://huevo.su/static/js/huevo-apps-v1.js";
 
 function supportCredentials(env) {
+  const configuredAppId = String(env.HU_APP_ID || "").trim();
+  // Apps API client_id is distinct from the numeric hu_app_id launch parameter.
+  // Keep the legacy non-numeric HU_APP_ID fallback so existing deployments
+  // continue working until HU_CLIENT_ID is configured explicitly.
+  const legacyClientId = configuredAppId && !/^\\d{1,20}$/.test(configuredAppId) ? configuredAppId : "";
   return {
-    clientId: String(env.HU_APP_ID || env.HUEVO_CLIENT_ID || "").trim(),
+    clientId: String(env.HU_CLIENT_ID || env.HUEVO_CLIENT_ID || legacyClientId).trim(),
     clientSecret: String(env.HU_SECRET || env.HUEVO_CLIENT_SECRET || "").trim(),
   };
 }
