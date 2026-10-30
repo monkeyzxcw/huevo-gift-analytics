@@ -26,7 +26,7 @@ GitHub deploy workflow применяет файлы из migrations/ до пу�
 
 ## 3. Локальный Chrome
 
-1. Запусти отдельный Windows ZIP HuevoDualScan v5.
+1. Запусти отдельный Windows ZIP HuevoDualScan v6.
 2. Введи LIVE_INGEST_TOKEN.
 3. Нажми «Проверить Cloudflare», затем «Запустить и открыть Huevo».
 4. Дождись открытия двух окон Chrome.
