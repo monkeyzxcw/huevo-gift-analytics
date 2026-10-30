@@ -491,7 +491,7 @@ test("live polling refreshes every gift-instance field and event detail", async 
   await page.fill("#search", String(lot.lot_id));
   await page.click("#rows button");
   assert.doesNotMatch(await page.textContent("#dBody"), /Новый автор/);
-  await page.keyboard.press("Escape");
+  // Keep the detail dialog open while the collector publishes new fields.
 
   // Keep the cache timestamp, history length and last event ID unchanged. These are
   // exactly the fields the old signature checked, while the actual visible metadata
@@ -511,8 +511,6 @@ test("live polling refreshes every gift-instance field and event detail", async 
   };
 
   await page.waitForTimeout(3600);
-  await page.fill("#search", String(lot.lot_id));
-  await page.click("#rows button");
   const detail = await page.textContent("#dBody");
   assert.match(detail, /Новый автор/);
   assert.match(detail, /Обновлённая коллекция/);
