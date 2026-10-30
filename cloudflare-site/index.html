@@ -28,6 +28,7 @@
     </div>
 
     <span class="badge" role="status"><i class="dot" id="stateDot"></i><span id="stateText">Загружаю данные…</span></span>
+    <button class="btn secondary account-trigger" id="accountButton" type="button">Войти в профиль</button>
     <a class="btn secondary" href="https://huevo.su/market/gifts" target="_blank" rel="noopener noreferrer">Войти в рынок ↗</a>
   </div>
 </header>
@@ -253,6 +254,36 @@
   <div class="palette-footer"><span>↑ ↓ навигация · ENTER открыть · ESC закрыть</span><span>AMNYAM COMMAND</span></div>
 </dialog>
 
+<dialog id="accountDialog" class="account-dialog" aria-labelledby="accountTitle">
+  <div class="dlg-head"><div><span class="section-index">/ PERSONAL ACCOUNT</span><h3 id="accountTitle">Профиль AMNYAM</h3></div><button class="btn secondary" id="accountClose" type="button" aria-label="Закрыть">✕</button></div>
+  <p class="account-intro">Рынок и аналитика общие для всех. Избранное, цели, фильтры и оформление хранятся отдельно в твоём аккаунте и открываются с любого устройства.</p>
+  <div id="accountGuest">
+    <form id="loginForm" class="account-form">
+      <h4>Войти в аккаунт</h4>
+      <label class="account-field"><span>Логин</span><input class="input" id="loginUsername" name="username" autocomplete="username" minlength="3" maxlength="24" required></label>
+      <label class="account-field"><span>Пароль</span><input class="input" id="loginPassword" name="password" type="password" autocomplete="current-password" minlength="12" maxlength="128" required></label>
+      <button class="btn" type="submit">Войти</button>
+      <button class="account-switch" type="button" id="showRegister">Новый пользователь? Создать аккаунт</button>
+    </form>
+    <form id="registerForm" class="account-form hide">
+      <h4>Создать аккаунт</h4>
+      <label class="account-field"><span>Отображаемое имя</span><input class="input" id="registerDisplayName" name="display_name" autocomplete="nickname" minlength="2" maxlength="32" placeholder="Как тебя показывать"></label>
+      <label class="account-field"><span>Логин</span><input class="input" id="registerUsername" name="username" autocomplete="username" minlength="3" maxlength="24" pattern="[A-Za-z0-9_.-]{3,24}" required></label>
+      <label class="account-field"><span>Пароль</span><input class="input" id="registerPassword" name="new-password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required></label>
+      <small class="account-note">Минимум 12 символов. При регистрации перенесём текущее избранное, целевые цены и фильтры с этого устройства. Не используй пароль от Huevo.</small>
+      <button class="btn" type="submit">Создать профиль</button>
+      <button class="account-switch" type="button" id="showLogin">Уже есть аккаунт? Войти</button>
+    </form>
+    <p class="account-status" id="accountStatus" role="status" aria-live="polite"></p>
+    <p class="account-note">Регистрация доступна всем. Почта и восстановление пароля пока не подключены — сохрани пароль в надёжном менеджере.</p>
+  </div>
+  <div id="accountSigned" class="hide">
+    <div class="account-profile-card"><span class="account-avatar" aria-hidden="true">◎</span><div><b id="accountDisplayName">Пользователь</b><small id="accountUsername">@user</small></div><span class="account-sync" id="accountSyncStatus">Синхронизация включена</span></div>
+    <p class="account-note">Профиль синхронизирует избранное, ценовые цели, историю срабатываний, сохранённые фильтры, звук и оформление. Разрешение браузерных уведомлений остаётся настройкой конкретного устройства.</p>
+    <button class="btn secondary" id="logoutButton" type="button">Выйти из аккаунта</button>
+  </div>
+</dialog>
+
 <dialog id="compareDialog" aria-labelledby="compareTitle"><div class="dlg-head"><h3 id="compareTitle">Сравнение лотов</h3><button class="btn secondary" id="compareClose" type="button" aria-label="Закрыть сравнение">✕</button></div><div id="compareBody"></div></dialog>
 
 <dialog id="detail" aria-labelledby="dTitle">
@@ -260,10 +291,10 @@
   <div id="dBody"></div>
 </dialog>
 
-<footer class="footer"><span>Huevo Gift Analytics · статическая версия</span><span>Данные собирает локальный сборщик на ПК владельца; блокировки источника не обходятся.</span></footer>
+<footer class="footer"><span>Huevo Gift Analytics · Cloudflare multi-user</span><span>Данные собирает локальный сборщик на ПК владельца; блокировки источника не обходятся.</span></footer>
 </main>
 <div id="ambientLayer" aria-hidden="true"></div><div id="cursorGlow" aria-hidden="true"></div>
 <div class="premium-splash" id="premiumSplash" aria-hidden="true"><div class="splash-mark">H<span>•</span></div><div class="splash-title">AMNYAM <b>MODE</b></div><div class="splash-subtitle">GIFT MARKET INTELLIGENCE</div><div class="splash-loader"><i></i></div></div>
-<script src="./app.js?v=amnyam-market-intel-v10" defer></script>
+<script src="./app.js?v=amnyam-multi-user-v11" defer></script>
 </body>
 </html>
