@@ -4,6 +4,7 @@ only reports `reached_end` when a normal page after page 1 has no new lots.
 
 Nothing here bypasses protection: on 403/418/429 (or a login/challenge page) it stops.
 """
+import re
 import time
 from dataclasses import dataclass, field
 
@@ -296,7 +297,8 @@ def run_gift_detail_crawl(browser, cfg, lots, previous_by_id=None, log=None, lim
         if not lot_id or lot.get("active") is False:
             continue
         old = previous_by_id.get(lot_id) or {}
-        if _detail_cache_fresh(old.get("gift_details"), now=current, max_age_days=max_age_days):
+        if (_detail_cache_fresh(old.get("gift_details"), now=current, max_age_days=max_age_days)
+                and not lot.get("_force_detail_check")):
             continue
         url = str(lot.get("lot_url") or "")
         if not url.startswith(cfg.base_url + "/market/lot/"):
@@ -392,7 +394,8 @@ def run_gift_instance_crawl(browser, cfg, candidates, log=None, limit=8,
             continue
         old = row.get("gift_instance") if isinstance(row.get("gift_instance"), dict) else {}
         force = bool(row.get("_force_history_check"))
-        if not force and _detail_cache_fresh(old, now=now, max_age_days=max_age_days):
+        cache_age = max_age_days if old.get("history_found") else min(max_age_days, 2)
+        if not force and _detail_cache_fresh(old, now=now, max_age_days=cache_age):
             continue
         item = {"gift_id": gift_id, "gift_url": gift_url, "old": old, "force": force,
                 "lot_id": str(row.get("lot_id") or "")}
