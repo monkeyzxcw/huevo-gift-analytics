@@ -301,13 +301,20 @@ test("old v1 data.json still renders; missing sections show honest placeholders"
   await browser.close();
 });
 
-test("empty and partial JSON show an empty state, never fake zeros", async () => {
-  for (const body of [{}, { lots: [], collector: { status: "no_cards", message: "каталог пуст" } }, []]) {
-    const { browser, page, problems } = await open(serve(body));
-    await page.waitForSelector("#empty:not(.hide)");
-    assert.equal(await page.locator("#content:not(.hide)").count(), 0);
-    assert.deepEqual(problems, []);
-    await browser.close();
+test("only an explicit empty lots array shows an empty-market state; malformed roots show an error", async () => {
+  const empty = await open(serve({ lots: [], collector: { status: "no_cards", message: "каталог пуст" } }));
+  await empty.page.waitForSelector("#empty:not(.hide)");
+  assert.equal(await empty.page.locator("#content:not(.hide)").count(), 0);
+  assert.deepEqual(empty.problems, []);
+  await empty.browser.close();
+
+  for (const body of [{}, []]) {
+    const invalid = await open(serve(body));
+    await invalid.page.waitForSelector("#error:not(.hide)");
+    assert.equal(await invalid.page.locator("#empty:not(.hide)").count(), 0, "malformed root is not an empty catalogue");
+    assert.equal(await invalid.page.locator("#content:not(.hide)").count(), 0);
+    assert.deepEqual(invalid.problems, []);
+    await invalid.browser.close();
   }
 });
 
@@ -544,3 +551,54 @@ test("target price sound is opt-in and persists locally", async () => {
   assert.deepEqual(problems, []);
   await browser.close();
 });
+
+test("malformed snapshot is rejected and retry recovers without showing a false empty market", async () => {
+  let calls = 0;
+  const { browser, page, problems } = await open((route) => {
+    calls += 1;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(calls === 1 ? { schema_version: 3, lots: "not-an-array" } : dataV2())
+    });
+  });
+  await page.waitForSelector("#error:not(.hide)");
+  assert.match(await page.textContent("#errorText"), /список lots/);
+  assert.equal(await page.locator("#empty:not(.hide)").count(), 0);
+  await page.click("#retry");
+  await page.waitForSelector("#content:not(.hide)");
+  assert.equal(await page.locator("#rows tr").count(), 50);
+  assert.deepEqual(problems, []);
+  await browser.close();
+});
+
+test("target prices reject fractions and values above the safe limit; blank input clears a target", async () => {
+  const { browser, page, problems } = await open(serve(dataV2()));
+  await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="market"]');
+  await page.fill("#search", "1003");
+  await page.locator("#rows button[aria-label^='Подробнее о лоте']").click();
+
+  const input = page.locator("#dBody .target-input");
+  const save = page.locator("#dBody .detail-watch button.btn:not(.secondary)");
+  await input.fill("12.5");
+  await save.click();
+  assert.match(await page.textContent("#dBody .target-error"), /целую целевую цену/);
+  assert.equal(await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem("amnyam.targets") || "{}")).length), 0);
+
+  await input.fill("1000000000000001");
+  await save.click();
+  assert.match(await page.textContent("#dBody .target-error"), /целую целевую цену/);
+  assert.equal(await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem("amnyam.targets") || "{}")).length), 0);
+
+  await input.fill("1000");
+  await save.click();
+  assert.equal(await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem("amnyam.targets") || "{}")).every(Number.isSafeInteger)), true);
+
+  await input.fill("");
+  await save.click();
+  assert.equal(await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem("amnyam.targets") || "{}")).length), 0);
+  assert.deepEqual(problems, []);
+  await browser.close();
+});
+

@@ -133,7 +133,7 @@ export function sanitiseProfile(value) {
   if (raw.targets && typeof raw.targets === "object" && !Array.isArray(raw.targets)) {
     for (const [id, rawPrice] of Object.entries(raw.targets).slice(0, 5000)) {
       const target = Number(rawPrice);
-      if (validLotId(id) && Number.isFinite(target) && target > 0 && target <= 1e15) profile.targets[id] = Math.round(target);
+      if (validLotId(id) && Number.isSafeInteger(target) && target > 0 && target <= 1e15) profile.targets[id] = target;
     }
   }
   if (Array.isArray(raw.alertedTargets)) {
