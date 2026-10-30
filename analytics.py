@@ -181,24 +181,39 @@ def sales_by_title(rows, min_group=MIN_GROUP, limit=500):
         history = [{"date": day, "median": median(values), "count": len(values)}
                    for day, values in sorted(dated.items())]
         out.append({
-            "title": key,
-            "count": len(prices),
-            "median": median(prices),
-            "p25": percentile(prices, .25),
-            "p75": percentile(prices, .75),
-            "min": prices[0],
-            "max": prices[-1],
+            "title": key, "count": len(prices), "median": median(prices),
+            "p25": percentile(prices, .25), "p75": percentile(prices, .75),
+            "min": prices[0], "max": prices[-1],
             "dated_sales": sum(point["count"] for point in history),
             "history": history[-180:],
         })
     out.sort(key=lambda group: (-group["count"], group["title"]))
-    return out[:max(1, min(int(limit), 1000))]    """Median confirmed sale price per gift title (serial number stripped); groups below `min_group` are omitted."""
-    groups = {}
-    for r in rows:
-        key = _sale_title(r.get("title"))
-        if key and _valid_price(r.get("price")):
-            groups.setdefault(key, []).append(r["price"])
-    out = [{"title": k, "count": len(v), "median": median(v), "min": min(v), "max": max(v)}
-           for k, v in groups.items() if len(v) >= min_group]
-    out.sort(key=lambda g: (-g["count"], g["title"]))
-    return out[:limit]
+    return out[:max(1, min(int(limit), 1000))]
+
+
+def robust_offer_reference(prices, min_group=MIN_GROUP):
+    """Return a conservative reference from asking prices, resistant to extreme listings.
+
+    Uses a Tukey 1.5*IQR fence when enough observations exist. The result is deliberately
+    labelled as offers, never as a confirmed market or transaction value.
+    """
+    values = sorted(float(value) for value in prices if _valid_price(value))
+    if len(values) < min_group:
+        return {"reference": None, "sample_size": len(values), "raw_size": len(values),
+                "p25": None, "p75": None, "excluded": 0, "dispersion": None}
+    q1, q3 = percentile(values, .25), percentile(values, .75)
+    iqr = q3 - q1
+    if iqr > 0 and len(values) >= 4:
+        low, high = q1 - 1.5 * iqr, q3 + 1.5 * iqr
+        core = [value for value in values if low <= value <= high]
+    else:
+        core = values
+    # Require three clean comparables after outlier suppression.
+    if len(core) < min_group:
+        return {"reference": None, "sample_size": len(core), "raw_size": len(values),
+                "p25": q1, "p75": q3, "excluded": len(values) - len(core), "dispersion": None}
+    core_q1, core_q3 = percentile(core, .25), percentile(core, .75)
+    dispersion = (core_q3 - core_q1) / median(core) if median(core) else None
+    return {"reference": median(core), "sample_size": len(core), "raw_size": len(values),
+            "p25": core_q1, "p75": core_q3, "excluded": len(values) - len(core),
+            "dispersion": round(dispersion, 4) if dispersion is not None else None}
