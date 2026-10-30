@@ -32,7 +32,7 @@ Worker хранит PBKDF2-SHA-256 хеш пароля с индивидуаль
 1. В wrangler.jsonc уже задана существующая D1 huevo-live-data, binding DB.
 2. Миграция migrations/0003_multi_user_profiles.sql создаёт таблицы user_accounts, user_sessions, user_profiles и auth_rate_limits.
 3. Workflow .github/workflows/cloudflare-static.yml применяет все новые D1 migrations при деплое, если у Cloudflare API Token есть D1: Edit.
-4. После применения миграции регистрация и вход доступны сразу. Дополнительные secrets для аккаунтов не требуются.
+4. После применения миграции регистрация и вход доступны сразу. Дополнительные secrets для аккаунтов не требуются. У существующего `CLOUDFLARE_API_TOKEN` должно быть право `D1: Edit` на базу `huevo-live-data`.
 
 Проверка: GET /api/me без cookie должен вернуть authenticated: false и profiles_ready: true. Если profiles_ready: false, проверь результат Apply D1 migrations в GitHub Actions и право D1: Edit у Cloudflare token.
 
