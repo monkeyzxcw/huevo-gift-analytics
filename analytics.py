@@ -194,6 +194,42 @@ def sales_by_title(rows, min_group=MIN_GROUP, limit=500):
 def robust_offer_reference(prices, min_group=MIN_GROUP):
     """Return a conservative reference from asking prices, resistant to extreme listings.
 
+    Isolated extremes are excluded by a Tukey 1.5*IQR fence. A clearly split market
+    (e.g. three offers near 100k and ten near 1m) is marked ambiguous instead of silently
+    allowing the majority cluster to define a fake "market price".
+    """
+    values = sorted(float(value) for value in prices if _valid_price(value))
+    if len(values) < min_group:
+        return {"reference": None, "sample_size": len(values), "raw_size": len(values),
+                "p25": None, "p75": None, "excluded": 0, "dispersion": None,
+                "ambiguous": False}
+    splits = [(i, values[i] / values[i - 1]) for i in range(3, len(values) - 2)
+              if values[i - 1] > 0 and values[i] / values[i - 1] >= 2.5]
+    if splits:
+        return {"reference": None, "sample_size": len(values), "raw_size": len(values),
+                "p25": percentile(values, .25), "p75": percentile(values, .75),
+                "excluded": 0, "dispersion": max(ratio for _, ratio in splits),
+                "ambiguous": True}
+    q1, q3 = percentile(values, .25), percentile(values, .75)
+    iqr = q3 - q1
+    if iqr > 0 and len(values) >= 4:
+        low, high = q1 - 1.5 * iqr, q3 + 1.5 * iqr
+        core = [value for value in values if low <= value <= high]
+    else:
+        core = values
+    if len(core) < min_group:
+        return {"reference": None, "sample_size": len(core), "raw_size": len(values),
+                "p25": q1, "p75": q3, "excluded": len(values) - len(core),
+                "dispersion": None, "ambiguous": True}
+    core_q1, core_q3 = percentile(core, .25), percentile(core, .75)
+    mid = median(core)
+    dispersion = (core_q3 - core_q1) / mid if mid else None
+    return {"reference": mid, "sample_size": len(core), "raw_size": len(values),
+            "p25": core_q1, "p75": core_q3, "excluded": len(values) - len(core),
+            "dispersion": round(dispersion, 4) if dispersion is not None else None,
+            "ambiguous": False}
+
+
     Uses a Tukey 1.5*IQR fence when enough observations exist. The result is deliberately
     labelled as offers, never as a confirmed market or transaction value.
     """
