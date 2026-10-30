@@ -201,6 +201,87 @@ test("below-market cards show price evidence, quick target controls, and three d
   await browser.close();
 });
 
+test("top reliable discount and absolute cheapest offer are shown as different picks", async () => {
+  const data=dataV2();
+  data.lots=[
+    ...Array.from({length:11},(_,i)=>({
+      lot_id:String(20000+i),title:"Лудобофос",rarity:"Лимитированный",
+      price:i===0?144000:567000,status:"На продаже",active:true,
+      image_url:"https://huevo.su/static/gift.webp",
+      lot_url:"https://huevo.su/market/lot/"+(20000+i),history:[]
+    })),
+    ...Array.from({length:5},(_,i)=>({
+      lot_id:String(21000+i),title:"Нимфа (FUKKERS)",rarity:"Лимитированный",
+      price:i===0?111111:888222,status:"На продаже",active:true,
+      image_url:"https://huevo.su/static/gift.webp",
+      lot_url:"https://huevo.su/market/lot/"+(21000+i),history:[]
+    }))
+  ];
+  data.stats={n_total:data.lots.length};
+  data.collector.lots=data.lots.length;
+  const {browser,page,problems}=await open(serve(data));
+  await page.waitForSelector("#content:not(.hide)");
+  assert.match(await page.textContent("#belowBestTitle"),/Лудобофос/);
+  assert.match(await page.textContent("#belowBestMeta"),/74,6|74\.6/);
+  await page.click('#mainNav [data-view="overview"]');
+  const picks=page.locator("#dayPicks .day-pick-card");
+  assert.equal(await picks.count(),3);
+  assert.match(await picks.nth(0).textContent(),/ЛУЧШИЙ НАДЁЖНЫЙ ДИСКОНТ/);
+  assert.match(await picks.nth(1).textContent(),/САМАЯ НИЗКАЯ ЦЕНА/);
+  assert.match(await picks.nth(1).textContent(),/Нимфа/);
+  assert.match(await picks.nth(1).textContent(),/ПРОВЕРИТЬ/);
+  assert.match(await picks.nth(1).textContent(),/Экстремальный дисконт более 80%/);
+  assert.deepEqual(problems,[]);
+  await browser.close();
+});
+
+test("contact strip shows public availability but hides controls from other Huevo users", async () => {
+  const {browser,page,problems}=await open(serve(dataV2()),{width:1280,height:900},{
+    supportRoutes:{
+      "/api/contact/status":route=>route.fulfill({
+        status:200,contentType:"application/json",
+        body:JSON.stringify({configured:true,available:true,can_manage:false,updated_at:NOW})
+      })
+    }
+  });
+  await page.waitForSelector("#content:not(.hide)");
+  await page.waitForFunction(()=>document.querySelector("#ownerPresenceText").textContent==="Сейчас на месте");
+  assert.equal(await page.locator("#ownerPresenceToggle").isVisible(),false);
+  assert.equal(await page.getAttribute("#ownerPresenceView","data-available"),"true");
+  assert.equal(await page.getAttribute("#contactPanel a.contact-message-btn","href"),"https://huevo.su/messages/monkeyzxcw");
+  assert.deepEqual(problems,[]);
+  await browser.close();
+});
+
+test("only the authenticated owner receives the availability switch and may change it", async () => {
+  let available=false;
+  const {browser,page,problems}=await open(serve(dataV2()),{width:1280,height:900},{
+    query:"?hu_user_id=14188",
+    supportRoutes:{
+      "/api/contact/status":async route=>{
+        if(route.request().method()==="PUT"){
+          const body=route.request().postDataJSON();
+          available=Boolean(body.available);
+        }
+        return route.fulfill({
+          status:200,contentType:"application/json",
+          body:JSON.stringify({configured:true,available,can_manage:true,updated_at:NOW})
+        });
+      }
+    }
+  });
+  await page.waitForSelector("#content:not(.hide)");
+  await page.waitForFunction(()=>!document.querySelector("#ownerPresenceToggle").hidden);
+  const toggle=page.locator("#ownerPresenceToggle");
+  assert.equal(await toggle.getAttribute("aria-checked"),"false");
+  await toggle.click();
+  await page.waitForFunction(()=>document.querySelector("#ownerPresenceToggle").getAttribute("aria-checked")==="true");
+  assert.equal(available,true);
+  assert.match(await page.textContent("#ownerPresenceText"),/Сейчас на месте/);
+  assert.deepEqual(problems,[]);
+  await browser.close();
+});
+
 test("lot without a price sorts last and shows a dash, not zero", async () => {
   const { browser, page } = await open(serve(dataV2()));
   await page.waitForSelector("#content:not(.hide)");
@@ -702,9 +783,11 @@ test("help tab documents main workflows and desktop notification limitations", a
   const guide = await page.textContent("#helpPanel");
   assert.match(guide, /Маркет/);
   assert.match(guide, /цена-цель/);
-  assert.match(guide, /уведомления рабочего стола/);
-  assert.match(guide, /браузер полностью закрыт/);
+  assert.match(guide, /push на рабочий стол/);
+  assert.match(guide, /Cloudflare Worker/);
   assert.match(guide, /HuevoDualScan/);
+  assert.match(guide, /gifts\\/\\{id\\}/);
+  assert.match(guide, /Рекомендации/);
   assert.deepEqual(problems, []);
   await browser.close();
 });
