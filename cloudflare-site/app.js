@@ -44,6 +44,7 @@
     revision: 0, saving: false, savePromise: null, profilePollRunning: false, saveTimer: null, pollTimer: null, authPromise: null, saveRetryCount: 0
   };
   let pushState = { loaded: false, authenticated: false, subscriptions: 0, error: "" };
+  let presenceState = { available: false, canManage: false, configured: false, loading: true, saving: false, error: "" };
 
   // ---------- safe DOM helpers (no innerHTML anywhere: all text goes through textContent) ----------
   function h(tag, attrs, children) {
@@ -195,6 +196,7 @@
       state.liveFingerprint = n.raw.live && n.raw.live.fingerprint ? String(n.raw.live.fingerprint) : null;
       lastSnapshotSignature = snapshotSignature(n.raw, n.lots);
       render();
+      openNotificationLotFromUrl();
       dismissPremiumSplash();
     } catch (error) {
       $("errorText").textContent = "Не удалось загрузить data.json (" + (error && error.message ? error.message : "ошибка") + "). Последний корректный снимок не заменён.";
@@ -1404,6 +1406,70 @@
     b.textContent=Notification.permission==="granted"?"Тест уведомления":Notification.permission==="denied"?"Разрешение запрещено":"Разрешить браузер";
   }
 
+  function renderOwnerPresence(){
+    const view=$("ownerPresenceView"), text=$("ownerPresenceText"), toggle=$("ownerPresenceToggle"), toggleText=$("ownerPresenceToggleText");
+    if(!view||!text||!toggle||!toggleText)return;
+    view.dataset.available=String(presenceState.available);
+    text.textContent=presenceState.loading?"Проверяем статус…":presenceState.error?"Статус временно недоступен":presenceState.available?"Сейчас на месте":"Сейчас не на месте";
+    toggle.hidden=!presenceState.canManage;
+    toggle.disabled=presenceState.saving||!presenceState.configured;
+    toggle.setAttribute("aria-checked",String(presenceState.available));
+    toggleText.textContent=presenceState.saving?"Сохраняем…":presenceState.available?"На месте":"Не на месте";
+    if(presenceState.error)view.title=presenceState.error;else view.removeAttribute("title");
+  }
+
+  async function refreshOwnerPresence(){
+    try{
+      const data=await fetchJson("./api/contact/status?_="+Date.now(),{cache:"no-store"},8000);
+      presenceState={
+        available:Boolean(data.available),
+        canManage:Boolean(data.can_manage),
+        configured:Boolean(data.configured),
+        loading:false,saving:false,error:""
+      };
+    }catch(error){
+      presenceState={...presenceState,loading:false,error:"Не удалось загрузить статус: "+error.message};
+    }
+    renderOwnerPresence();
+  }
+
+  async function setOwnerPresence(available){
+    if(!presenceState.canManage||presenceState.saving)return;
+    presenceState.saving=true;
+    presenceState.error="";
+    renderOwnerPresence();
+    try{
+      const result=await accountRequest("./api/contact/status",{
+        method:"PUT",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({available:Boolean(available)})
+      });
+      presenceState={
+        available:Boolean(result.available),canManage:Boolean(result.can_manage),
+        configured:Boolean(result.configured),loading:false,saving:false,error:""
+      };
+    }catch(error){
+      presenceState.saving=false;
+      presenceState.error=error.message||"Не удалось изменить статус.";
+    }
+    renderOwnerPresence();
+  }
+
+  function openNotificationLotFromUrl(){
+    const params=new URLSearchParams(location.search);
+    const id=params.get("amnyam_lot");
+    if(!id||!/^\\d{1,20}$/.test(id))return;
+    params.delete("amnyam_lot");
+    const query=params.toString();
+    history.replaceState(null,"",location.pathname+(query?"?"+query:"")+location.hash);
+    const lot=state.lots.find(item=>String(item.lot_id)===id);
+    switchView("market",false);
+    $("search").value=id;
+    state.page=0;
+    applyFilters();
+    if(lot)openDetail(lot,null);
+  }
+
   function updatePushControls(){
     const connect=$("enablePushNotifications"), test=$("testPushNotifications"), disable=$("disablePushNotifications"), status=$("pushStatus");
     if(!connect||!test||!disable||!status)return;
@@ -2009,6 +2075,7 @@
     applyAccountProfile(data.profile);
     updateAccountUI();
     refreshPushStatus();
+    refreshOwnerPresence();
     if ($("accountDialog").open) $("accountDialog").close();
     setAccountStatus("Профиль huEVO загружен", "ok");
   }
@@ -2058,6 +2125,7 @@
         updateAccountUI();
         startAccountProfilePolling();
         refreshPushStatus();
+        refreshOwnerPresence();
       } else {
         accountState.user = null;
         accountState.updatedAt = null;
@@ -2065,6 +2133,7 @@
         restoreGuestProfile();
         updateAccountUI();
         refreshPushStatus();
+        refreshOwnerPresence();
         setAccountStatus(accountState.profilesReady
           ? "Открой AMNYAM MODE внутри huEVO — профиль подключится автоматически."
           : "Серверное хранилище профилей ещё не подготовлено.", "muted");
@@ -2186,6 +2255,7 @@
 
   // ---------- events ----------
   initAccountUI();
+  refreshOwnerPresence();
   initAppearance();
   initAmbience();
   initAlertSoundControls();
@@ -2319,6 +2389,16 @@
       pushState.error="Push доступен только по HTTPS.";
       updatePushControls();return;
     }
+    if(window.top!==window.self){
+      try{
+        window.open(location.href,"_blank","noopener,noreferrer");
+        pushState.error="AMNYAM открылся в отдельной вкладке. Переключись в неё и повтори подключение push — в iframe браузер может блокировать разрешения и фоновую работу.";
+      }catch(_){
+        pushState.error="Открой AMNYAM отдельной вкладкой HTTPS, затем повтори подключение push.";
+      }
+      updatePushControls();
+      return;
+    }
     let permission=Notification.permission;
     if(permission==="default"){
       try{permission=await Notification.requestPermission();}catch(_){permission=Notification.permission;}
@@ -2366,6 +2446,7 @@
       updatePushControls();
     }
   });
+  $("ownerPresenceToggle").addEventListener("click",()=>setOwnerPresence(!presenceState.available));
   $("closeWatchAlert").addEventListener("click",()=>$("watchAlert").classList.add("hide"));
   $("compareSelected").addEventListener("click",openComparison);$("compareClose").addEventListener("click",()=>$("compareDialog").close());
   $("compareDialog").addEventListener("click",e=>{if(e.target===$("compareDialog"))$("compareDialog").close();});
