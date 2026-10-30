@@ -114,7 +114,7 @@ function validLotId(value) {
   return /^\d{1,20}$/.test(String(value));
 }
 
-function sanitiseProfile(value) {
+export function sanitiseProfile(value) {
   const raw = value && typeof value === "object" && !Array.isArray(value) ? value : {};
   const profile = {
     favorites: [],
