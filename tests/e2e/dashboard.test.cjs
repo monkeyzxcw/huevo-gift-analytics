@@ -95,7 +95,8 @@ async function open(handler, viewport = { width: 1280, height: 900 }, options = 
     if (!file.startsWith(SITE) || !fs.existsSync(file)) return route.fulfill({ status: 404, body: "" });
     return route.fulfill({ status: 200, headers: { "content-type": TYPES[path.extname(file)] || "text/plain", "content-security-policy": CSP }, body: fs.readFileSync(file) });
   });
-  await page.goto("http://site.test/" + (options.query || ""));
+  const destination = options.path ? String(options.path).replace(/^[/]+/, "") : "";
+  await page.goto("http://site.test/" + destination + (options.query || ""));
   return { browser, page, problems };
 }
 const serve = (body, status = 200) => (route) => route.fulfill({ status, contentType: "application/json", body: typeof body === "string" ? body : JSON.stringify(body) });
@@ -763,6 +764,61 @@ test("collector aggregate detail count is not shown as per-lot analysis when the
   await page.fill("#search", "1003");
   await page.click("#rows button");
   assert.match(await page.textContent("#dBody"), /8 карточек подарков, но характеристики этого экземпляра не прикреплены к лоту/);
+  assert.deepEqual(problems, []);
+  await browser.close();
+});
+
+test("embedded Push shows a signed standalone link when Chrome blocks the popup", async () => {
+  const launchQuery = "?hu_user_id=14188&hu_app_id=77&hu_hash=test-signature&hu_ts=" + Math.floor(Date.now() / 1000) + "&hu_mode=live";
+  const account = {
+    ok: true, authenticated: true,
+    user: { id: "qa-user", hu_user_id: "14188", username: "monkeyzxcw", display_name: "AMNYAM QA", avatar_url: "" },
+    profile: { favorites: [], targets: {}, alertedTargets: [], savedFilters: [],
+      preferences: { alertSound: false, appearance: { background: "cosmic", mascot: "omnom", motion: "normal", glass: true }, seasonTheme: "default" } },
+    updated_at: NOW
+  };
+  const { browser, page, problems } = await open(serve(dataV2()), { width: 1280, height: 900 }, {
+    path: "frame-host",
+    supportRoutes: {
+      "/frame-host": (route) => route.fulfill({
+        status: 200, contentType: "text/html",
+        body: '<!doctype html><html><body><iframe id="amnyam-frame" title="AMNYAM" src="/' + launchQuery + '"></iframe></body></html>'
+      }),
+      "/api/auth/launch": (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(account) })
+    },
+    initScript: () => {
+      Object.defineProperty(window, "isSecureContext", { configurable: true, value: true });
+      Object.defineProperty(window, "PushManager", { configurable: true, value: function PushManager() {} });
+      Object.defineProperty(navigator, "serviceWorker", { configurable: true, value: {
+        ready: Promise.resolve({}), getRegistration: async () => null
+      }});
+      class FakeNotification {
+        static permission = "default";
+        static async requestPermission() { return "granted"; }
+      }
+      Object.defineProperty(window, "Notification", { configurable: true, value: FakeNotification });
+      window.open = () => null;
+    }
+  });
+  const frame = await page.waitForFunction(() => {
+    return Array.from(window.frames).some((item) => {
+      try { return item.location.search.includes("hu_user_id=14188"); } catch (_) { return false; }
+    });
+  }).then(() => page.frames().find((item) => item.url().includes("hu_user_id=14188")));
+  assert.ok(frame, "signed Huevo frame should load");
+  await frame.waitForSelector("#content:not(.hide)");
+  await frame.waitForFunction(() => {
+    const button = document.getElementById("enablePushNotifications");
+    return button && !button.disabled && document.getElementById("accountButton")?.textContent.includes("AMNYAM QA");
+  });
+  await frame.click('#mainNav [data-view="favorites"]');
+  await frame.click("#enablePushNotifications");
+  await frame.waitForFunction(() => {
+    const link = document.getElementById("pushStandaloneLink");
+    return link && !link.hidden && link.href.includes("hu_user_id=14188");
+  });
+  assert.match(await frame.textContent("#pushStatus"), /Chrome заблокировал новое окно/);
+  assert.match(await frame.locator("#pushStandaloneLink").getAttribute("href"), /hu_hash=test-signature/);
   assert.deepEqual(problems, []);
   await browser.close();
 });

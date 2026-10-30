@@ -1520,7 +1520,7 @@
     const connect=$("enablePushNotifications"), test=$("testPushNotifications"), disable=$("disablePushNotifications"), status=$("pushStatus");
     if(!connect||!test||!disable||!status)return;
     const supported=window.isSecureContext&&("serviceWorker" in navigator)&&("PushManager" in window)&&("Notification" in window);
-    connect.disabled=!supported||!accountState.user;
+    connect.disabled=!supported;
     test.disabled=!supported||!accountState.user||!pushState.localSubscription;
     disable.disabled=!pushState.localSubscription;
     connect.textContent=!supported?"Push недоступен в этом браузере":!accountState.user?"Сначала войди через huEVO":pushState.subscriptions?"Обновить push-подписку":"Подключить push на рабочий стол";
@@ -2443,14 +2443,39 @@
       updatePushControls();return;
     }
     if(window.top!==window.self){
+      const standaloneLink=$("pushStandaloneLink");
+      if(standaloneLink)standaloneLink.hidden=true;
+      let opened=null;
       try{
-        window.open(location.href,"_blank","noopener,noreferrer");
-        pushState.error="AMNYAM открылся в отдельной вкладке. Переключись в неё и повтори подключение push — в iframe браузер может блокировать разрешения и фоновую работу.";
-      }catch(_){
-        pushState.error="Открой AMNYAM отдельной вкладкой HTTPS, затем повтори подключение push.";
+        // Keep the signed hu_* launch query when leaving the embedded Huevo frame.
+        // Avoid the noopener feature string: browsers report null for that window
+        // even when the new tab was opened successfully.
+        opened=window.open(location.href,"_blank");
+      }catch(_){}
+      if(opened){
+        try{opened.opener=null;}catch(_){}
+        pushState.error="AMNYAM открыт в отдельной вкладке. Переключись в неё: подписанный запуск huEVO должен подключить профиль автоматически.";
+      }else{
+        if(standaloneLink){
+          standaloneLink.href=location.href;
+          standaloneLink.hidden=false;
+        }
+        pushState.error="Chrome заблокировал новое окно. Нажми ссылку «Открыть AMNYAM в отдельной вкладке» ниже — она сохранит подписанный запуск huEVO.";
       }
       updatePushControls();
       return;
+    }
+    const standaloneLink=$("pushStandaloneLink");
+    if(standaloneLink)standaloneLink.hidden=true;
+    if(!accountState.user){
+      await checkAccountSession();
+      if(!accountState.user){
+        pushState.error=hasHuevoLaunch()
+          ?"Не удалось подтвердить подписанный запуск huEVO. Закрой эту вкладку и заново открой AMNYAM через huEVO."
+          :"В этой вкладке нет подписанного запуска huEVO. Обычный адрес не переносит профиль. Вернись в huEVO и открой AMNYAM оттуда в отдельной вкладке.";
+        updatePushControls();
+        return;
+      }
     }
     let permission=Notification.permission;
     if(permission==="default"){
