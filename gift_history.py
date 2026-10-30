@@ -7,17 +7,19 @@ def merge_instance_record(old, new):
     old = old if isinstance(old, dict) else {}
     new = new if isinstance(new, dict) else {}
     merged = {**deepcopy(old), **deepcopy(new)}
-    if not new.get("history_found") and old.get("history_found"):
-        merged["history"] = deepcopy(old.get("history") or [])
-        merged["history_found"] = True
+    old_events = deepcopy(old.get("history") or [])
+    old_ids = {str(event.get("event_id")) for event in old_events if event.get("event_id")}
+    if not new.get("history_found"):
+        merged["history"] = old_events
+        merged["history_found"] = bool(old.get("history_found"))
         merged["history_delta_known"] = False
         merged["new_events"] = []
     else:
-        old_ids = {str(event.get("event_id")) for event in (old.get("history") or [])
-                   if event.get("event_id")}
-        events = new.get("history") or []
-        merged["new_events"] = [event for event in events
-                                if event.get("event_id") and str(event["event_id"]) not in old_ids]
+        incoming = new.get("history") or []
+        additions = [event for event in incoming
+                     if event.get("event_id") and str(event["event_id"]) not in old_ids]
+        merged["history"] = old_events + additions
+        merged["new_events"] = additions
         merged["history_delta_known"] = bool(old.get("history_found"))
     return merged
 
