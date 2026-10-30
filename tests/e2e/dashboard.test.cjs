@@ -228,6 +228,67 @@ test("detail dialog: price history, comparison, safe link, Escape closes", async
   await browser.close();
 });
 
+test("gift instance metadata and history feed render in the detail and catalog changes panels", async () => {
+  const data = dataV2();
+  data.lots[3].gift_details = {
+    gift_id: "18336", gift_url: "https://huevo.su/gift/18336",
+    checked_at: NOW, attributes: {}
+  };
+  data.lots[3].gift_instance = {
+    gift_id: "18336", gift_url: "https://huevo.su/gift/18336",
+    title: "Адидас-Тян Зеленая", serial: 4, supply: 111,
+    rarity: "Лимитированный", drop_price: 5555, drop_price_text: "5555 монэток",
+    edition_sold_out: true, author: "hhiૐvi buritania XVII",
+    collection: "ADIDAS-Тян", current_owner: "monkeyzxcw",
+    history_found: true, checked_at: NOW,
+    history: [
+      { event_id: "event-1", type: "purchase", label: "Куплен", from_user: "monkeyzxcw", to_user: "monkeyzxcw", time_raw: "22 окт в 03:35" },
+      { event_id: "event-2", type: "market_sale", label: "Продан в Маркете", from_user: "monkeyzxcw", to_user: "teeth", time_raw: "28 окт в 21:37" },
+      { event_id: "event-3", type: "transfer", label: "Передан", from_user: "teeth", to_user: "monkeyzxcw", time_raw: "вчера в 00:18" }
+    ]
+  };
+  data.gone_lots = [{
+    lot_id: "2000", title: "Золотая роза", price: 400, rarity: "Редкий",
+    lot_url: "https://huevo.su/market/lot/2000", active: false,
+    disappearance_status: "delisted",
+    gift_instance: { serial: 111, supply: 111 }
+  }];
+  data.catalog_events = [{
+    event_id: "history:18336:event-2", type: "market_sale",
+    label: "Продан в Маркете", title: "Адидас-Тян Зеленая",
+    lot_id: "1003", gift_id: "18336", serial: "№ 4/111",
+    from_user: "monkeyzxcw", to_user: "teeth",
+    time_raw: "28 окт в 21:37", observed_at: NOW,
+    gift_url: "https://huevo.su/gift/18336",
+    lot_url: "https://huevo.su/market/lot/1003"
+  }];
+
+  const { browser, page, problems } = await open(serve(data));
+  await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="market"]');
+  await page.fill("#search", "1003");
+  await page.click("#rows button");
+  const detail = await page.textContent("#dBody");
+  assert.match(detail, /№ 4/);
+  assert.match(detail, /111/);
+  assert.match(detail, /5555/);
+  assert.match(detail, /Продан в Маркете/);
+  assert.match(detail, /teeth/);
+  assert.match(detail, /не содержит сумму каждой сделки/);
+  await page.keyboard.press("Escape");
+
+  await page.click('#mainNav [data-view="analytics"]');
+  await page.click("#tabGone");
+  assert.match(await page.textContent("#changeList"), /Вероятно снят продавцом/);
+  await page.click("#tabEvents");
+  const events = await page.textContent("#changeList");
+  assert.match(events, /Продан в Маркете/);
+  assert.match(events, /monkeyzxcw → teeth/);
+  assert.match(events, /28 окт в 21:37/);
+  assert.deepEqual(problems, []);
+  await browser.close();
+});
+
 test("old v1 data.json still renders; missing sections show honest placeholders", async () => {
   const v1 = dataV2(); ["schema_version", "categories", "top_expensive", "changes", "sales"].forEach((k) => delete v1[k]); v1.schema_version = 1;
   const { browser, page, problems } = await open(serve(v1));
