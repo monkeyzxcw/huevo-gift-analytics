@@ -327,8 +327,8 @@
       toggle.setAttribute("aria-pressed", String(alertSoundEnabled));
     }
     if (hint) hint.textContent = alertSoundEnabled
-      ? "Короткий сигнал прозвучит при достижении целевой цены. Вкладка должна быть открыта."
-      : "Звуковые сигналы отключены. Уведомления браузера работают отдельно.";
+      ? "Фирменная пятинотная мелодия прозвучит при достижении цены-цели."
+      : "Звуковые сигналы отключены. Включи их и нажми тест, чтобы услышать сигнал AMNYAM.";
   }
   function playAlertSound(force) {
     if (!force && !alertSoundEnabled) return;
