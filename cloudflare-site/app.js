@@ -1023,7 +1023,9 @@
     }
 
     const instance = l.gift_instance && typeof l.gift_instance === "object" ? l.gift_instance : null;
-    const giftCatalog = l.gift_catalog && typeof l.gift_catalog === "object" ? l.gift_catalog : null;
+    const catalogCandidate = l.gift_catalog && typeof l.gift_catalog === "object" ? l.gift_catalog : null;
+    const catalogId = String(catalogCandidate && (catalogCandidate.catalog_id || catalogCandidate.gift_catalog_id) || "");
+    const giftCatalog = catalogCandidate && catalogCandidate.source === "huevo_gift_catalog_page" && /^\d{1,20}$/.test(catalogId) ? catalogCandidate : null;
     body.append(h("h4", { text: "Экземпляр и тираж" }));
     if (giftCatalog) {
       const soldOutLabel = giftCatalog.edition_sold_out === true ? "Тираж разошёлся"
