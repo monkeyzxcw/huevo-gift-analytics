@@ -174,6 +174,26 @@ test("saved filters, target prices, mini charts and comparison work", async () =
   await browser.close();
 });
 
+test("below-market cards show price evidence, quick target controls, and three daily picks", async () => {
+  const { browser, page, problems } = await open(serve(dataV2()));
+  await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="overview"]');
+  assert.equal(await page.locator("#dayPicks .day-pick-card").count(),3,"three distinct daily picks");
+  await page.click('#mainNav [data-view="deals"]');
+  assert.ok(await page.locator("#dealsList .deal-card-rich").count()>0,"value signals rendered as rich cards");
+  const card=page.locator("#dealsList .deal-card-rich").first();
+  assert.match(await card.textContent(),/ЦЕНА ЛОТА/);
+  assert.match(await card.textContent(),/МЕДИАНА АНАЛОГОВ/);
+  assert.match(await card.textContent(),/РАЗНИЦА/);
+  await card.locator(".deal-target-input").fill("50");
+  await card.locator(".target-save").click();
+  assert.ok(await page.evaluate(()=>Object.keys(JSON.parse(localStorage.getItem("amnyam.targets")||"{}")).length>0),"target price persists in browser");
+  assert.match(await page.textContent("#favoritesCount"),/лотов/);
+  await page.selectOption("#dealSort","price");
+  assert.deepEqual(problems,[]);
+  await browser.close();
+});
+
 test("lot without a price sorts last and shows a dash, not zero", async () => {
   const { browser, page } = await open(serve(dataV2()));
   await page.waitForSelector("#content:not(.hide)");
