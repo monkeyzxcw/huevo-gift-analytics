@@ -1,4 +1,5 @@
-import { registerAccount, loginAccount, currentAccount, saveAccountProfile, logoutAccount, purgeAuthRecords } from "./auth.js";
+import { authenticateHuevoLaunch, currentAccount, saveAccountProfile, purgeAuthRecords } from "./auth.js";
+import { verifyHuevoLaunch } from "./huevo_launch.js";
 
 const HUEVO_HOSTS = new Set(["huevo.su", "huevo.departament.site"]);
 const MAX_LIVE_BODY_BYTES = 256_000;
@@ -480,32 +481,6 @@ function supportCredentials(env) {
   };
 }
 
-function hexBytes(value) {
-  return [...new Uint8Array(value)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-async function supportHmac(clientSecret, message) {
-  const encoder = new TextEncoder();
-  const hashedSecret = await crypto.subtle.digest("SHA-256", encoder.encode(clientSecret));
-  const key = await crypto.subtle.importKey("raw", hashedSecret, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  return hexBytes(await crypto.subtle.sign("HMAC", key, encoder.encode(message)));
-}
-
-async function verifySupportLaunch(query, clientSecret) {
-  if (!clientSecret || typeof query !== "string" || query.length > 4096) return null;
-  const params = Object.fromEntries(new URLSearchParams(query.replace(/^\?/, "")).entries());
-  const signed = Object.entries(params)
-    .filter(([key]) => key.startsWith("hu_") && key !== "hu_hash")
-    .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
-    .map(([key, value]) => key + "=" + value)
-    .join("\n");
-  const expected = await supportHmac(clientSecret, signed);
-  if (!constantTimeEqual(expected, String(params.hu_hash || "").toLowerCase())) return null;
-  const timestamp = Number.parseInt(params.hu_ts || "", 10);
-  const age = Math.floor(Date.now() / 1000) - timestamp;
-  if (!Number.isFinite(timestamp) || age < 0 || age > 86400) return null;
-  return Object.fromEntries(Object.entries(params).filter(([key]) => key.startsWith("hu_")));
-}
 
 function supportDbConfigured(env) {
   return Boolean(env.DB);
@@ -582,7 +557,7 @@ async function createSupportIntent(request, env) {
   if (!Number.isSafeInteger(amount) || amount < 5000 || amount > 100000) {
     return jsonResponse(request, env, { ok: false, detail: "Сумма должна быть целым числом от 5000 до 100000." }, 400);
   }
-  const launch = await verifySupportLaunch(String(payload.launch_query || "").slice(0, 4096), credentials.clientSecret);
+  const launch = await verifyHuevoLaunch(String(payload.launch_query || "").slice(0, 8192), credentials.clientSecret, 86400);
   if (!launch || !/^\d{1,20}$/.test(String(launch.hu_user_id || "")) || !Number.isSafeInteger(Number(launch.hu_user_id))) {
     return jsonResponse(request, env, { ok: false, detail: "Откройте AMNYAM MODE внутри huEVO: подпись запуска не подтверждена." }, 401);
   }
@@ -697,9 +672,7 @@ async function fetchHandler(request, env, ctx) {
     return new Response(null, { status: 204, headers: responseHeaders(request, env) });
   }
   if (request.method === "GET" && path === "/api/bridge") return bridgePage(request, env);
-  if (request.method === "POST" && path === "/api/auth/register") return registerAccount(request, env, jsonResponse);
-  if (request.method === "POST" && path === "/api/auth/login") return loginAccount(request, env, jsonResponse);
-  if (request.method === "POST" && path === "/api/auth/logout") return logoutAccount(request, env, jsonResponse);
+  if (request.method === "POST" && path === "/api/auth/launch") return authenticateHuevoLaunch(request, env, jsonResponse);
   if (request.method === "GET" && path === "/api/me") return currentAccount(request, env, jsonResponse);
   if (request.method === "PUT" && path === "/api/me/profile") return saveAccountProfile(request, env, jsonResponse);
   if (request.method === "GET" && path === "/api/health") {
