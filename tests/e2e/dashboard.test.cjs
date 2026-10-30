@@ -576,12 +576,15 @@ test("target prices reject fractional and unsafe values but blank input clears a
   await page.click("#dBody button:has-text('Сохранить цену-цель')");
   assert.match(await page.textContent("#watchAlertText"), /целую целевую цену/);
   assert.equal(await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem("amnyam.targets") || "{}")).length), 0);
+  await page.click("#closeWatchAlert");
   await page.fill("#dBody .target-input", "1000000000000001");
   await page.click("#dBody button:has-text('Сохранить цену-цель')");
   assert.match(await page.textContent("#watchAlertText"), /целую целевую цену/);
+  await page.click("#closeWatchAlert");
   await page.fill("#dBody .target-input", "1000");
   await page.click("#dBody button:has-text('Сохранить цену-цель')");
   assert.equal(await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem("amnyam.targets") || "{}")).every(Number.isSafeInteger)), true);
+  await page.click("#closeWatchAlert");
   await page.fill("#dBody .target-input", "");
   await page.click("#dBody button:has-text('Сохранить цену-цель')");
   assert.equal(await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem("amnyam.targets") || "{}")).length), 0);
