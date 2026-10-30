@@ -76,6 +76,8 @@
     targets:readTargets(),alertedTargets:readAlertedTargets(),savedFilters:readSavedFilters()
   };
   let livePollRunning = false;
+  let pollFailureCount = 0;
+  let pollBackoffUntil = 0;
   let lastSnapshotSignature = "";
   let supportConfig = { enabled: false, amounts: [5000, 10000, 25000, 50000, 100000] };
   let supportSdkReady = false;
@@ -146,6 +148,7 @@
             : []
       ]),
       stats: raw && raw.stats,
+      sales: raw && raw.sales ? [raw.sales.generated_at, raw.sales.summary, Array.isArray(raw.sales.by_title) ? raw.sales.by_title.length : 0] : null,
       snapshots: Array.isArray(raw && raw.snapshots) ? raw.snapshots.length : 0,
       lastSnapshot: lastSnapshot ? [lastSnapshot.observed_at, lastSnapshot.active_lots, lastSnapshot.median_price] : null,
       changes: changes ? [changes.new, changes.gone, changes.price_up, changes.price_down] : null
@@ -156,15 +159,18 @@
     // The dashboard polls the Worker's merged /data.json, not only the first-page
     // endpoint. This lets both the 3-second live stream and the 5-minute full snapshot
     // reach every panel without reloading the document.
-    if (livePollRunning || !state.data || document.visibilityState !== "visible") return;
+    if (livePollRunning || !state.data || document.visibilityState !== "visible" || Date.now() < pollBackoffUntil) return;
     livePollRunning = true;
     try {
       const response = await fetch("./data.json?_=" + Date.now(), {
         cache: "no-store",
         headers: { "Accept": "application/json" }
       });
-      if (!response.ok) return;
+      if (!response.ok) throw new Error("HTTP " + response.status);
       const json = await response.json();
+      if (!json || typeof json !== "object" || !Array.isArray(json.lots)) throw new Error("Некорректный снимок рынка");
+      pollFailureCount = 0;
+      pollBackoffUntil = 0;
       const n = normalise(json);
       const signature = snapshotSignature(n.raw, n.lots);
       const changed = signature !== lastSnapshotSignature;
@@ -193,10 +199,75 @@
         renderState();
       }
     } catch (_) {
-      // Keep the last successfully rendered data if the Worker is temporarily unavailable.
+      // Preserve the last valid snapshot and back off network requests on intermittent failures.
+      pollFailureCount = Math.min(pollFailureCount + 1, 5);
+      const delays = [3000, 6000, 12000, 20000, 30000];
+      pollBackoffUntil = Date.now() + delays[pollFailureCount - 1];
+      const dot = $("stateDot"), label = $("stateText");
+      if (dot && label && state.data) {
+        dot.className = "dot warn";
+        label.textContent = "Связь восстанавливается";
+      }
     } finally {
       livePollRunning = false;
     }
+  }
+
+  // ---------- optional target-price sound ----------
+  const ALERT_SOUND_KEY = "amnyam.alertSound.v1";
+  let alertSoundEnabled = false;
+  let alertAudioContext = null;
+  try { alertSoundEnabled = localStorage.getItem(ALERT_SOUND_KEY) === "on"; } catch (_) {}
+  function updateAlertSoundControls() {
+    const toggle = $("toggleAlertSound"), hint = $("alertSoundHint");
+    if (toggle) {
+      toggle.textContent = "Звук: " + (alertSoundEnabled ? "включён" : "выключен");
+      toggle.setAttribute("aria-pressed", String(alertSoundEnabled));
+    }
+    if (hint) hint.textContent = alertSoundEnabled
+      ? "Короткий сигнал прозвучит при достижении целевой цены. Вкладка должна быть открыта."
+      : "Звуковые сигналы отключены. Уведомления браузера работают отдельно.";
+  }
+  function playAlertSound(force) {
+    if (!force && !alertSoundEnabled) return;
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) {
+      const hint = $("alertSoundHint");
+      if (hint) hint.textContent = "В этом браузере звуковой сигнал недоступен.";
+      return;
+    }
+    try {
+      if (!alertAudioContext) alertAudioContext = new AudioContextClass();
+      const context = alertAudioContext;
+      if (context.state === "suspended") context.resume().catch(() => {});
+      [880, 1174].forEach((frequency, index) => {
+        const start = context.currentTime + index * 0.16;
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(frequency, start);
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(0.055, start + 0.025);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.22);
+        oscillator.connect(gain);
+        gain.connect(context.destination);
+        oscillator.start(start);
+        oscillator.stop(start + 0.24);
+      });
+    } catch (_) {
+      const hint = $("alertSoundHint");
+      if (hint) hint.textContent = "Не удалось запустить звук. Проверь разрешения и настройки браузера.";
+    }
+  }
+  function initAlertSoundControls() {
+    updateAlertSoundControls();
+    $("toggleAlertSound").addEventListener("click", () => {
+      alertSoundEnabled = !alertSoundEnabled;
+      try { localStorage.setItem(ALERT_SOUND_KEY, alertSoundEnabled ? "on" : "off"); } catch (_) {}
+      updateAlertSoundControls();
+      if (alertSoundEnabled) playAlertSound(true);
+    });
+    $("testAlertSound").addEventListener("click", () => playAlertSound(true));
   }
 
   function show(which) {
@@ -1078,6 +1149,7 @@
   function showWatchAlert(lot){
     const text=(lot.title||("Лот #"+lot.lot_id))+" достиг целевой цены: "+price(lot.price)+" (цель "+price(state.targets[String(lot.lot_id)])+").";
     $("watchAlertText").textContent=text;$("watchAlertOpen").href=safeUrl(lot.lot_url,lot.lot_id);$("watchAlert").classList.remove("hide");
+    playAlertSound(false);
     if("Notification" in window&&Notification.permission==="granted"){try{new Notification("AMNYAM MODE · цена-цель",{body:text,tag:"amnyam-target-"+lot.lot_id});}catch(_){}}
   }
 
@@ -1358,6 +1430,7 @@
   // ---------- events ----------
   initAppearance();
   initAmbience();
+  initAlertSoundControls();
   const paletteOpen = $("openCommandPalette");
   if (paletteOpen) paletteOpen.addEventListener("click", openCommandPalette);
   $("commandPaletteInput").addEventListener("input", event => filterCommandPalette(event.target.value));
@@ -1451,5 +1524,5 @@
   initSupport();
   pollLive();
   window.setInterval(pollLive, 3000);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) { pollLive(); } });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { pollBackoffUntil = 0; pollFailureCount = 0; pollLive(); } });
 })();
