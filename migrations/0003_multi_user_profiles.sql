@@ -1,15 +1,18 @@
 CREATE TABLE IF NOT EXISTS user_accounts (
   user_id TEXT PRIMARY KEY,
-  username TEXT NOT NULL,
-  username_norm TEXT NOT NULL UNIQUE,
+  hu_user_id TEXT NOT NULL UNIQUE,
+  hu_username TEXT NOT NULL DEFAULT '',
   display_name TEXT NOT NULL,
-  password_hash TEXT NOT NULL,
-  password_salt TEXT NOT NULL,
-  password_iterations INTEGER NOT NULL,
+  avatar_url TEXT NOT NULL DEFAULT '',
+  app_id TEXT NOT NULL,
+  mode TEXT NOT NULL CHECK (mode IN ('live', 'test')),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   last_login_at TEXT NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_user_accounts_hu_username
+  ON user_accounts (hu_username);
 
 CREATE TABLE IF NOT EXISTS user_sessions (
   session_hash TEXT PRIMARY KEY,
