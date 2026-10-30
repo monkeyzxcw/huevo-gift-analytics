@@ -104,7 +104,7 @@ test("registration imports guest favourites and saves account preferences to the
   assert.equal(state.registerPayload.profile.targets["1000"], 75);
   assert.equal(state.registerPayload.profile.preferences.alertSound, true);
   await page.selectOption("#appearanceBackground", "nebula");
-  await page.waitForFunction(() => document.getElementById("accountSyncStatus").textContent.includes("сохранены"), { timeout: 5000 }).catch(() => {});
+  await page.waitForFunction(() => document.getElementById("accountSyncStatus").textContent.includes("сохранены"), null, { timeout: 5000 }).catch(() => {});
   await page.waitForTimeout(800);
   assert.ok(state.writes.length >= 1, "profile preferences should be persisted to the Worker");
   assert.equal(state.writes[state.writes.length - 1].preferences.appearance.background, "nebula");
