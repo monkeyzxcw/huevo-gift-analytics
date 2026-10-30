@@ -104,7 +104,7 @@ Cloudflare Worker обслуживает интерфейс из `cloudflare-sit
 
 ## Переменные окружения
 
-`INGEST_TOKEN`, `HUEVO_BASE_URL`, `HUEVO_COOKIES_JSON` / `HUEVO_COOKIES`, `HUEVO_DB`, `CRAWL_DELAY`, `MAX_PAGES`, `CRAWL_BLOCK_COOLDOWN_HOURS`, `AUTO_REFRESH_HOURS`, `DIAG_COOLDOWN_SECONDS`, `LOG_LEVEL`, `HUEVO_CLIENT_ID`, `HUEVO_CLIENT_SECRET` относятся к дополнительному локальному FastAPI/Docker-режиму. **Для Cloudflare Worker они не нужны**. Для публикации нужны только `CLOUDFLARE_API_TOKEN` и `CLOUDFLARE_ACCOUNT_ID` в GitHub Secrets.
+`INGEST_TOKEN`, `HUEVO_BASE_URL`, `HUEVO_COOKIES_JSON` / `HUEVO_COOKIES`, `HUEVO_DB`, `CRAWL_DELAY`, `MAX_PAGES`, `CRAWL_BLOCK_COOLDOWN_HOURS`, `AUTO_REFRESH_HOURS`, `DIAG_COOLDOWN_SECONDS`, `LOG_LEVEL`, `HUEVO_CLIENT_ID`, `HUEVO_CLIENT_SECRET` относятся к дополнительному локальному FastAPI/Docker-режиму. **Для Cloudflare Worker они не нужны**. Для публикации нужны `CLOUDFLARE_API_TOKEN` и `CLOUDFLARE_ACCOUNT_ID` в GitHub Secrets. Токен должен иметь право `D1: Edit`: deploy workflow применяет миграции и остановится, если аккаунтные таблицы не удалось создать.
 
 ## API
 
