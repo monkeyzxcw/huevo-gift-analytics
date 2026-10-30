@@ -284,7 +284,8 @@ def run_gift_detail_crawl(browser, cfg, lots, previous_by_id=None, log=None, lim
     from gift_detail_parser import parse_gift_detail
 
     previous_by_id = previous_by_id or {}
-    logger = log
+    import logging
+    logger = log or logging.getLogger(__name__)
     max_pages = max(0, min(int(limit), 50))
     if not max_pages:
         return {"details": {}, "status": "disabled", "pages": 0, "message": "Проверка карточек выключена."}
@@ -305,6 +306,8 @@ def run_gift_detail_crawl(browser, cfg, lots, previous_by_id=None, log=None, lim
     pages = 0
     status = "ok"
     message = "Карточки подарков проверены."
+    http_status = None
+    retry_after = None
     for lot in candidates[:max_pages]:
         if should_stop():
             status, message = "stopped", "Проверка карточек остановлена оператором."
@@ -316,8 +319,16 @@ def run_gift_detail_crawl(browser, cfg, lots, previous_by_id=None, log=None, lim
         def parser(html):
             nonlocal parsed
             parsed = parse_gift_detail(html, lot_id=lot_id, base_url=cfg.base_url,
-                                       observed_at=checked_at) or {}
-            return ([parsed] if parsed else []), (1 if parsed else 0)
+                                       observed_at=checked_at) or {
+                "lot_id": lot_id,
+                "title": str(lot.get("title") or "Без названия")[:300],
+                "attributes": {},
+                "image_url": "",
+                "checked_at": checked_at,
+                "source": "huevo_lot_page",
+                "status": "no_recognised_attributes",
+            }
+            return [parsed], 1
 
         probe, rows, _, _ = observe_with_retry(browser, cfg, "/market/lot/" + lot_id,
                                                logger, parser=parser)
@@ -325,15 +336,16 @@ def run_gift_detail_crawl(browser, cfg, lots, previous_by_id=None, log=None, lim
         verdict = probe.get("verdict")
         if verdict == "blocked":
             status, message = "blocked", "Huevo ограничил доступ при проверке карточек подарков. Проверка остановлена."
-            if logger:
-                logger.warning("gift detail block on lot=%s http=%s; stopping detail pass",
-                                lot_id, probe.get("http_status"))
+            http_status = probe.get("http_status") or probe.get("status_class_inferred")
+            retry_after = probe.get("retry_after")
+            logger.warning("gift detail block on lot=%s http=%s; stopping detail pass", lot_id, http_status)
             break
         if verdict in ("network_error", "server_error", "login", "wrong_host"):
             status = verdict
             message = "Проверка карточек прервана: " + verdict
-            if logger:
-                logger.warning("gift detail inspection stopped on lot=%s verdict=%s", lot_id, verdict)
+            http_status = probe.get("http_status") or probe.get("status_class_inferred")
+            retry_after = probe.get("retry_after")
+            logger.warning("gift detail inspection stopped on lot=%s verdict=%s", lot_id, verdict)
             break
         if parsed:
             # Retain only the whitelisted object from the parser. Never copy arbitrary page text.
@@ -344,7 +356,9 @@ def run_gift_detail_crawl(browser, cfg, lots, previous_by_id=None, log=None, lim
             logger.info("gift detail lot=%s: no recognised metadata; skipped", lot_id)
         if pages < min(max_pages, len(candidates)):
             cfg.sleep(max(float(cfg.delay), 3.0))
-    return {"details": details, "status": status, "pages": pages, "message": message}
+    return {"details": details, "status": status, "pages": pages, "message": message,
+            "http_status": http_status, "retry_after": retry_after}
+
 
 def run_history_crawl(browser, store, cfg, log, max_pages=5, should_stop=lambda: False):
     """Collect confirmed sales from /market/history into `store.sales`.
