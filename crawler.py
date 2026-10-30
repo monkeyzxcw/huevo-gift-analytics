@@ -438,7 +438,7 @@ def run_gift_instance_crawl(browser, cfg, candidates, log=None, limit=8,
             retry_after = probe.get("retry_after")
             logger.warning("gift instance block gift=%s http=%s; stopping queue", item["gift_id"], http_status)
             break
-        if verdict in ("network_error", "server_error", "login", "wrong_host"):
+        if verdict in ("network_error", "server_error", "login", "wrong_host", "not_found", "empty"):
             status, message = verdict, "Проверка историй прервана: " + verdict
             http_status = probe.get("http_status") or probe.get("status_class_inferred")
             retry_after = probe.get("retry_after")
