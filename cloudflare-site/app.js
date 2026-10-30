@@ -1023,53 +1023,88 @@
     }
 
     const instance = l.gift_instance && typeof l.gift_instance === "object" ? l.gift_instance : null;
+    const giftCatalog = l.gift_catalog && typeof l.gift_catalog === "object" ? l.gift_catalog : null;
     body.append(h("h4", { text: "Экземпляр и тираж" }));
-    if (instance) {
-      const soldOutLabel = instance.edition_sold_out === true ? "Тираж разошёлся"
-        : instance.edition_sold_out === false ? "Распродажа тиража не отмечена" : "Неизвестно";
-      const instanceKv = [
-        ["Номер экземпляра", instance.serial ? "№ " + fmt(instance.serial) : "—"],
-        ["Полный тираж", isNum(instance.supply) ? fmt(instance.supply) : "—"],
-        ["Редкость", instance.rarity || "—"],
-        ["Цена дропа", isNum(instance.drop_price) ? price(instance.drop_price) : (instance.drop_price_text || "—")],
+    if (giftCatalog) {
+      const soldOutLabel = giftCatalog.edition_sold_out === true ? "Тираж разошёлся"
+        : giftCatalog.edition_sold_out === false ? "Тираж ещё доступен / распродажа не отмечена" : "Не указано на странице подарка";
+      const catalogRows = [
+        ["Подарок", giftCatalog.title || l.title || "—"],
+        ["Полный тираж", isNum(giftCatalog.supply) ? fmt(giftCatalog.supply) : "—"],
+        ["Выпущено экземпляров", isNum(giftCatalog.issued) ? fmt(giftCatalog.issued) : "—"],
+        ["Цена выпуска", isNum(giftCatalog.drop_price) ? price(giftCatalog.drop_price) : (giftCatalog.drop_price_text || "—")],
         ["Состояние тиража", soldOutLabel],
-        ["Автор дизайна", instance.author || "—"],
-        ["Коллекция", instance.collection || "—"],
+        ["Редкость", giftCatalog.rarity || "—"],
+        ["Автор дизайна", giftCatalog.author || "—"],
+        ["Коллекция", giftCatalog.collection || "—"]
+      ];
+      body.append(h("dl", { class: "kv gift-attributes" }, catalogRows.map((pair) =>
+        h("div", {}, [h("dt", { text: pair[0] }), h("dd", { text: pair[1] })]))));
+      const catalogAttributes = giftCatalog.attributes && typeof giftCatalog.attributes === "object"
+        ? Object.entries(giftCatalog.attributes) : [];
+      if (catalogAttributes.length) {
+        body.append(h("dl", { class: "kv gift-attributes" }, catalogAttributes
+          .filter(([key, value]) => key && value != null && String(value).trim())
+          .map(([key, value]) => h("div", {}, [
+            h("dt", { text: String(key) }),
+            h("dd", { text: String(value) })
+          ]))));
+      }
+      const catalogId = String(giftCatalog.catalog_id || giftCatalog.gift_catalog_id || "");
+      const rawCatalogUrl = String(giftCatalog.gift_catalog_url || giftCatalog.source_url || "");
+      const catalogHref = /^https:\/\/(?:huevo\.su|huevo\.departament\.site)\/gifts\/\d+\/?$/i.test(rawCatalogUrl)
+        ? rawCatalogUrl : /^\d{1,20}$/.test(catalogId) ? "https://huevo.su/gifts/" + catalogId : "";
+      if (catalogHref) {
+        body.append(h("p", {}, [h("a", { class: "btn secondary", href: catalogHref, target: "_blank", rel: "noopener noreferrer", text: "Открыть страницу подарка и тираж ↗" })]));
+      }
+      body.append(h("p", { class: "muted foot", text: "Данные о тираже, цене выпуска и статусе выпуска загружены со страницы подарка /gifts/{id}. Они не подменяются информацией из личной страницы конкретного экземпляра." }));
+    } else {
+      body.append(h("div", { class: "empty", text: "Информация о тираже ещё не получена со страницы подарка /gifts/{id}. Старые поля с личной страницы /gift/{id} не используются как источник тиража." }));
+    }
+
+    if (instance) {
+      const instanceRows = [
+        ["Номер экземпляра", instance.serial ? "№ " + fmt(instance.serial) : "—"],
+        ["Редкость экземпляра", instance.rarity || "—"],
         ["Текущий владелец", instance.current_owner || "—"]
       ];
-      body.append(h("dl", { class: "kv gift-attributes" }, instanceKv.map((pair) =>
+      body.append(h("dl", { class: "kv gift-attributes" }, instanceRows.map((pair) =>
         h("div", {}, [h("dt", { text: pair[0] }), h("dd", { text: pair[1] })]))));
-      if (instance.gift_url) {
-        body.append(h("a", { class: "btn secondary", href: instance.gift_url, target: "_blank", rel: "noopener noreferrer", text: "Открыть страницу экземпляра ↗" }));
+      const rawInstanceUrl = String(instance.gift_url || "");
+      const instanceHref = /^https:\/\/(?:huevo\.su|huevo\.departament\.site)\/gift\/\d+\/?$/i.test(rawInstanceUrl)
+        ? rawInstanceUrl : "";
+      if (instanceHref) {
+        body.append(h("a", { class: "btn secondary", href: instanceHref, target: "_blank", rel: "noopener noreferrer", text: "Открыть страницу конкретного экземпляра ↗" }));
       }
-      body.append(h("h4", { text: "История экземпляра: кто кому" }));
-      const events = Array.isArray(instance.history) ? instance.history.slice().reverse().slice(0, 20) : [];
-      if (!instance.history_found) {
-        body.append(h("div", { class: "empty", text: "История экземпляра ещё не получена или её блок не удалось распознать." }));
-      } else if (!events.length) {
-        body.append(h("div", { class: "empty", text: "Блок истории доступен, но событий в нём нет." }));
-      } else {
-        const eventList = h("ul", { class: "list" });
-        events.forEach((event) => {
-          const flow = [event.from_user, event.to_user].filter(Boolean).join(" → ") || "Участники не указаны";
-          eventList.append(h("li", { class: "li" }, [
-            h("span", { class: "thumb", text: "↗", "aria-hidden": "true" }),
-            h("div", {}, [
-              h("div", { class: "t", text: event.label || "Изменение истории" }),
-              h("div", { class: "m", text: flow })
-            ]),
-            h("div", { class: "p", text: event.time_raw || "—" })
-          ]));
-        });
-        body.append(eventList);
-        if (instance.history.length > events.length) {
-          body.append(h("p", { class: "muted foot", text: "Показаны последние " + fmt(events.length) + " из " + fmt(instance.history.length) + " событий." }));
-        }
-      }
-      body.append(h("p", { class: "muted foot", text: "Цена дропа — первоначальная цена выпуска, а не текущая цена объявления. История показывает передачи и продажи, но не содержит сумму каждой сделки; отдельный обмен монетами в ней не виден." }));
     } else {
-      body.append(h("div", { class: "empty", text: "Данные экземпляра ещё не собраны. Сборщик получает их отдельной очередью и не открывает страницу при каждом обновлении рынка." }));
+      body.append(h("div", { class: "empty", text: "Данные конкретного экземпляра — номер, владелец и история — ещё не собраны." }));
     }
+
+    body.append(h("h4", { text: "История экземпляра: кто кому" }));
+    const events = Array.isArray(instance && instance.history) ? instance.history.slice().reverse().slice(0, 20) : [];
+    if (!instance || !instance.history_found) {
+      body.append(h("div", { class: "empty", text: "История конкретного экземпляра ещё не получена или её блок не удалось распознать." }));
+    } else if (!events.length) {
+      body.append(h("div", { class: "empty", text: "Блок истории доступен, но событий в нём нет." }));
+    } else {
+      const eventList = h("ul", { class: "list" });
+      events.forEach((event) => {
+        const flow = [event.from_user, event.to_user].filter(Boolean).join(" → ") || "Участники не указаны";
+        eventList.append(h("li", { class: "li" }, [
+          h("span", { class: "thumb", text: "↗", "aria-hidden": "true" }),
+          h("div", {}, [
+            h("div", { class: "t", text: event.label || "Изменение истории" }),
+            h("div", { class: "m", text: flow })
+          ]),
+          h("div", { class: "p", text: event.time_raw || "—" })
+        ]));
+      });
+      body.append(eventList);
+      if (instance.history.length > events.length) {
+        body.append(h("p", { class: "muted foot", text: "Показаны последние " + fmt(events.length) + " из " + fmt(instance.history.length) + " событий." }));
+      }
+    }
+    body.append(h("p", { class: "muted foot", text: "Номер, владелец и история относятся к конкретному экземпляру. Тираж и цена выпуска берутся отдельно со страницы /gifts/{id}. События истории не содержат сумму каждой сделки." }));
 
     const watch=h("div",{class:"detail-watch"});
     const fav=h("button",{class:"btn secondary",type:"button",text:state.favorites.includes(String(l.lot_id))?"★ В избранном":"☆ В избранное"});
