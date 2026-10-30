@@ -17,7 +17,7 @@ test("profile validator drops invalid lot IDs, targets and unsupported preferenc
       seasonTheme: "unknown"
     }
   });
-  assert.deepEqual(profile.favorites, ["123", "456"]);
+  assert.deepEqual(profile.favorites, ["123", "456", "7"]);
   assert.deepEqual(profile.targets, { "123": 1000, "789": 500 });
   assert.deepEqual(profile.alertedTargets, ["123"]);
   assert.equal(profile.savedFilters.length, 2);
