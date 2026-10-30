@@ -171,7 +171,18 @@ def parse_gift_instance(html, gift_id=None, base_url="https://huevo.su", observe
             break
     history_nodes = (history_card.select(".mg-hist") if history_card else soup.select(".mg-hist"))
     history_found = history_card is not None or bool(history_nodes)
-    events = [_history_event(node) for node in history_nodes[:300]]
+    events = []
+    repeated = {}
+    for order, node in enumerate(history_nodes[:300]):
+        event = _history_event(node)
+        signature = (event["type"], event["from_user"], event["to_user"])
+        repeated[signature] = repeated.get(signature, 0) + 1
+        # Relative labels such as "вчера" change every day. Keep event ids stable by
+        # hashing the event kind, participants, and occurrence number instead.
+        material = "\\x1f".join((*signature, str(repeated[signature])))
+        event["event_id"] = hashlib.sha256(material.encode("utf-8")).hexdigest()[:32]
+        event["event_order"] = order
+        events.append(event)
 
     if not heading_text and not history_found and drop_price_text == "" and not rarity:
         return None
