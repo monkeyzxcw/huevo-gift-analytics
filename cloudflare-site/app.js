@@ -977,8 +977,11 @@
     const target=h("input",{class:"input target-input",type:"number",min:"1",step:"1",inputmode:"numeric",placeholder:"Целевая цена","aria-label":"Целевая цена для "+(l.title||l.lot_id)});
     target.value=state.targets[String(l.lot_id)]?String(state.targets[String(l.lot_id)]):"";
     const save=h("button",{class:"btn",type:"button",text:"Сохранить цену-цель"});
-    save.addEventListener("click",()=>{if(saveTarget(l.lot_id,target.value))save.textContent=target.value.trim()?"Цена-цель сохранена":"Цель удалена";});
-    watch.append(fav,target,save);body.append(watch);
+    const targetError=h("small",{class:"target-error","role":"alert","aria-live":"polite"});
+    save.addEventListener("click",()=>{
+      if(saveTarget(l.lot_id,target.value,targetError))save.textContent=target.value.trim()?"Цена-цель сохранена":"Цель удалена";
+    });
+    watch.append(fav,target,save);body.append(watch,targetError);
     body.append(h("h4", { text: "История цены объявления" }));
     body.append(h("p", { class: "muted foot", text: "Это история изменения цены именно этого лота; она не равна цене завершённых продаж." }));
 
@@ -1312,12 +1315,15 @@
     if(changed)writeAlertedTargets();
   }
 
-  function saveTarget(lotId,raw){
+  function saveTarget(lotId,raw,errorNode){
     const id=String(lotId),textValue=String(raw == null ? "" : raw).trim(),value=textValue===""?null:Number(textValue);
     if(value!==null&&(!Number.isSafeInteger(value)||value<=0||value>TARGET_PRICE_MAX)){
-      $("watchAlertText").textContent="Введи целую целевую цену от 1 до "+fmt(TARGET_PRICE_MAX)+".";
-      $("watchAlert").classList.remove("hide");return false;
+      const message="Введи целую целевую цену от 1 до "+fmt(TARGET_PRICE_MAX)+".";
+      if(errorNode){errorNode.textContent=message;errorNode.classList.add("visible");}
+      else{$("watchAlertText").textContent=message;$("watchAlert").classList.remove("hide");}
+      return false;
     }
+    if(errorNode){errorNode.textContent="";errorNode.classList.remove("visible");}
     if(value===null){delete state.targets[id];state.alertedTargets=state.alertedTargets.filter(v=>v!==id);}
     else{state.targets[id]=value;if(!state.favorites.includes(id))state.favorites=[...state.favorites,id].slice(-5000);}
     writeTargets();writeAlertedTargets();writeFavorites();checkTargetAlerts();renderFavorites();renderRows();renderDeals();renderDayPicks();updateViewCounts();return true;

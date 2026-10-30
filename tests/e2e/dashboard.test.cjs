@@ -301,13 +301,20 @@ test("old v1 data.json still renders; missing sections show honest placeholders"
   await browser.close();
 });
 
-test("empty and partial JSON show an empty state, never fake zeros", async () => {
-  for (const body of [{}, { lots: [], collector: { status: "no_cards", message: "каталог пуст" } }, []]) {
-    const { browser, page, problems } = await open(serve(body));
-    await page.waitForSelector("#empty:not(.hide)");
-    assert.equal(await page.locator("#content:not(.hide)").count(), 0);
-    assert.deepEqual(problems, []);
-    await browser.close();
+test("only an explicit empty lots array shows an empty-market state; malformed roots show an error", async () => {
+  const empty = await open(serve({ lots: [], collector: { status: "no_cards", message: "каталог пуст" } }));
+  await empty.page.waitForSelector("#empty:not(.hide)");
+  assert.equal(await empty.page.locator("#content:not(.hide)").count(), 0);
+  assert.deepEqual(empty.problems, []);
+  await empty.browser.close();
+
+  for (const body of [{}, []]) {
+    const invalid = await open(serve(body));
+    await invalid.page.waitForSelector("#error:not(.hide)");
+    assert.equal(await invalid.page.locator("#empty:not(.hide)").count(), 0, "malformed root is not an empty catalogue");
+    assert.equal(await invalid.page.locator("#content:not(.hide)").count(), 0);
+    assert.deepEqual(invalid.problems, []);
+    await invalid.browser.close();
   }
 });
 
@@ -576,20 +583,17 @@ test("target prices reject fractions and values above the safe limit; blank inpu
   const save = page.locator("#dBody button:has-text('Сохранить цену-цель')");
   await input.fill("12.5");
   await save.click();
-  assert.match(await page.textContent("#watchAlertText"), /целую целевую цену/);
+  assert.match(await page.textContent("#dBody .target-error"), /целую целевую цену/);
   assert.equal(await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem("amnyam.targets") || "{}")).length), 0);
-  await page.click("#closeWatchAlert");
 
   await input.fill("1000000000000001");
   await save.click();
-  assert.match(await page.textContent("#watchAlertText"), /целую целевую цену/);
+  assert.match(await page.textContent("#dBody .target-error"), /целую целевую цену/);
   assert.equal(await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem("amnyam.targets") || "{}")).length), 0);
-  await page.click("#closeWatchAlert");
 
   await input.fill("1000");
   await save.click();
   assert.equal(await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem("amnyam.targets") || "{}")).every(Number.isSafeInteger)), true);
-  await page.click("#closeWatchAlert");
 
   await input.fill("");
   await save.click();

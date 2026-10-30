@@ -686,3 +686,6 @@ button[aria-busy="true"]{cursor:progress;opacity:.72}
 button:disabled{cursor:not-allowed;filter:saturate(.55)}
 .state[aria-busy="true"]{min-height:190px}
 @media(prefers-reduced-motion:reduce){button,.btn,.mode-btn{transition:none!important}}
+
+.target-error{display:none;color:var(--red);font-size:11px;line-height:1.45;margin-top:7px}
+.target-error.visible{display:block}
