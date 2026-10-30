@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://huevo.su; style-src 'self'; img-src 'self' https://huevo.su https://huevo.departament.site data:; connect-src 'self' https://huevo.su https://*.huevo.su; base-uri 'none'; form-action 'none'">
 <title>AMNYAM MODE — Huevo Gift Intelligence</title>
-<link rel="stylesheet" href="./styles.css?v=amnyam-v4">
+<link rel="stylesheet" href="./styles.css?v=amnyam-v5">
 </head>
 <body>
 <a class="skip" href="#catalog">К каталогу</a>
@@ -38,7 +38,7 @@
 </section>
 
 <div class="notice hide" id="notice" role="alert"></div>
-<div class="watch-alert hide" id="watchAlert" role="status" aria-live="polite"><span class="watch-alert-mark" aria-hidden="true">↗</span><span id="watchAlertText"></span><button class="btn secondary" id="closeWatchAlert" type="button" aria-label="Закрыть уведомление">✕</button></div>
+<div class="watch-alert hide" id="watchAlert" role="status" aria-live="polite"><span class="watch-alert-mark" aria-hidden="true">↗</span><span id="watchAlertText"></span><a class="btn secondary" id="watchAlertOpen" href="https://huevo.su/market/gifts" target="_blank" rel="noopener noreferrer">Открыть лот ↗</a><button class="btn secondary" id="closeWatchAlert" type="button" aria-label="Закрыть уведомление">✕</button></div>
 
 <div id="loading" class="panel state"><div class="spinner" aria-hidden="true"></div><p>Загружаю data.json…</p></div>
 <div id="error" class="panel state hide" role="alert"><p id="errorText"></p><button class="btn" id="retry" type="button">Повторить</button></div>
@@ -51,6 +51,10 @@
   <div class="pick-copy"><span class="section-index">/ CURRENT BEST PICK</span><h2>Лот дня <span>ниже ориентира</span></h2><p id="overviewPickHint">Ищем лучший лот относительно похожих предложений…</p></div>
   <div id="overviewPickLot" class="pick-lot"><span class="muted">Рынок загружается</span></div>
   <button class="btn secondary" type="button" data-go-view="deals">Все предложения ↗</button>
+</section>
+<section class="panel day-picks" data-view-section="overview" aria-labelledby="dayPicksTitle">
+  <div class="panel-head"><div><span class="section-index">/ DAILY MARKET RADAR</span><h3 id="dayPicksTitle">3 лота дня</h3><p class="muted">Сильный дисконт, низкая цена входа и достаточное число аналогов.</p></div><span class="view-stat" id="dayPicksNote">Сканируем рынок…</span></div>
+  <div class="day-pick-grid" id="dayPicks"></div>
 </section>
 <section class="cards" id="cards" data-view-section="overview" aria-label="Ключевые показатели"></section>
 
@@ -88,8 +92,11 @@
   <div class="section-heading"><div><span class="section-index">/ VALUE HUNT</span><h2>Ниже рынка</h2><p>Лоты дешевле ориентира похожих предложений. Ориентир объясняется в каждой карточке.</p></div><div class="view-heading-right"><span class="view-stat" id="dealsCount">— сигналов</span><span class="muted" id="dealsNote">Сравнение с медианой аналогов</span></div></div>
   <article class="deal-hero" id="belowBest">
     <div class="deal-hero-stamp">AMNYAM<br>SELECT</div>
-    <div class="deal-hero-content"><span class="eyebrow">BEST CURRENT PICK</span><h3 id="belowBestTitle">Сканируем каталог…</h3><strong id="belowBestPrice">—</strong><p id="belowBestMeta">Сравнение появится после загрузки рынка.</p><a id="belowBestOpen" class="btn" href="https://huevo.su/market/gifts" target="_blank" rel="noopener noreferrer">Открыть лот ↗</a></div>
+    <div class="deal-hero-content"><span class="eyebrow">BEST CURRENT PICK</span><h3 id="belowBestTitle">Сканируем каталог…</h3><strong id="belowBestPrice">—</strong><p id="belowBestMeta">Сравнение появится после загрузки рынка.</p><a id="belowBestOpen" class="btn" href="https://huevo.su/market/gifts" target="_blank" rel="noopener noreferrer">Открыть лот ↗</a>
+      <div class="best-target-tools"><label class="f"><span>Желаемая цена</span><input class="input target-input" id="belowBestTarget" type="number" min="1" step="1" inputmode="numeric" placeholder="Цена-цель"></label><button class="btn secondary" id="saveBelowBestTarget" type="button">Уведомить на этой цене</button><button class="btn secondary" id="belowBestMinus10" type="button">Цель −10%</button></div>
+    </div>
   </article>
+  <div class="deal-list-toolbar"><span class="muted">Цена лота, медиана похожих предложений, разница, исторический минимум и цена-цель — прямо в карточке.</span><label class="f"><span>Сортировать</span><select class="select" id="dealSort"><option value="discount">Самый большой дисконт</option><option value="price">Самая низкая цена</option><option value="savings">Максимальная разница с медианой</option><option value="sample">Больше аналогов</option><option value="historical">Ближе к историческому минимуму</option></select></label></div>
   <ol class="deal-list" id="dealsList"></ol>
   <p class="muted foot">Сигнал ниже рынка — сравнительная оценка, а не обещание прибыли. Сверяй серию, редкость и данные лота перед покупкой.</p>
 </section>
@@ -103,7 +110,7 @@
   <div class="section-heading"><div><span class="section-index">/ PERSONAL WATCHLIST</span><h2>Избранное</h2><p>Задай целевую цену у любого лота. Цели и сохранённые наборы фильтров хранятся только в этом браузере.</p></div>
     <div class="watch-header-actions"><span class="view-stat" id="favoritesCount">0 лотов</span><button class="btn secondary" id="enableNotifications" type="button">Включить уведомления</button></div>
   </div>
-  <p class="watch-help" id="notificationHint">Достижение целевой цены показывается в приложении. Браузерные уведомления можно разрешить отдельно.</p>
+  <p class="watch-help" id="notificationHint">Целевые цены проверяются при обновлении данных. Браузерные уведомления можно разрешить отдельно; сайт должен быть открыт, чтобы получать актуальные проверки.</p>
   <ol class="deal-list" id="favoritesList"></ol>
 </section>
 
@@ -193,6 +200,6 @@
 
 <footer class="footer"><span>Huevo Gift Analytics · статическая версия</span><span>Данные собирает локальный сборщик на ПК владельца; блокировки источника не обходятся.</span></footer>
 </main>
-<script src="./app.js?v=amnyam-v4" defer></script>
+<script src="./app.js?v=amnyam-v5" defer></script>
 </body>
 </html>
