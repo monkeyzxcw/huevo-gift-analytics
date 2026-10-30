@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://huevo.su; style-src 'self'; img-src 'self' https://huevo.su https://huevo.departament.site data:; connect-src 'self' https://huevo.su https://*.huevo.su; base-uri 'none'; form-action 'none'">
 <title>AMNYAM MODE — Huevo Gift Intelligence</title>
-<link rel="stylesheet" href="./styles.css?v=amnyam-v2">
+<link rel="stylesheet" href="./styles.css?v=amnyam-v3">
 </head>
 <body>
 <a class="skip" href="#catalog">К каталогу</a>
@@ -120,15 +120,33 @@
     <label class="f"><span>Статус</span><select class="select" id="status"><option value="">Все</option></select></label>
     <label class="f num"><span>Цена от</span><input class="input" id="pmin" type="number" min="0" inputmode="numeric" placeholder="0"></label>
     <label class="f num"><span>Цена до</span><input class="input" id="pmax" type="number" min="0" inputmode="numeric" placeholder="∞"></label>
+    <label class="f sort-control"><span>Сортировка</span><select class="select" id="sortBy" aria-label="Сортировка каталога">
+      <option value="price:1" selected>Цена: дешевле сначала</option>
+      <option value="price:-1">Цена: дороже сначала</option>
+      <option value="lot_count:-1">Больше похожих лотов</option>
+      <option value="lot_count:1">Меньше похожих лотов</option>
+      <option value="delta:1">Сильнее подешевели</option>
+      <option value="delta:-1">Сильнее подорожали</option>
+      <option value="first_seen:-1">Сначала новые</option>
+      <option value="first_seen:1">Сначала старые</option>
+      <option value="title:1">Название: А → Я</option>
+      <option value="title:-1">Название: Я → А</option>
+      <option value="rarity:1">Редкость: А → Я</option>
+      <option value="rarity:-1">Редкость: Я → А</option>
+      <option value="lot_id:-1">ID лота: новые ID</option>
+      <option value="lot_id:1">ID лота: старые ID</option>
+    </select></label>
     <button class="btn secondary reset" id="reset" type="button">Сбросить</button>
   </form>
   <div class="search-tips"><span>БЫСТРЫЕ ФИЛЬТРЫ</span><button type="button" data-search-token="price<100000">до 100k</button><button type="button" data-search-token="rarity:Редкий">редкие</button><button type="button" data-search-token="status:На продаже">на продаже</button><button type="button" data-search-token="price>500000">выше 500k</button></div>
+  <p class="sort-help">Сортируй через список выше или нажми на заголовок столбца. «Похожие лоты» — активные предложения с тем же подарком и редкостью.</p>
   <div class="table-wrap">
     <table>
       <caption class="sr">Каталог подарков. Нажмите на заголовок столбца, чтобы отсортировать.</caption>
       <thead><tr>
         <th scope="col" aria-sort="none"><button class="sort" data-key="title" type="button">Подарок</button></th>
         <th scope="col" aria-sort="ascending"><button class="sort" data-key="price" type="button">Цена</button></th>
+        <th scope="col" aria-sort="none"><button class="sort" data-key="lot_count" type="button">Похожие лоты</button></th>
         <th scope="col" aria-sort="none"><button class="sort" data-key="rarity" type="button">Редкость</button></th>
         <th scope="col" aria-sort="none"><button class="sort" data-key="delta" type="button">Изменение</button></th>
         <th scope="col" aria-sort="none"><button class="sort" data-key="first_seen" type="button">Замечен</button></th>
@@ -148,6 +166,6 @@
 
 <footer class="footer"><span>Huevo Gift Analytics · статическая версия</span><span>Данные собирает локальный сборщик на ПК владельца; блокировки источника не обходятся.</span></footer>
 </main>
-<script src="./app.js?v=amnyam-v2" defer></script>
+<script src="./app.js?v=amnyam-v3" defer></script>
 </body>
 </html>
