@@ -35,13 +35,13 @@ def classify_disappearance(old_instance, fresh_instance):
     new_events = fresh_instance.get("new_events") or []
     if not new_events:
         return "delisted"
-    latest = new_events[-1]
-    kind = latest.get("type")
-    if kind == "market_sale":
-        return "sold"
-    if kind == "transfer":
-        return "transferred"
-    # Huevo can record a purchase without enough detail to prove what happened to this listing.
+    for event in reversed(new_events):
+        kind = event.get("type")
+        if kind == "market_sale":
+            return "sold"
+        if kind == "transfer":
+            return "transferred"
+    # Huevo can record a purchase/other event without proving a sale or transfer.
     return "delisted"
 
 
