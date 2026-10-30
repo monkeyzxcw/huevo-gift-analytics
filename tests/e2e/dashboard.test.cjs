@@ -84,6 +84,9 @@ async function open(handler, viewport = { width: 1280, height: 900 }, options = 
         ok: true, authenticated: false, profiles_ready: true, user: null, profile: {}, updated_at: null
       }) });
     }
+    if (u.pathname.startsWith("/api/")) {
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, enabled: false, authenticated: false, subscriptions: 0, amounts: [], supporters: 0, total: 0 }) });
+    }
     if (u.pathname === "/data.json") return handler(route);
     const file = path.join(SITE, u.pathname === "/" ? "index.html" : u.pathname.slice(1));
     if (!file.startsWith(SITE) || !fs.existsSync(file)) return route.fulfill({ status: 404, body: "" });
