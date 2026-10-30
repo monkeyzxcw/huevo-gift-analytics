@@ -253,6 +253,7 @@ test("gift instance metadata and history feed render in the detail and catalog c
     disappearance_status: "delisted",
     gift_instance: { serial: 111, supply: 111 }
   }];
+  data.changes.gone = data.gone_lots;
   data.catalog_events = [{
     event_id: "history:18336:event-2", type: "market_sale",
     label: "Продан в Маркете", title: "Адидас-Тян Зеленая",
