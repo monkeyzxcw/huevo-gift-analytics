@@ -63,10 +63,10 @@
   }
   function writeFavorites() { try { localStorage.setItem("amnyam.favorites", JSON.stringify(state.favorites)); } catch (_) {} }
   function readTargets() {
-    try { const x=JSON.parse(localStorage.getItem("amnyam.targets")||"{}"); return x&&typeof x==="object"&&!Array.isArray(x)?Object.fromEntries(Object.entries(x).filter(([id,v])=>/^\\d{1,20}$/.test(id)&&isNum(v)&&v>0).slice(0,5000)):{}; } catch (_) { return {}; }
+    try { const x=JSON.parse(localStorage.getItem("amnyam.targets")||"{}"); return x&&typeof x==="object"&&!Array.isArray(x)?Object.fromEntries(Object.entries(x).filter(([id,v])=>/^\d{1,20}$/.test(id)&&isNum(v)&&v>0).slice(0,5000)):{}; } catch (_) { return {}; }
   }
   function writeTargets(){try{localStorage.setItem("amnyam.targets",JSON.stringify(state.targets));}catch(_){}}
-  function readAlertedTargets(){try{const x=JSON.parse(localStorage.getItem("amnyam.alertedTargets")||"[]");return Array.isArray(x)?x.map(String).filter(id=>/^\\d{1,20}$/.test(id)).slice(0,5000):[];}catch(_){return [];}}
+  function readAlertedTargets(){try{const x=JSON.parse(localStorage.getItem("amnyam.alertedTargets")||"[]");return Array.isArray(x)?x.map(String).filter(id=>/^\d{1,20}$/.test(id)).slice(0,5000):[];}catch(_){return [];}}
   function writeAlertedTargets(){try{localStorage.setItem("amnyam.alertedTargets",JSON.stringify(state.alertedTargets));}catch(_){}}
   function readSavedFilters(){try{const x=JSON.parse(localStorage.getItem("amnyam.savedFilters")||"[]");return Array.isArray(x)?x.filter(i=>i&&typeof i.name==="string"&&i.name.trim()&&i.filters&&typeof i.filters==="object").slice(0,25):[];}catch(_){return [];}}
   function writeSavedFilters(){try{localStorage.setItem("amnyam.savedFilters",JSON.stringify(state.savedFilters));}catch(_){}}
