@@ -54,6 +54,9 @@ async function open(handler, viewport = { width: 1280, height: 900 }, options = 
   const problems = [];
   if (options.initScript) await page.addInitScript(options.initScript);
   page.on("console", (m) => { if (m.type() === "error") problems.push("console: " + m.text()); });
+  page.on("response", (response) => {
+    if (response.status() === 404) problems.push("http 404: " + response.url());
+  });
   page.on("pageerror", (e) => problems.push("pageerror: " + e.message));
   page.on("dialog", (d) => { problems.push("dialog: " + d.message()); d.dismiss(); });
   await ctx.route("https://huevo.su/**", (r) => r.fulfill({ status: 204, body: "" }));
@@ -400,7 +403,7 @@ test("gift instance and catalogue edition use separate verified data sources", a
   assert.doesNotMatch(detail, /Чужая коллекция/);
   assert.match(detail, /Продан в Маркете/);
   assert.match(detail, /teeth/);
-  assert.match(detail, /не содержит сумму каждой сделки/);
+  assert.match(detail, /не содержат сумму каждой сделки/);
   assert.equal(await page.locator("#dBody a").filter({ hasText: "Открыть страницу подарка и тираж" }).getAttribute("href"), "https://huevo.su/gifts/131");
   assert.equal(await page.locator("#dBody a").filter({ hasText: "Открыть страницу конкретного экземпляра" }).getAttribute("href"), "https://huevo.su/gift/18336");
   await page.keyboard.press("Escape");
@@ -597,6 +600,14 @@ test("live polling refreshes every gift-instance field and event detail", async 
       from_user: "old_owner", to_user: "unknown", time_raw: "вчера"
     }]
   };
+  lot.gift_catalog = {
+    catalog_id: "131", gift_catalog_id: "131",
+    gift_catalog_url: "https://huevo.su/gifts/131",
+    title: lot.title, supply: 111, rarity: "Лимитированный",
+    drop_price: 5555, drop_price_text: "5555 монэток",
+    edition_sold_out: null, author: "", collection: "",
+    checked_at: NOW, source: "huevo_gift_catalog_page"
+  };
   data.catalog_events = [{
     event_id: "stable-event-id", type: "transfer", label: "Первичная запись",
     title: lot.title, lot_id: String(lot.lot_id), gift_id: "18336",
@@ -622,10 +633,10 @@ test("live polling refreshes every gift-instance field and event detail", async 
   // exactly the fields the old signature checked, while the actual visible metadata
   // and event details have changed.
   latest = JSON.parse(JSON.stringify(latest));
-  latest.lots[3].gift_instance.author = "Новый автор";
-  latest.lots[3].gift_instance.collection = "Обновлённая коллекция";
+  latest.lots[3].gift_catalog.author = "Новый автор";
+  latest.lots[3].gift_catalog.collection = "Обновлённая коллекция";
+  latest.lots[3].gift_catalog.edition_sold_out = true;
   latest.lots[3].gift_instance.current_owner = "new_owner";
-  latest.lots[3].gift_instance.edition_sold_out = true;
   latest.lots[3].gift_instance.history[0] = {
     ...latest.lots[3].gift_instance.history[0],
     label: "Продан в Маркете", from_user: "seller", to_user: "buyer", time_raw: "28 окт в 21:37"
