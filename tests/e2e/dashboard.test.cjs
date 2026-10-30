@@ -672,7 +672,8 @@ test("support payment status failures do not invite duplicate intents and can be
   assert.equal(statusCalls, 2);
   assert.equal(intentCalls, 1);
   assert.equal(await page.locator("#supportRetryStatus").isVisible(), false);
-  assert.deepEqual(problems, []);
+  assert.equal(problems.length, 1, "only the deliberately mocked 503 response may be logged");
+  assert.match(problems[0], /503 \(Service Unavailable\)/);
   await browser.close();
 });
 
