@@ -115,20 +115,48 @@ def parse_gift_detail(html, lot_id=None, base_url="https://huevo.su", observed_a
 
     gift_url = ""
     gift_id = ""
-    for gift_link in soup.select("a[href*='/gift/']"):
-        candidate = urljoin(base_url, str(gift_link.get("href") or "").strip())
-        try:
-            parts = urlsplit(candidate)
-        except ValueError:
-            continue
-        host = (parts.hostname or "").lower().rstrip(".")
-        match = re.fullmatch(r"/gift/(\\d{1,20})/?", parts.path)
-        if (parts.scheme == "https" and not parts.username and not parts.password
-                and (host in ("huevo.su", "huevo.departament.site") or host.endswith(".huevo.su"))
-                and match):
-            gift_id = match.group(1)
-            gift_url = f"{base_url.rstrip('/')}/gift/{gift_id}"
-            break
+    gift_links = list(soup.select("a.hue-gbadge[href*='/gift/'], a[href*='/gift/']"))
+    # The detail page can also contain gift badges belonging to the author/other users.
+    # Prefer the badge whose public tooltip names this exact collectible and serial.
+    wanted_title = _clean(title, 250).lower()
+    for gift_link in gift_links:
+        hint = _clean(gift_link.get("data-tip") or gift_link.get("aria-label"), 300).lower()
+        if wanted_title and wanted_title in hint and (not attributes.get("serial") or attributes["serial"].lower() in hint):
+            candidate = urljoin(base_url, str(gift_link.get("href") or "").strip())
+            try:
+                parts = urlsplit(candidate)
+            except ValueError:
+                continue
+            host = (parts.hostname or "").lower().rstrip(".")
+            match = re.fullmatch(r"/gift/(\\d{1,20})/?", parts.path)
+            if (parts.scheme == "https" and not parts.username and not parts.password
+                    and (host in ("huevo.su", "huevo.departament.site") or host.endswith(".huevo.su"))
+                    and match):
+                gift_id = match.group(1)
+                gift_url = f"{base_url.rstrip('/')}/gift/{gift_id}"
+                break
+    if not gift_id:
+        # Fallback: prefer a gift badge inside the owner row, never the author's badge.
+        for row in soup.select(".mg-r"):
+            labels = row.find_all("span", recursive=False)
+            if not labels or not _clean(labels[0], 60).lower().startswith("владелец"):
+                continue
+            gift_link = row.select_one("a.hue-gbadge[href*='/gift/'], a[href*='/gift/']")
+            if not gift_link:
+                continue
+            candidate = urljoin(base_url, str(gift_link.get("href") or "").strip())
+            try:
+                parts = urlsplit(candidate)
+            except ValueError:
+                continue
+            host = (parts.hostname or "").lower().rstrip(".")
+            match = re.fullmatch(r"/gift/(\\d{1,20})/?", parts.path)
+            if (parts.scheme == "https" and not parts.username and not parts.password
+                    and (host in ("huevo.su", "huevo.departament.site") or host.endswith(".huevo.su"))
+                    and match):
+                gift_id = match.group(1)
+                gift_url = f"{base_url.rstrip('/')}/gift/{gift_id}"
+                break
 
     image = ""
     og_image = soup.select_one('meta[property="og:image"]')
