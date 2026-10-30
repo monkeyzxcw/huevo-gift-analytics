@@ -1,37 +1,39 @@
-# Python
+# Node tooling
+node_modules/
+npm-debug.log*
+
+# Python tooling
 __pycache__/
 *.py[cod]
 .venv/
 venv/
 
-# Secrets and local configuration
+# Environment secrets
 .env
 .env.*
 !.env.example
 
-# Local database files
-huevo.db
-huevo.db-shm
-huevo.db-wal
+# Databases and local state
+*.db
+*.db-*
 *.sqlite
 *.sqlite3
+.collector-state.json
+.collector-state.json.tmp
+history.db
+history.db-*
 
-# Local scheduled collector logs
+# Logs, browser captures and local profiles
 logs/
+*.log
+*.har
+HuevoGiftBridge/
+.local-huevo-chrome-profile/
+ChromeProfile/
+ChromeProfileFull/
 
 # OS / editor
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
-
-# Local Chrome profile contains the private Huevo session; never commit it
-.local-huevo-chrome-profile/
-
-# Local collector cooldown memory
-.collector-state.json
-.collector-state.json.tmp
-
-# Local sales history database
-history.db
-history.db-*
