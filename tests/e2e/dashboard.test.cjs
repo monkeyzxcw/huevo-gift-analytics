@@ -580,7 +580,7 @@ test("target prices reject fractions and values above the safe limit; blank inpu
   await page.locator("#rows button[aria-label^='Подробнее о лоте']").click();
 
   const input = page.locator("#dBody .target-input");
-  const save = page.locator("#dBody button:has-text('Сохранить цену-цель')");
+  const save = page.locator("#dBody .detail-watch button.btn:not(.secondary)");
   await input.fill("12.5");
   await save.click();
   assert.match(await page.textContent("#dBody .target-error"), /целую целевую цену/);
