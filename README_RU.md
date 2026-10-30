@@ -16,13 +16,16 @@
 | `huevo_probe.py` | классификация страницы, реальный HTTP-статус и `Retry-After` из журнала Chrome |
 | `analytics.py` | чистая математика: медиана, квартили, группы сопоставимых лотов, выгодные предложения |
 | `support.py` | платежи huEVO Apps: подпись запуска, callback, идемпотентность |
+| `src/worker.js` | Cloudflare Worker: общий снимок рынка, live-данные, платежи, API аккаунтов |
+| `src/auth.js` | регистрация, вход, сессии и серверные персональные профили |
+| `migrations/0003_multi_user_profiles.sql` | пользователи, сессии, профильные настройки и лимиты входа |
 | `security.py` | Content-Security-Policy |
 | `snapshot.py` | схема публичного снимка v2: проверка структуры, миграция v1→v2, сравнение снимков, атомарная запись |
 | `history_parser.py` | разбор страницы истории сделок (личные имена не сохраняются; точная дата сделки nullable) |
 | `gift_detail_parser.py` | осторожный разбор разрешённых характеристик индивидуальной карточки подарка |
 | `scripts/collect_history.py` | ограниченный сбор локальной истории подтверждённых сделок в `history.db` |
 | `scripts/collect_snapshot.py` | сборщик GitHub Actions / локальный запуск → `cloudflare-site/data.json` |
-| `cloudflare-site/` | статический дашборд (HTML/CSS/JS без библиотек) |
+| `cloudflare-site/` | общий онлайн-дашборд (HTML/CSS/JS без библиотек), персональные данные синхронизируются через Worker API |
 | `static/` | интерфейс (`index.html`, `app.css`, `app.js`) и `browser_collector.js` |
 | `tests/` | unittest (Python) и Playwright (`tests/e2e`, фикстуры страниц Huevo) |
 
@@ -82,7 +85,7 @@
 
 Рабочий сайт: **https://huevo-gift-analytics.monkeyzxcw.workers.dev**.
 
-Cloudflare Worker обслуживает только статические файлы из `cloudflare-site/`. Имя Worker уже задано в `wrangler.jsonc` как `huevo-gift-analytics`. Python/Selenium и вход в Huevo в Cloudflare и GitHub Actions не запускаются.
+Cloudflare Worker обслуживает интерфейс из `cloudflare-site/` и API из `src/worker.js`. Вкладки рынка общие для всех пользователей; отдельные аккаунты и персональные настройки хранятся в Cloudflare D1 (`DB`). Python/Selenium и авторизованный вход в Huevo в браузере пользователей Cloudflare не запускает. Имя Worker — `huevo-gift-analytics`.
 
 Сбор идёт на твоём Windows-ПК:
 1. Один раз запусти `run_local_collector.bat`: откроется отдельный локальный Chrome-профиль, в котором нужно войти на Huevo. Сессия хранится только на этом компьютере.
@@ -93,11 +96,19 @@ Cloudflare Worker обслуживает только статические ф�
 
 Если каталог не удалось собрать полностью или Huevo ограничил доступ, последний корректный снимок остаётся без изменений. Блокировки не обходятся.
 
+## Пользовательские аккаунты
+
+Приложение поддерживает гостевой режим и регистрацию нескольких пользователей. Каждый пользователь получает собственные избранное, целевые цены, сохранённые фильтры, настройки звука и оформления; общие вкладки и аналитика рынка остаются одинаковыми для всех. Данные профиля хранятся в D1 и не публикуются вместе с `data.json`. При регистрации текущие локальные настройки браузера переносятся в новый профиль. Подробности, API и модель безопасности: [`MULTI_USER_PROFILES_RU.md`](MULTI_USER_PROFILES_RU.md).
+
+Пароль аккаунта AMNYAM должен быть отдельным от пароля Huevo и содержать не менее 12 символов. Восстановление забытого пароля пока не реализовано — сохрани его в менеджере паролей.
+
 ## Переменные окружения
 
-`INGEST_TOKEN`, `HUEVO_BASE_URL`, `HUEVO_COOKIES_JSON` / `HUEVO_COOKIES`, `HUEVO_DB`, `CRAWL_DELAY`, `MAX_PAGES`, `CRAWL_BLOCK_COOLDOWN_HOURS`, `AUTO_REFRESH_HOURS`, `DIAG_COOLDOWN_SECONDS`, `LOG_LEVEL`, `HUEVO_CLIENT_ID`, `HUEVO_CLIENT_SECRET` относятся к дополнительному локальному FastAPI/Docker-режиму. **Статическому Cloudflare Worker они не нужны**. Для публикации нужны только `CLOUDFLARE_API_TOKEN` и `CLOUDFLARE_ACCOUNT_ID` в GitHub Secrets.
+`INGEST_TOKEN`, `HUEVO_BASE_URL`, `HUEVO_COOKIES_JSON` / `HUEVO_COOKIES`, `HUEVO_DB`, `CRAWL_DELAY`, `MAX_PAGES`, `CRAWL_BLOCK_COOLDOWN_HOURS`, `AUTO_REFRESH_HOURS`, `DIAG_COOLDOWN_SECONDS`, `LOG_LEVEL`, `HUEVO_CLIENT_ID`, `HUEVO_CLIENT_SECRET` относятся к дополнительному локальному FastAPI/Docker-режиму. **Для Cloudflare Worker они не нужны**. Для публикации нужны только `CLOUDFLARE_API_TOKEN` и `CLOUDFLARE_ACCOUNT_ID` в GitHub Secrets.
 
 ## API
+
+Cloudflare Worker: `POST /api/auth/register|login/logout`, `GET /api/me`, `PUT /api/me/profile` — аккаунты и личные настройки (для закрытых операций требуется cookie текущей сессии). Рынок остаётся общим.
 
 Публичные (GET): `/health`, `/api/status`, `/api/diagnostics`, `/api/catalog` (`q, sort, status, rarity, min_price, max_price, limit≤200, offset`), `/api/facets`, `/api/lots/by-ids`, `/api/lots` (совместимость), `/api/stats`, `/api/highlights`, `/api/deals`, `/api/drops`, `/api/analytics/summary`, `/api/analytics/snapshots`, `/api/analytics/price-history`, `/api/history/{lot_id}`, `/api/support/config|stats|status/{id}`.
 
