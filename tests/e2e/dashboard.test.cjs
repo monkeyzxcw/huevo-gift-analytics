@@ -801,7 +801,7 @@ test("embedded Push shows a signed standalone link when Chrome blocks the popup"
     }
   });
   const frame = await page.waitForFunction(() => {
-    return [...window.frames].some((item) => {
+    return Array.from(window.frames).some((item) => {
       try { return item.location.search.includes("hu_user_id=14188"); } catch (_) { return false; }
     });
   }).then(() => page.frames().find((item) => item.url().includes("hu_user_id=14188")));
