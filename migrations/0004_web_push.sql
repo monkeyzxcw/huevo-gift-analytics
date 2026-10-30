@@ -28,3 +28,13 @@ CREATE TABLE IF NOT EXISTS push_alert_state (
 
 CREATE INDEX IF NOT EXISTS idx_push_alert_state_user
   ON push_alert_state (user_id);
+
+CREATE TABLE IF NOT EXISTS owner_presence (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  is_available INTEGER NOT NULL DEFAULT 0 CHECK (is_available IN (0, 1)),
+  updated_at TEXT NOT NULL,
+  updated_by_hu_user_id TEXT NOT NULL
+);
+
+INSERT OR IGNORE INTO owner_presence (id, is_available, updated_at, updated_by_hu_user_id)
+VALUES (1, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 'system');
