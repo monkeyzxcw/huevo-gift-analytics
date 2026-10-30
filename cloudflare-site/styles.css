@@ -213,3 +213,30 @@ tbody tr:hover td{background:#1a2115}
 .count-pill{display:inline-flex;align-items:center;justify-content:center;min-width:34px;padding:4px 8px;border:1px solid #4a6031;border-radius:5px;background:#1b2411;color:var(--amnyam-acid);font:900 12px ui-monospace,monospace}
 .count-sub{font-size:10px;margin-top:4px}
 @media(max-width:600px){.sort-control{min-width:100%;flex:1 1 100%}.sort-help{font-size:10px}}
+
+/* AMNYAM Market Intelligence suite */
+.catalog-header-actions,.watch-header-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.market-tools-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:6px 0 12px}
+.catalog-modes{display:inline-flex;gap:4px;padding:4px;background:#0a0d08;border:1px solid #303a27;border-radius:7px}
+.mode-btn{border:1px solid transparent;background:transparent;color:#9fa991;border-radius:5px;padding:8px 11px;cursor:pointer;font-size:11px;font-weight:800}
+.mode-btn.active,.mode-btn[aria-pressed=true]{background:#253319;border-color:#4f6b31;color:var(--amnyam-acid)}
+.mode-note{font-size:10px}
+.saved-filters{display:flex;align-items:end;gap:8px;flex-wrap:wrap;padding:12px;margin:0 0 13px;border:1px solid #2c3525;border-radius:8px;background:#0e110c}
+.saved-filters .preset-name,.saved-filters .preset-select{min-width:180px;flex:1}
+.preset-status{flex-basis:100%;min-height:1em;color:#a8bc91;font-size:10px}
+#groupsMode .group-mode-note{color:#a4b196;font-size:11px;line-height:1.55;margin:10px 0}
+.groups-table{min-width:850px}
+.groups-table th .group-sort{all:unset;box-sizing:border-box;display:block;width:100%;padding:12px;color:#c2cbb8;font-size:11px;text-transform:uppercase;letter-spacing:.6px;font-weight:850;cursor:pointer}
+.groups-table th[aria-sort=ascending] .group-sort::after{content:" ▲"}.groups-table th[aria-sort=descending] .group-sort::after{content:" ▼"}
+.groups-table .group-gift{display:flex;align-items:center;gap:10px;min-width:170px}.groups-table .group-gift strong{font-size:12px}.groups-table .group-gift small{display:block;color:var(--muted);font-size:10px;margin-top:4px}
+.group-thumb{width:39px!important;height:39px!important;min-width:39px;object-fit:cover}.groups-table .group-median{color:var(--amnyam-acid);font-weight:900}
+.price-cell{white-space:normal}.price-value{white-space:nowrap}
+.sparkline{display:block;width:72px;height:21px;margin-top:4px;overflow:visible}.sparkline polyline{fill:none;stroke:#91c85a;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.sparkline.down polyline{stroke:#f0a15e}.sparkline.flat polyline{stroke:#a0a8c0}
+.lot-actions{display:flex;align-items:center;gap:5px;flex-wrap:wrap}.compare-check{accent-color:var(--amnyam-acid);width:16px;height:16px;cursor:pointer}
+.watch-alert{display:flex;align-items:center;gap:10px;margin:12px 0;padding:12px 14px;border:1px solid #5b7639;border-radius:8px;background:#18220f;color:#e2f2d4;font-size:12px}.watch-alert.hide{display:none}.watch-alert #watchAlertText{flex:1}
+.watch-alert-mark{display:grid;place-items:center;width:28px;height:28px;background:#283a18;color:var(--amnyam-acid);border-radius:6px;font-weight:900}.watch-help{font-size:11px;color:#9eaa91;line-height:1.55}
+.target-editor{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px}.target-input{max-width:145px;min-width:100px!important;padding:7px 8px!important;font-size:11px!important}.target-save{padding:7px 9px;font-size:10px}.target-status{flex-basis:100%;font-size:10px;color:#9da98e}
+.detail-watch{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 0;border-bottom:1px solid var(--line);margin-bottom:10px}
+.comparison-wrap{max-width:100%;margin:12px 0}.comparison-table{min-width:540px}.comparison-table th,.comparison-table td{padding:10px;border-bottom:1px solid var(--line);text-align:left;font-size:11px;vertical-align:middle}.comparison-table thead th{color:#d6e4c7}.comparison-table tbody th{color:#a7b39a;font-weight:800;white-space:nowrap}
+#compareDialog{width:min(1050px,calc(100% - 26px));max-width:1050px}
+@media(max-width:700px){.catalog-header-actions,.watch-header-actions{align-items:stretch}.catalog-header-actions .mono-tag{display:none}.mode-note{flex-basis:100%}.saved-filters .preset-name,.saved-filters .preset-select{min-width:100%;flex-basis:100%}.saved-filters>button{flex:1}.target-editor{align-items:stretch}.target-input{flex:1;max-width:none}.target-save{flex:1}.watch-header-actions{width:100%}.watch-header-actions .btn{flex:1}.catalog-modes{width:100%}.mode-btn{flex:1}}
