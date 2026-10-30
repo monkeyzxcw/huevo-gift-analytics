@@ -441,7 +441,13 @@ def main(argv=None):
                           if isinstance(r.get("price"), (int, float)) and r["price"] > 0]
         summary = market_summary(current_prices)
         old_lots = previous.get("lots") or []
-        old_by_id = {str(row.get("lot_id")): row for row in old_lots if row.get("lot_id") is not None}
+        old_by_id = {
+            str(row.get("lot_id")): row for row in (previous.get("gone_lots") or [])
+            if row.get("lot_id") is not None
+        }
+        old_by_id.update({
+            str(row.get("lot_id")): row for row in old_lots if row.get("lot_id") is not None
+        })
         new_details = details_result.get("details") or {}
         lots = [snapshot_lot(row, old_by_id, observed_at, new_details.get(str(row.get("lot_id"))))
                 for row in current_rows]
@@ -493,7 +499,12 @@ def main(argv=None):
                 gone_by_id[lot_id] = gone
 
         # A just-disappeared item is checked even if other market pages remain cached.
-        for lot_id, row in gone_by_id.items():
+        for lot_id, row in list(gone_by_id.items()):
+            if lot_id in current_ids:
+                # The exact market listing has returned; keep its lifetime history on the
+                # active row and remove the stale gone-state copy.
+                gone_by_id.pop(lot_id, None)
+                continue
             if new_details.get(lot_id):
                 row["gift_details"] = new_details[lot_id]
         keep_after = now_utc() - timedelta(hours=retention_hours())
