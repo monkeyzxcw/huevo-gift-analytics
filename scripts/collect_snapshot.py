@@ -371,15 +371,24 @@ def main(argv=None):
                             # Previous gone rows use their normal 2/30-day cache; only a
                             # newly disappeared listing above forces an immediate refresh.
                         })
-                try:
-                    instance_result = run_gift_instance_crawl(
-                        browser, config, instance_candidates, LOG,
-                        limit=args.instance_limit, max_age_days=30,
-                    )
-                except Exception as instance_error:
-                    LOG.warning("gift instance history pass skipped: %s", type(instance_error).__name__)
-                    instance_result = {"instances": {}, "status": "error", "pages": 0,
-                                       "message": "Проверка истории экземпляров не удалась; рыночный снимок сохранён."}
+                if details_result.get("status") == "blocked":
+                    # A rate-limit response ends ALL optional Huevo page work for this run.
+                    instance_result = {
+                        "instances": {}, "status": "blocked", "pages": 0,
+                        "http_status": details_result.get("http_status"),
+                        "retry_after": details_result.get("retry_after"),
+                        "message": "Очередь истории не запускалась после блокировки при чтении карточки лота.",
+                    }
+                else:
+                    try:
+                        instance_result = run_gift_instance_crawl(
+                            browser, config, instance_candidates, LOG,
+                            limit=args.instance_limit, max_age_days=30,
+                        )
+                    except Exception as instance_error:
+                        LOG.warning("gift instance history pass skipped: %s", type(instance_error).__name__)
+                        instance_result = {"instances": {}, "status": "error", "pages": 0,
+                                           "message": "Проверка истории экземпляров не удалась; рыночный снимок сохранён."}
         except Exception as exc:
             LOG.error("collector failed: %s", type(exc).__name__)
             result = None
