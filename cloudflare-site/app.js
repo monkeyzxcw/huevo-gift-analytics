@@ -9,7 +9,7 @@
   const ACCOUNT_PROFILE_URL = "./api/me";
   let accountState = {
     user: null, profilesReady: false, updatedAt: null, dirty: false, hydrating: false,
-    revision: 0, saving: false, saveTimer: null, pollTimer: null
+    revision: 0, saving: false, savePromise: null, profilePollRunning: false, saveTimer: null, pollTimer: null
   };
 
   // ---------- safe DOM helpers (no innerHTML anywhere: all text goes through textContent) ----------
@@ -1484,24 +1484,36 @@
   }
 
   async function saveAccountProfile() {
-    if (!accountState.user || !accountState.dirty || accountState.saving) return;
+    if (!accountState.user || !accountState.dirty) return;
+    if (accountState.savePromise) {
+      await accountState.savePromise;
+      if (accountState.dirty && accountState.user) return saveAccountProfile();
+      return;
+    }
     const revision = accountState.revision;
     const payload = profilePayload();
     accountState.dirty = false;
     accountState.saving = true;
+    const operation = (async () => {
+      try {
+        const result = await accountRequest("./api/me/profile", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ profile: payload })
+        });
+        accountState.updatedAt = result.updated_at || accountState.updatedAt;
+        if (revision === accountState.revision) setAccountStatus("Все изменения сохранены", "ok");
+        else accountState.dirty = true;
+      } catch (error) {
+        accountState.dirty = true;
+        setAccountStatus("Не удалось синхронизировать: " + error.message, "error");
+      }
+    })();
+    accountState.savePromise = operation;
     try {
-      const result = await accountRequest("./api/me/profile", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profile: payload })
-      });
-      accountState.updatedAt = result.updated_at || accountState.updatedAt;
-      if (revision === accountState.revision) setAccountStatus("Все изменения сохранены", "ok");
-      else accountState.dirty = true;
-    } catch (error) {
-      accountState.dirty = true;
-      setAccountStatus("Не удалось синхронизировать: " + error.message, "error");
+      await operation;
     } finally {
+      if (accountState.savePromise === operation) accountState.savePromise = null;
       accountState.saving = false;
       if (accountState.dirty && accountState.user) {
         if (accountState.saveTimer) window.clearTimeout(accountState.saveTimer);
@@ -1510,6 +1522,13 @@
     }
   }
 
+  async function flushAccountProfile() {
+    if (accountState.saveTimer) window.clearTimeout(accountState.saveTimer);
+    accountState.saveTimer = null;
+    if (accountState.savePromise) await accountState.savePromise;
+    if (accountState.dirty && accountState.user) await saveAccountProfile();
+    return !accountState.dirty;
+  }
   function acceptAccountSession(data) {
     accountState.user = data.user;
     accountState.profilesReady = true;
@@ -1584,7 +1603,8 @@
   function startAccountProfilePolling() {
     if (accountState.pollTimer) return;
     accountState.pollTimer = window.setInterval(async () => {
-      if (!accountState.user || accountState.dirty) return;
+      if (!accountState.user || accountState.dirty || accountState.profilePollRunning) return;
+      accountState.profilePollRunning = true;
       try {
         const data = await accountRequest(ACCOUNT_PROFILE_URL);
         if (!data.authenticated || !data.user) {
@@ -1606,7 +1626,11 @@
           applyAccountProfile(data.profile);
           setAccountStatus("Профиль синхронизирован с другого устройства", "ok");
         }
-      } catch (_) {}
+      } catch (_) {
+        // A temporary profile API failure must not interrupt the shared market.
+      } finally {
+        accountState.profilePollRunning = false;
+      }
     }, 30000);
   }
 
@@ -1614,24 +1638,31 @@
     const button = $("logoutButton");
     button.disabled = true;
     try {
-      await saveAccountProfile();
+      const saved = await flushAccountProfile();
+      if (!saved) {
+        setAccountStatus("Не удалось сохранить изменения. Остаюсь в аккаунте — проверь соединение и повтори выход.", "error");
+        button.disabled = false;
+        return;
+      }
       await accountRequest("./api/auth/logout", { method: "POST" });
-    } catch (_) {
-      // A lost connection must not leave the current browser showing the next guest's profile.
-    } finally {
-      accountState.user = null;
-      accountState.updatedAt = null;
-      accountState.dirty = false;
-      accountState.saving = false;
-      if (accountState.saveTimer) window.clearTimeout(accountState.saveTimer);
-      if (accountState.pollTimer) window.clearInterval(accountState.pollTimer);
-      accountState.saveTimer = null;
-      accountState.pollTimer = null;
-      restoreGuestProfile();
-      updateAccountUI();
+    } catch (error) {
+      setAccountStatus("Не удалось завершить сеанс: " + error.message, "error");
       button.disabled = false;
-      $("accountDialog").close();
+      return;
     }
+    accountState.user = null;
+    accountState.updatedAt = null;
+    accountState.dirty = false;
+    accountState.saving = false;
+    accountState.savePromise = null;
+    if (accountState.saveTimer) window.clearTimeout(accountState.saveTimer);
+    if (accountState.pollTimer) window.clearInterval(accountState.pollTimer);
+    accountState.saveTimer = null;
+    accountState.pollTimer = null;
+    restoreGuestProfile();
+    updateAccountUI();
+    button.disabled = false;
+    $("accountDialog").close();
   }
 
   function initAccountUI() {
