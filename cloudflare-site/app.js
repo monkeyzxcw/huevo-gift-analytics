@@ -43,7 +43,7 @@
     user: null, profilesReady: false, updatedAt: null, dirty: false, hydrating: false, authRevision: 0,
     revision: 0, saving: false, savePromise: null, profilePollRunning: false, saveTimer: null, pollTimer: null, authPromise: null, saveRetryCount: 0
   };
-  let pushState = { loaded: false, authenticated: false, subscriptions: 0, error: "" };
+  let pushState = { loaded: false, authenticated: false, subscriptions: 0, localSubscription: false, error: "" };
   let presenceState = { available: false, canManage: false, configured: false, loading: true, saving: false, error: "" };
 
   // ---------- safe DOM helpers (no innerHTML anywhere: all text goes through textContent) ----------
@@ -1475,8 +1475,8 @@
     if(!connect||!test||!disable||!status)return;
     const supported=window.isSecureContext&&("serviceWorker" in navigator)&&("PushManager" in window)&&("Notification" in window);
     connect.disabled=!supported||!accountState.user;
-    test.disabled=!supported||!accountState.user||!pushState.subscriptions;
-    disable.disabled=!pushState.subscriptions;
+    test.disabled=!supported||!accountState.user||!pushState.localSubscription;
+    disable.disabled=!pushState.localSubscription;
     connect.textContent=!supported?"Push недоступен в этом браузере":!accountState.user?"Сначала войди через huEVO":pushState.subscriptions?"Обновить push-подписку":"Подключить push на рабочий стол";
     if(pushState.error){status.textContent=pushState.error;status.dataset.state="error";}
     else if(!pushState.loaded){status.textContent="Проверяем состояние push…";status.dataset.state="loading";}
@@ -1488,7 +1488,12 @@
   async function refreshPushStatus(){
     try{
       const data=await accountRequest("./api/push/status");
-      pushState={loaded:true,authenticated:Boolean(data.authenticated),subscriptions:Number(data.subscriptions)||0,error:""};
+      let localSubscription=false;
+      if("serviceWorker" in navigator&&"PushManager" in window){
+        const registration=await navigator.serviceWorker.getRegistration("./");
+        localSubscription=Boolean(registration&&await registration.pushManager.getSubscription());
+      }
+      pushState={loaded:true,authenticated:Boolean(data.authenticated),subscriptions:Number(data.subscriptions)||0,localSubscription,error:""};
     }catch(error){
       pushState={...pushState,loaded:true,error:"Не удалось проверить push-сервер: "+error.message};
     }
@@ -1521,7 +1526,7 @@
       body:JSON.stringify(subscription.toJSON())
     });
     await refreshPushStatus();
-    if(!pushState.subscriptions)throw new Error("Сервер не подтвердил сохранение push-подписки.");
+    if(!pushState.localSubscription)throw new Error("Сервер не подтвердил push-подписку этого браузера.");
   }
 
   async function testServerPush(){
@@ -1537,12 +1542,13 @@
   async function disableServerPush(){
     const registration=await navigator.serviceWorker.getRegistration("./");
     const subscription=registration?await registration.pushManager.getSubscription():null;
-    if(subscription)await subscription.unsubscribe();
+    if(!subscription)throw new Error("На этом браузере push-подписка не найдена.");
     await accountRequest("./api/push/unsubscribe",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({endpoint:subscription?subscription.endpoint:""})
+      body:JSON.stringify({endpoint:subscription.endpoint})
     });
+    await subscription.unsubscribe();
     await refreshPushStatus();
   }
 
