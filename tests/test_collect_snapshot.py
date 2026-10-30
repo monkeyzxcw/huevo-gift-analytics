@@ -72,7 +72,7 @@ class CollectorTests(unittest.TestCase):
         cs.OUT.write_text(json.dumps(v1), encoding="utf-8")
         self.assertEqual(self.run_main([lot(7, 50)]), 0)
         d = self.data()
-        self.assertEqual(d["schema_version"], 2)
+        self.assertEqual(d["schema_version"], 3, "legacy v1 snapshots migrate to the current v3 schema")
         self.assertEqual(d["lots"][0]["first_seen"], "2026-01-01T00:00:00+00:00")
 
     def test_identical_rerun_does_not_add_duplicate_history_point(self):
