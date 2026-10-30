@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT))
 
 from analytics import best_value, find_deals, market_summary, price_bins, sales_by_title, sales_summary
 from cookies import ALLOWED_HUEVO_HOSTS
-from crawler import CrawlConfig, run_crawl
+from crawler import CrawlConfig, run_crawl, run_gift_detail_crawl
 from snapshot import (SnapshotError, category_distribution, compare, is_duplicate_snapshot, migrate,
                       safe_write, snapshot_entry, top_expensive, validate, SCHEMA_VERSION)
 from storage import Store, utcnow
@@ -40,11 +40,11 @@ def iso(dt):
 
 
 def retention_hours():
-    """How long to remember gone lots and price/market history (default 72 h, 1..720)."""
+    """How long to remember gone lots and price/market history (default 30 days, 1..720)."""
     try:
-        return max(1, min(int(os.getenv("HUEVO_RETENTION_HOURS", "72")), 720))
+        return max(1, min(int(os.getenv("HUEVO_RETENTION_HOURS", "720")), 720))
     except ValueError:
-        return 72
+        return 720
 
 
 def parse_ts(value):
@@ -183,7 +183,7 @@ def make_browser(local_login=False, local_profile=False):
     return browser
 
 
-def snapshot_lot(row, old_by_id, observed_at):
+def snapshot_lot(row, old_by_id, observed_at, gift_details=None):
     item = {key: row.get(key) for key in (
         "lot_id", "title", "serial", "rarity", "price", "status", "image_url",
         "lot_url", "first_seen", "last_seen"
@@ -201,6 +201,9 @@ def snapshot_lot(row, old_by_id, observed_at):
     cutoff = now_utc() - timedelta(hours=retention_hours())
     item["history"] = [point for point in history[-200:]
                        if is_recent(point.get("observed_at"), cutoff)]
+    cached_details = gift_details or old.get("gift_details")
+    if isinstance(cached_details, dict):
+        item["gift_details"] = cached_details
     return item
 
 
@@ -214,6 +217,9 @@ def main(argv=None):
         "--local-profile", action="store_true",
         help="Use the saved local Chrome profile headlessly for scheduled runs; no cookie export required.",
     )
+    parser.add_argument("--detail-limit", type=int,
+                        default=max(0, min(int(os.getenv("HUEVO_DETAIL_LIMIT", "8")), 50)),
+                        help="Maximum individual gift pages inspected after a complete catalog pass (0 disables).")
     parser.add_argument(
         "--with-sales", action="store_true",
         help="Also publish aggregate sales statistics from the local history.db (only if it has enough confirmed rows).",
@@ -276,6 +282,24 @@ def main(argv=None):
                 delay=delay, max_pages=max_pages, cookies_raw=cookies,
             )
             result = run_crawl(browser, store, config, LOG)
+            details_result = {"details": {}, "status": "skipped", "pages": 0,
+                              "message": "Каталог не прошёл полный сбор; карточки не запрашивались."}
+            if result.status == "ok" and result.reached_end:
+                old_detail_index = {
+                    str(row.get("lot_id")): row for row in (previous.get("lots") or [])
+                    if row.get("lot_id") is not None
+                }
+                try:
+                    details_result = run_gift_detail_crawl(
+                        browser, config, store.active_lots(priced_only=False), old_detail_index,
+                        LOG, limit=args.detail_limit, max_age_days=60,
+                    )
+                except Exception as detail_error:
+                    # Detail parsing is enrichment only: never discard a complete catalog snapshot
+                    # because one optional lot page changed its markup or failed to render.
+                    LOG.warning("gift detail pass skipped: %s", type(detail_error).__name__)
+                    details_result = {"details": {}, "status": "error", "pages": 0,
+                                      "message": "Дополнительный анализ карточек не удался; основной каталог сохранён."}
         except Exception as exc:
             LOG.error("collector failed: %s", type(exc).__name__)
             result = None
@@ -310,7 +334,14 @@ def main(argv=None):
             print(f"Snapshot not updated: {status}: {message}", file=sys.stderr)
             return 2
 
-        save_state({})      # a complete pass clears any earlier cooldown
+        # A complete catalog pass clears prior cooldown, unless the optional detail crawl itself hit a block.
+        if details_result.get("status") == "blocked":
+            detail_pause = max(cooldown_hours * 3600, int(details_result.get("retry_after") or 0))
+            save_state({"blocked_until": iso(now_utc() + timedelta(seconds=detail_pause)),
+                        "http_status": details_result.get("http_status"), "checked_at": iso(now_utc()),
+                        "source": "gift_detail"})
+        else:
+            save_state({})
         observed_at = utcnow()
         current_rows = store.active_lots(priced_only=False)
         current_prices = [r["price"] for r in current_rows
@@ -318,7 +349,9 @@ def main(argv=None):
         summary = market_summary(current_prices)
         old_lots = previous.get("lots") or []
         old_by_id = {str(row.get("lot_id")): row for row in old_lots if row.get("lot_id") is not None}
-        lots = [snapshot_lot(row, old_by_id, observed_at) for row in current_rows]
+        new_details = details_result.get("details") or {}
+        lots = [snapshot_lot(row, old_by_id, observed_at, new_details.get(str(row.get("lot_id"))))
+                for row in current_rows]
         current_ids = {str(row["lot_id"]) for row in lots}
 
         # Match the production app's completeness guard before declaring older lots gone.
@@ -406,6 +439,12 @@ def main(argv=None):
                 "pages": result.pages,
                 "lots": len(lots),
                 "http_status": result.http_status,
+                "gift_details": {
+                    "status": details_result.get("status", "skipped"),
+                    "pages": details_result.get("pages", 0),
+                    "updated": len(new_details),
+                    "message": details_result.get("message", ""),
+                },
             },
             "stats": {"n_total": len(lots), **summary},
             "lots": lots,

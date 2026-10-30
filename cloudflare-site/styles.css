@@ -603,3 +603,43 @@ body[data-motion="off"] .deal-hero-art::after{animation:none!important}
 @media(max-width:900px){.cc-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.cc-lower{grid-template-columns:1fr}}
 @media(max-width:560px){.command-center{padding:13px;border-radius:13px}.cc-heading{align-items:flex-start}.cc-heading p{max-width:260px}.cc-command-trigger{padding:9px;font-size:0;gap:5px}.cc-command-trigger>span{font-size:18px}.cc-command-trigger kbd{font-size:9px}.cc-metric{padding:12px;min-height:112px}.cc-metric>strong{font-size:24px;margin-top:12px}.cc-metric>span{font-size:8px;letter-spacing:.07em}.cc-opportunity,.cc-quick{padding:13px}.cc-opportunity-main{align-items:flex-start}.cc-opportunity-main>strong{font-size:25px}.palette-footer span:first-child{max-width:65%;line-height:1.5}}
 @media(prefers-reduced-motion:reduce){.cc-live-dot{box-shadow:none}}
+
+
+/* AMNYAM Market Intelligence Lab — prevent the oversized gift art from covering copy. */
+.day-pick-card{
+  grid-template-columns:58px minmax(0,1fr)!important;
+  column-gap:11px!important;
+  align-items:start!important;
+}
+.day-pick-card>.day-pick-label{grid-column:1/-1!important;grid-row:1;min-width:0}
+.day-pick-card>.thumb{
+  grid-column:1!important;grid-row:2!important;
+  width:54px!important;height:54px!important;max-width:100%!important;
+  min-width:0!important;object-fit:contain!important;justify-self:start;
+  padding:3px!important;margin:0!important;box-sizing:border-box;
+}
+.day-pick-card>div:not(.p):not(.day-pick-label){grid-column:2!important;grid-row:2!important;min-width:0!important;width:100%}
+.day-pick-card>.p{
+  grid-column:1/-1!important;grid-row:3!important;
+  min-width:0!important;width:100%!important;max-width:100%!important;
+}
+.day-pick-card .t,.day-pick-card .m,.day-pick-card .p,.day-pick-card .deal-metric b{
+  min-width:0!important;max-width:100%;overflow-wrap:anywhere;word-break:normal;
+}
+.day-pick-card .deal-metrics{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+.day-pick-card .deal-target-row{min-width:0!important}
+.alert-sound-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:-4px 0 14px;padding:10px 12px;border:1px solid rgba(151,132,255,.16);border-radius:9px;background:rgba(10,14,25,.32)}
+.alert-sound-controls .btn{font-size:10px;padding:8px 10px}
+.alert-sound-controls small{flex:1 1 100%;color:#96a1ba;font-size:10px;line-height:1.5}
+.alert-sound-controls [aria-pressed="true"]{border-color:rgba(196,255,88,.45);color:var(--amnyam-acid)}
+.gift-attributes{margin:8px 0 16px}
+.gift-attributes>div{min-width:0}
+.sale-history-browser{display:grid;gap:10px;margin-top:16px}
+.sale-history-select{display:grid;gap:6px;max-width:420px}
+.gift-sales-profile{display:grid;gap:8px}
+.sale-history-chart{margin-top:8px}
+@media(max-width:650px){
+  .day-pick-card{grid-template-columns:54px minmax(0,1fr)!important;column-gap:9px!important}
+  .day-pick-card>.thumb{width:50px!important;height:50px!important}
+  .day-pick-card>div:not(.p):not(.day-pick-label){grid-column:2!important}
+}

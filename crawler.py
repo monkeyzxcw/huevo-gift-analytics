@@ -255,6 +255,111 @@ def _finish(pages, seen, new, changed, reached_end, reason):
     return CrawlResult("ok", f"Готово: {len(seen)} уникальных лотов, страниц {pages} ({reason})", pages, len(seen), new, changed, reached_end, stop_reason=reason)
 
 
+
+def _detail_cache_fresh(record, now=None, max_age_days=60):
+    """True when we inspected this lot page recently, even if it exposed no whitelisted fields."""
+    from datetime import datetime, timezone
+    record = record if isinstance(record, dict) else {}
+    raw = record.get("checked_at")
+    try:
+        checked = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        if checked.tzinfo is None:
+            return False
+        current = now or datetime.now(timezone.utc)
+        return (current - checked).total_seconds() < max_age_days * 86400
+    except (TypeError, ValueError):
+        return False
+
+
+def run_gift_detail_crawl(browser, cfg, lots, previous_by_id=None, log=None, limit=12,
+                          max_age_days=60, should_stop=lambda: False):
+    """Inspect a small, rotating set of individual lot pages without expanding request volume.
+
+    Details are cached per lot id. A page that renders but exposes no known attributes is still
+    marked as inspected, preventing the same unsupported page from being requested every run.
+    Any source block stops this detail pass immediately; already collected catalog data remains
+    usable and the caller can persist the shared cooldown.
+    """
+    from datetime import datetime, timezone
+    from gift_detail_parser import parse_gift_detail
+
+    previous_by_id = previous_by_id or {}
+    import logging
+    logger = log or logging.getLogger(__name__)
+    max_pages = max(0, min(int(limit), 50))
+    if not max_pages:
+        return {"details": {}, "status": "disabled", "pages": 0, "message": "Проверка карточек выключена."}
+    current = datetime.now(timezone.utc)
+    candidates = []
+    for lot in lots or []:
+        lot_id = str(lot.get("lot_id", "")).strip()
+        if not lot_id or lot.get("active") is False:
+            continue
+        old = previous_by_id.get(lot_id) or {}
+        if _detail_cache_fresh(old.get("gift_details"), now=current, max_age_days=max_age_days):
+            continue
+        url = str(lot.get("lot_url") or "")
+        if not url.startswith(cfg.base_url + "/market/lot/"):
+            continue
+        candidates.append(lot)
+    details = {}
+    pages = 0
+    status = "ok"
+    message = "Карточки подарков проверены."
+    http_status = None
+    retry_after = None
+    for lot in candidates[:max_pages]:
+        if should_stop():
+            status, message = "stopped", "Проверка карточек остановлена оператором."
+            break
+        lot_id = str(lot["lot_id"])
+        parsed = {}
+        checked_at = datetime.now(timezone.utc).isoformat()
+
+        def parser(html):
+            nonlocal parsed
+            parsed = parse_gift_detail(html, lot_id=lot_id, base_url=cfg.base_url,
+                                       observed_at=checked_at) or {
+                "lot_id": lot_id,
+                "title": str(lot.get("title") or "Без названия")[:300],
+                "attributes": {},
+                "image_url": "",
+                "checked_at": checked_at,
+                "source": "huevo_lot_page",
+                "status": "no_recognised_attributes",
+            }
+            return [parsed], 1
+
+        probe, rows, _, _ = observe_with_retry(browser, cfg, "/market/lot/" + lot_id,
+                                               logger, parser=parser)
+        pages += 1
+        verdict = probe.get("verdict")
+        if verdict == "blocked":
+            status, message = "blocked", "Huevo ограничил доступ при проверке карточек подарков. Проверка остановлена."
+            http_status = probe.get("http_status") or probe.get("status_class_inferred")
+            retry_after = probe.get("retry_after")
+            logger.warning("gift detail block on lot=%s http=%s; stopping detail pass", lot_id, http_status)
+            break
+        if verdict in ("network_error", "server_error", "login", "wrong_host"):
+            status = verdict
+            message = "Проверка карточек прервана: " + verdict
+            http_status = probe.get("http_status") or probe.get("status_class_inferred")
+            retry_after = probe.get("retry_after")
+            logger.warning("gift detail inspection stopped on lot=%s verdict=%s", lot_id, verdict)
+            break
+        if parsed:
+            # Retain only the whitelisted object from the parser. Never copy arbitrary page text.
+            details[lot_id] = parsed
+            if logger:
+                logger.info("gift detail lot=%s attrs=%d", lot_id, len(parsed.get("attributes") or {}))
+        elif logger:
+            logger.info("gift detail lot=%s: no recognised metadata; skipped", lot_id)
+        if pages < min(max_pages, len(candidates)):
+            cfg.sleep(max(float(cfg.delay), 3.0))
+    return {"details": details, "status": status, "pages": pages, "message": message,
+            "http_status": http_status, "retry_after": retry_after}
+
+
 def run_history_crawl(browser, store, cfg, log, max_pages=5, should_stop=lambda: False):
     """Collect confirmed sales from /market/history into `store.sales`.
 

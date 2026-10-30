@@ -102,3 +102,39 @@ class RobustnessTests(unittest.TestCase):
         from analytics import market_summary
         s = market_summary([1, 2, 3, 4, 5])
         self.assertEqual((s["median"], s["p25"], s["p75"]), (3, 2, 4))
+
+
+class MarketReferenceTests(unittest.TestCase):
+    def test_isolated_extreme_listing_does_not_pull_reference_up(self):
+        from analytics import robust_offer_reference
+        result = robust_offer_reference([100, 105, 110, 115, 10000])
+        self.assertEqual(result["reference"], 107.5)
+        self.assertEqual(result["excluded"], 1)
+
+    def test_split_price_clusters_are_flagged_as_unreliable(self):
+        from analytics import robust_offer_reference
+        result = robust_offer_reference([100, 100, 100, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000])
+        self.assertGreater(result["dispersion"], 2.5)
+        self.assertIsNone(result["reference"], "a split market must not be assigned a misleading median")
+        self.assertTrue(result["ambiguous"])
+        self.assertEqual(result["raw_size"], 13)
+
+    def test_sale_history_uses_only_explicit_timezone_aware_dates(self):
+        from analytics import sales_by_title
+        rows = [
+            {"title": "Gold Rose #1", "price": 100, "sold_at": "2026-10-27T10:00:00+00:00"},
+            {"title": "Gold Rose #2", "price": 110, "sold_at": "2026-10-27T12:00:00+00:00"},
+            {"title": "Gold Rose #3", "price": 120, "sold_at": "2026-10-28T12:00:00+00:00"},
+            {"title": "Gold Rose #4", "price": 1000000, "sold_at": None},
+            {"title": "Gold Rose #5", "price": 105, "sold_at": "10:33"},
+        ]
+        profile = sales_by_title(rows)[0]
+        self.assertEqual(profile["title"], "gold rose")
+        self.assertEqual(profile["count"], 5)
+        self.assertEqual(profile["median"], 110)
+        self.assertEqual(profile["dated_sales"], 3)
+        self.assertEqual([p["date"] for p in profile["history"]], ["2026-10-27", "2026-10-28"])
+
+
+if __name__ == "__main__":
+    unittest.main()

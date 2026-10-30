@@ -76,6 +76,8 @@
     targets:readTargets(),alertedTargets:readAlertedTargets(),savedFilters:readSavedFilters()
   };
   let livePollRunning = false;
+  let pollFailureCount = 0;
+  let pollBackoffUntil = 0;
   let lastSnapshotSignature = "";
   let supportConfig = { enabled: false, amounts: [5000, 10000, 25000, 50000, 100000] };
   let supportSdkReady = false;
@@ -138,6 +140,7 @@
       lots: (lots || []).map((lot) => [
         String(lot.lot_id), lot.title, lot.serial, lot.rarity, lot.price, lot.status,
         lot.active !== false,
+        lot.gift_details && [lot.gift_details.checked_at, lot.gift_details.attributes],
         Array.isArray(lot._history) && lot._history.length
           ? [lot._history.length, lot._history[lot._history.length - 1].observed_at, lot._history[lot._history.length - 1].price]
           : Array.isArray(lot.history) && lot.history.length
@@ -145,6 +148,7 @@
             : []
       ]),
       stats: raw && raw.stats,
+      sales: raw && raw.sales ? [raw.sales.generated_at, raw.sales.summary, Array.isArray(raw.sales.by_title) ? raw.sales.by_title.length : 0] : null,
       snapshots: Array.isArray(raw && raw.snapshots) ? raw.snapshots.length : 0,
       lastSnapshot: lastSnapshot ? [lastSnapshot.observed_at, lastSnapshot.active_lots, lastSnapshot.median_price] : null,
       changes: changes ? [changes.new, changes.gone, changes.price_up, changes.price_down] : null
@@ -155,15 +159,18 @@
     // The dashboard polls the Worker's merged /data.json, not only the first-page
     // endpoint. This lets both the 3-second live stream and the 5-minute full snapshot
     // reach every panel without reloading the document.
-    if (livePollRunning || !state.data || document.visibilityState !== "visible") return;
+    if (livePollRunning || !state.data || document.visibilityState !== "visible" || Date.now() < pollBackoffUntil) return;
     livePollRunning = true;
     try {
       const response = await fetch("./data.json?_=" + Date.now(), {
         cache: "no-store",
         headers: { "Accept": "application/json" }
       });
-      if (!response.ok) return;
+      if (!response.ok) throw new Error("HTTP " + response.status);
       const json = await response.json();
+      if (!json || typeof json !== "object" || !Array.isArray(json.lots)) throw new Error("Некорректный снимок рынка");
+      pollFailureCount = 0;
+      pollBackoffUntil = 0;
       const n = normalise(json);
       const signature = snapshotSignature(n.raw, n.lots);
       const changed = signature !== lastSnapshotSignature;
@@ -192,10 +199,75 @@
         renderState();
       }
     } catch (_) {
-      // Keep the last successfully rendered data if the Worker is temporarily unavailable.
+      // Preserve the last valid snapshot and back off network requests on intermittent failures.
+      pollFailureCount = Math.min(pollFailureCount + 1, 5);
+      const delays = [3000, 6000, 12000, 20000, 30000];
+      pollBackoffUntil = Date.now() + delays[pollFailureCount - 1];
+      const dot = $("stateDot"), label = $("stateText");
+      if (dot && label && state.data) {
+        dot.className = "dot warn";
+        label.textContent = "Связь восстанавливается";
+      }
     } finally {
       livePollRunning = false;
     }
+  }
+
+  // ---------- optional target-price sound ----------
+  const ALERT_SOUND_KEY = "amnyam.alertSound.v1";
+  let alertSoundEnabled = false;
+  let alertAudioContext = null;
+  try { alertSoundEnabled = localStorage.getItem(ALERT_SOUND_KEY) === "on"; } catch (_) {}
+  function updateAlertSoundControls() {
+    const toggle = $("toggleAlertSound"), hint = $("alertSoundHint");
+    if (toggle) {
+      toggle.textContent = "Звук: " + (alertSoundEnabled ? "включён" : "выключен");
+      toggle.setAttribute("aria-pressed", String(alertSoundEnabled));
+    }
+    if (hint) hint.textContent = alertSoundEnabled
+      ? "Короткий сигнал прозвучит при достижении целевой цены. Вкладка должна быть открыта."
+      : "Звуковые сигналы отключены. Уведомления браузера работают отдельно.";
+  }
+  function playAlertSound(force) {
+    if (!force && !alertSoundEnabled) return;
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) {
+      const hint = $("alertSoundHint");
+      if (hint) hint.textContent = "В этом браузере звуковой сигнал недоступен.";
+      return;
+    }
+    try {
+      if (!alertAudioContext) alertAudioContext = new AudioContextClass();
+      const context = alertAudioContext;
+      if (context.state === "suspended") context.resume().catch(() => {});
+      [880, 1174].forEach((frequency, index) => {
+        const start = context.currentTime + index * 0.16;
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(frequency, start);
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(0.055, start + 0.025);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.22);
+        oscillator.connect(gain);
+        gain.connect(context.destination);
+        oscillator.start(start);
+        oscillator.stop(start + 0.24);
+      });
+    } catch (_) {
+      const hint = $("alertSoundHint");
+      if (hint) hint.textContent = "Не удалось запустить звук. Проверь разрешения и настройки браузера.";
+    }
+  }
+  function initAlertSoundControls() {
+    updateAlertSoundControls();
+    $("toggleAlertSound").addEventListener("click", () => {
+      alertSoundEnabled = !alertSoundEnabled;
+      try { localStorage.setItem(ALERT_SOUND_KEY, alertSoundEnabled ? "on" : "off"); } catch (_) {}
+      updateAlertSoundControls();
+      if (alertSoundEnabled) playAlertSound(true);
+    });
+    $("testAlertSound").addEventListener("click", () => playAlertSound(true));
   }
 
   function show(which) {
@@ -481,12 +553,53 @@
   // ---------- sales (only when the file really contains confirmed data) ----------
   function renderSales() {
     const sales = state.data.sales, panel = $("salesPanel");
-    if (!sales || !sales.summary || !isNum(sales.summary.count) || sales.summary.count < 1) { panel.classList.add("hide"); return; }
+    if (!sales || !sales.summary || !isNum(sales.summary.count) || sales.summary.count < 1) {
+      panel.classList.add("hide"); return;
+    }
     panel.classList.remove("hide");
     const sm = sales.summary, body = clear($("salesBody"));
     $("salesNote").textContent = "подтверждённых записей: " + fmt(sm.count);
-    body.append(h("div", { class: "cards" }, [card("Продаж в базе", fmt(sm.count), "Цена неизвестна у " + fmt(sm.unknown || 0)), card("Медианная цена продажи", price(sm.median), sm.enough_data ? "Выборка достаточна" : "Выборка мала — ориентир"), card("Диапазон", sm.min != null ? short(sm.min) + "–" + short(sm.max) : "—", "Минимум–максимум")]));
+    body.append(h("div", { class: "cards" }, [
+      card("Продаж в базе", fmt(sm.count), "Цена неизвестна у " + fmt(sm.unknown || 0)),
+      card("Медианная цена продажи", price(sm.median), sm.enough_data ? "Основной ориентир оценки" : "Выборка мала — только подсказка"),
+      card("Диапазон", sm.min != null ? short(sm.min) + "–" + short(sm.max) : "—", "Минимум–максимум")
+    ]));
     if (sm.note) body.append(h("p", { class: "muted foot", text: sm.note }));
+    const profiles = Array.isArray(sales.by_title) ? sales.by_title.filter(x => x && typeof x.title === "string" && isNum(x.median)) : [];
+    if (!profiles.length) {
+      body.append(h("div", { class: "empty", text: "Группы подарков появятся, когда накопится минимум 3 сделки с известной ценой для одного названия." }));
+      return;
+    }
+    const wrap = h("div", { class: "sale-history-browser" });
+    const label = h("label", { class: "f sale-history-select" }, [
+      h("span", { text: "Подарок" }),
+      h("select", { class: "select", id: "giftSalesSelect" },
+        profiles.slice().sort((a,b) => b.count-a.count).map((profile,index) =>
+          h("option", { value: profile.title, text: profile.title + " · " + fmt(profile.count) + " продаж" })))
+    ]);
+    const detail = h("div", { id: "giftSalesProfile", class: "gift-sales-profile" });
+    wrap.append(label, detail);
+    body.append(wrap);
+    const draw = (title) => {
+      const profile = profiles.find(item => item.title === title) || profiles[0];
+      clear(detail);
+      detail.append(h("div", { class: "cards" }, [
+        card("Медиана продаж", price(profile.median), fmt(profile.count) + " завершённых сделок"),
+        card("P25 – P75", isNum(profile.p25)&&isNum(profile.p75)?price(profile.p25)+" – "+price(profile.p75):"—", "Центральные 50% цен"),
+        card("Нижняя / верхняя", price(profile.min)+" / "+price(profile.max), "Все цены в выборке")
+      ]));
+      const dated = Array.isArray(profile.history) ? profile.history : [];
+      if (dated.length >= 2) {
+        const chart = h("div", { class: "chart sale-history-chart" });
+        lineChart(chart, dated.map(point => ({ label: dayLabel(point.date), value: point.median })),
+          "Медиана подтверждённых продаж подарка " + profile.title);
+        detail.append(chart);
+      } else {
+        detail.append(h("div", { class: "empty", text: "Для этих сделок Huevo не передал надёжную календарную дату. Медиана и диапазон рассчитаны по подтверждённым ценам, но временную линию без даты мы не выдумываем." }));
+      }
+    };
+    draw(profiles.slice().sort((a,b)=>b.count-a.count)[0].title);
+    $("giftSalesSelect").addEventListener("change", event => draw(event.target.value));
   }
 
   // ---------- table ----------
@@ -687,11 +800,38 @@
     const img = l.image_url && /^https:\/\//i.test(l.image_url) ? h("img", { class: "thumb", src: l.image_url, alt: "", referrerpolicy: "no-referrer" }) : h("span", { class: "thumb", text: "🎁", "aria-hidden": "true" });
     body.append(h("div", { class: "dl-top" }, [img, h("div", {}, [h("div", { class: "price", text: price(l.price) }), h("div", { class: "muted", text: "Цена объявления, не цена сделки" })])]));
     // comparable group: same title & rarity, only when big enough
-    const group = state.lots.filter((x) => x.title === l.title && x.rarity === l.rarity && isNum(x.price)).map((x) => x.price).sort((a, b) => a - b);
-    let cmp = "Недостаточно сопоставимых лотов (" + group.length + " из 5 нужных)";
-    if (group.length >= 5 && isNum(l.price)) { const m = median(group); cmp = "Медиана группы " + fmt(m) + " ◉ (" + group.length + " лотов); этот лот " + (l.price < m ? "дешевле" : l.price > m ? "дороже" : "равен") + " медианы на " + fmt(Math.abs(l.price - m) / m * 100) + "%"; }
+    const groupLots = state.lots.filter((x) => x.title === l.title && x.rarity === l.rarity && isNum(x.price));
+    const group = groupLots.map((x) => x.price).sort((a, b) => a - b);
+    const salesProfile = salesProfileForGift(l);
+    let cmp = "Недостаточно данных: нужны 5 сопоставимых продаж или устойчивых объявлений.";
+    if (salesProfile && salesProfile.count >= 5 && isNum(l.price)) {
+      cmp = "Медиана подтверждённых продаж по названию: " + price(salesProfile.median) +
+        " (" + fmt(salesProfile.count) + " продаж). Объявления продавцов не используются как цена сделки.";
+    } else {
+      const offerProfile = robustOfferReference(group);
+      if (offerProfile && !offerProfile.ambiguous && offerProfile.dispersion <= .65) {
+        cmp = "Предварительный ориентир объявлений: " + price(offerProfile.reference) +
+          " (" + fmt(offerProfile.sample_size) + " из " + fmt(offerProfile.raw_size) +
+          " объявлений; исключено выбросов: " + fmt(offerProfile.excluded) + "). Это не цена продажи.";
+      } else if (offerProfile && offerProfile.ambiguous) {
+        cmp = "Цены объявлений разделены на разные ценовые группы. Надёжный ориентир не рассчитан.";
+      }
+    }
     const kv = [["ID", "#" + l.lot_id], ["Серия", l.serial || "—"], ["Редкость", l.rarity || "—"], ["Статус", l.status || "—"], ["Впервые замечен", when(l.first_seen)], ["Последний раз виден", when(l.last_seen)], ["Сравнение с аналогами", cmp]];
     body.append(h("dl", { class: "kv" }, kv.map((p) => h("div", {}, [h("dt", { text: p[0] }), h("dd", { text: p[1] })]))));
+    const attributes = l.gift_details && l.gift_details.attributes && typeof l.gift_details.attributes === "object"
+      ? Object.entries(l.gift_details.attributes).filter(([key,value]) => /^[a-z_]{2,30}$/.test(key) && typeof value === "string" && value.trim())
+      : [];
+    body.append(h("h4", { text: "Характеристики подарка" }));
+    if (attributes.length) {
+      const labels = { model:"Модель", backdrop:"Фон", symbol:"Символ", pattern:"Узор", rarity:"Редкость", serial:"Номер", supply:"Тираж", collection:"Коллекция" };
+      body.append(h("dl", { class: "kv gift-attributes" }, attributes.map(([key,value]) =>
+        h("div", {}, [h("dt", { text: labels[key] || key }), h("dd", { text: value })]))));
+      body.append(h("p", { class: "muted foot", text: "Характеристики извлечены из карточки подарка Huevo. Не распознанные поля и данные владельца не сохраняются." }));
+    } else {
+      body.append(h("div", { class: "empty", text: l.gift_details ? "Карточка проверена, но её характеристики пока не удалось распознать. Мы не подставляем догадки." : "Карточка подарка ещё не проанализирована сборщиком." }));
+    }
+
     const watch=h("div",{class:"detail-watch"});
     const fav=h("button",{class:"btn secondary",type:"button",text:state.favorites.includes(String(l.lot_id))?"★ В избранном":"☆ В избранное"});
     fav.addEventListener("click",()=>{toggleFavorite(l.lot_id);fav.textContent=state.favorites.includes(String(l.lot_id))?"★ В избранном":"☆ В избранное";});
@@ -700,7 +840,9 @@
     const save=h("button",{class:"btn",type:"button",text:"Сохранить цену-цель"});
     save.addEventListener("click",()=>{if(saveTarget(l.lot_id,target.value))save.textContent=target.value.trim()?"Цена-цель сохранена":"Цель удалена";});
     watch.append(fav,target,save);body.append(watch);
-    body.append(h("h4", { text: "История цены" }));
+    body.append(h("h4", { text: "История цены объявления" }));
+    body.append(h("p", { class: "muted foot", text: "Это история изменения цены именно этого лота; она не равна цене завершённых продаж." }));
+
     const hist = l._history, chart = h("div", { class: "chart" });
     body.append(chart);
     if (hist.length < 2) chart.append(h("div", { class: "empty", text: hist.length ? "Цена пока не менялась с первого наблюдения: " + price(hist[0].price) + " (" + when(hist[0].observed_at) + ")." : "История цены ещё не накоплена." }));
@@ -708,6 +850,28 @@
       lineChart(chart, hist.map((p) => ({ label: dayLabel(p.observed_at), value: p.price })), "История цены лота");
       const tbl = h("table", { class: "hist" }, [h("caption", { class: "sr", text: "История цены" }), h("tbody", {}, hist.slice().reverse().map((p) => h("tr", {}, [h("td", { text: when(p.observed_at) }), h("td", { class: "price", text: price(p.price) })])))]);
       body.append(tbl);
+    }
+    body.append(h("h4", { text: "История продаж такого подарка" }));
+    const saleChart = h("div", { class: "chart" });
+    body.append(saleChart);
+    if (salesProfile && salesProfile.count >= 3) {
+      saleChart.append(h("div", { class: "cards" }, [
+        card("Продаж в выборке", fmt(salesProfile.count), "Подтверждённые записи Huevo"),
+        card("Медиана продаж", price(salesProfile.median), "Главный ценовой ориентир"),
+        card("Диапазон 25–75%", isNum(salesProfile.p25)&&isNum(salesProfile.p75)?price(salesProfile.p25)+" – "+price(salesProfile.p75):"—", "Центральная половина продаж")
+      ]));
+      const dated = Array.isArray(salesProfile.history) ? salesProfile.history : [];
+      if (dated.length >= 2) {
+        const datedChart = h("div", { class: "chart" });
+        lineChart(datedChart, dated.map(point => ({ label: dayLabel(point.date), value: point.median })),
+          "Медианная цена подтверждённых продаж подарка");
+        saleChart.append(datedChart);
+        saleChart.append(h("p", { class: "muted foot", text: "График строится только по сделкам с точной датой и часовым поясом, указанными Huevo." }));
+      } else {
+        saleChart.append(h("div", { class: "empty", text: "Huevo показывает время без даты для части сделок. Поэтому хронологический график не строится наугад; ниже остаётся проверенный диапазон и медиана." }));
+      }
+    } else {
+      saleChart.append(h("div", { class: "empty", text: "В локальной базе пока нет достаточного числа подтверждённых продаж этого подарка. Будут показаны данные, когда накопится минимум 3 записи." }));
     }
     body.append(h("p", {}, [h("a", { class: "btn", href: safeUrl(l.lot_url, l.lot_id), target: "_blank", rel: "noopener noreferrer", text: "Открыть лот на Huevo ↗" })]));
     const dlg = $("detail");
@@ -741,9 +905,39 @@
     set("belowStat", fmt(buildDealSignals().length) + " сигналов");
   }
 
+  function normaliseSaleTitle(value) {
+    return String(value || "").trim().toLocaleLowerCase("ru")
+      .replace(/\s*#\s*\d+.*$/, "").replace(/\s+/g, " ").trim();
+  }
+
+  function salesProfileForGift(lot) {
+    const list = state.data && state.data.sales && Array.isArray(state.data.sales.by_title)
+      ? state.data.sales.by_title : [];
+    const title = normaliseSaleTitle(lot && lot.title);
+    return list.find(item => normaliseSaleTitle(item.title) === title && isNum(item.median) && item.median > 0) || null;
+  }
+
+  function robustOfferReference(prices) {
+    const values = (prices || []).filter(v => isNum(v) && v > 0).slice().sort((a,b) => a-b);
+    if (values.length < 5) return null;
+    for (let i=3; i<values.length-2; i++) {
+      const ratio = values[i-1] > 0 ? values[i]/values[i-1] : 0;
+      if (ratio >= 2.5) return { reference:null, sample_size:values.length, raw_size:values.length,
+        excluded:0, p25:quantile(values,.25), p75:quantile(values,.75), dispersion:ratio, ambiguous:true };
+    }
+    const q1 = quantile(values, .25), q3 = quantile(values, .75), iqr = q3 - q1;
+    const core = iqr > 0 ? values.filter(v => v >= q1 - 1.5 * iqr && v <= q3 + 1.5 * iqr) : values;
+    if (core.length < 5) return null;
+    const mid = median(core), low = quantile(core, .25), high = quantile(core, .75);
+    const dispersion = mid > 0 ? (high - low) / mid : Infinity;
+    return { reference:mid, sample_size:core.length, raw_size:values.length,
+      excluded:values.length-core.length, p25:low, p75:high, dispersion, ambiguous:false };
+  }
+
   function buildDealSignals() {
     const groups = new Map();
-    const active = state.lots.filter((lot) => lot && lot.active !== false && isNum(lot.price) && lot.price > 0 && String(lot.title || "").trim());
+    const active = state.lots.filter(lot => lot && lot.active !== false && isNum(lot.price) &&
+      lot.price > 0 && String(lot.title || "").trim());
     for (const lot of active) {
       const title = String(lot.title || "").trim().toLocaleLowerCase("ru").replace(/\s+/g, " ");
       const rarity = String(lot.rarity || "").trim().toLocaleLowerCase("ru");
@@ -754,21 +948,38 @@
     const signals = [];
     for (const group of groups.values()) {
       if (group.length < 3) continue;
-      const reference = median(group.map((lot) => lot.price));
+      const sales = salesProfileForGift(group[0]);
+      const offers = robustOfferReference(group.map(lot => lot.price));
+      let reference, basis, sampleSize, p25, p75, dispersion, excluded;
+      if (sales && sales.count >= 5) {
+        reference = sales.median; basis = "sales"; sampleSize = sales.count;
+        p25 = isNum(sales.p25) ? sales.p25 : null;
+        p75 = isNum(sales.p75) ? sales.p75 : null;
+        dispersion = p25 != null && p75 != null && reference > 0 ? (p75-p25)/reference : null;
+        excluded = 0;
+      } else {
+        // Asking prices are not transaction prices. Use them only when the distribution
+        // has a sufficiently large, non-dispersed core; otherwise suppress the deal signal.
+        if (!offers || offers.ambiguous || offers.dispersion > 1.0) continue;
+        reference = offers.reference; basis = "active"; sampleSize = offers.sample_size;
+        p25 = offers.p25; p75 = offers.p75; dispersion = offers.dispersion; excluded = offers.excluded;
+      }
       if (!isNum(reference) || reference <= 0) continue;
       for (const lot of group) {
         if (lot.price >= reference * 0.85) continue;
         const discount = Math.round((1 - lot.price / reference) * 1000) / 10;
         signals.push({
-          ...lot,
-          reference_price: reference,
-          discount_pct: discount,
-          sample_size: group.length,
-          basis: "active",
+          ...lot, reference_price: reference, discount_pct: discount, sample_size: sampleSize,
+          basis, reference_p25: p25, reference_p75: p75, dispersion, excluded_outliers: excluded,
+          confidence: basis === "sales" ? (sampleSize >= 20 ? "high" : "medium") : "low",
+          suspicious: discount > 80,
         });
       }
     }
-    signals.sort((a, b) => b.discount_pct - a.discount_pct || a.price - b.price || String(a.title).localeCompare(String(b.title), "ru"));
+    signals.sort((a,b) => (a.suspicious === b.suspicious ? 0 : a.suspicious ? 1 : -1) ||
+      (a.basis === b.basis ? 0 : a.basis === "sales" ? -1 : 1) ||
+      b.discount_pct-a.discount_pct || a.price-b.price ||
+      String(a.title).localeCompare(String(b.title), "ru"));
     return signals;
   }
 
@@ -776,8 +987,10 @@
     const badgeEl = h("span", { class: "discount-tag", text: badge || price(lot.price) });
     const actions = h("div", { class: "deal-actions" }, [
       badgeEl,
+      h("button", { class: "btn secondary deal-detail", type: "button", text: "Анализ" }),
       h("a", { class: "btn secondary", href: safeUrl(lot.lot_url, lot.lot_id), target: "_blank", rel: "noopener noreferrer", text: linkLabel || "Открыть ↗" })
     ]);
+    actions.querySelector(".deal-detail").addEventListener("click", event => openDetail(lot, event.currentTarget));
     const row = lotItem(lot, actions, sub);
     row.classList.add("deal-row");
     return row;
@@ -791,10 +1004,12 @@
     const fav=state.favorites.includes(id);
     const actions=h("div",{class:"deal-actions"},[
       h("span",{class:"discount-tag deal-discount",text:badgeText}),
+      h("button",{class:"btn secondary deal-detail",type:"button",text:"Анализ","aria-label":"Анализировать "+(lot.title||id)}),
       h("a",{class:"btn secondary",href:safeUrl(lot.lot_url,lot.lot_id),target:"_blank",rel:"noopener noreferrer",text:"Открыть ↗"}),
       ...(dayPick ? [h("button",{class:"btn purchase-confirm",type:"button",text:"Куплено ✓","aria-label":"Подтвердить успешную покупку лота "+(lot.title||id)})] : []),
       h("button",{class:"watch-btn deal-watch",type:"button","aria-pressed":String(fav),"aria-label":(fav?"Убрать из избранного ":"Добавить в избранное ")+(lot.title||id),text:fav?"★":"☆"})
     ]);
+    actions.querySelector(".deal-detail").addEventListener("click",event=>openDetail(lot,event.currentTarget));
     actions.querySelector(".deal-watch").addEventListener("click",()=>toggleFavorite(lot.lot_id));
     const purchased = actions.querySelector(".purchase-confirm");
     if (purchased) purchased.addEventListener("click", () => {
@@ -807,9 +1022,9 @@
     const metrics=h("div",{class:"deal-metrics"});
     metrics.append(
       h("span",{class:"deal-metric ask"},[h("small",{text:"ЦЕНА ЛОТА"}),h("b",{text:price(lot.price)})]),
-      h("span",{class:"deal-metric"},[h("small",{text:"МЕДИАНА АНАЛОГОВ"}),h("b",{text:isNum(lot.reference_price)?price(lot.reference_price):"Нет ориентира"})]),
+      h("span",{class:"deal-metric"},[h("small",{text:lot.basis==="sales"?"МЕДИАНА ПРОДАЖ":"МЕДИАНА ОБЪЯВЛЕНИЙ"}),h("b",{text:isNum(lot.reference_price)?price(lot.reference_price):"Нет ориентира"})]),
       h("span",{class:"deal-metric saving"},[h("small",{text:"РАЗНИЦА"}),h("b",{text:isNum(saved)?price(saved)+" ниже":"Не рассчитана"})]),
-      h("span",{class:"deal-metric"},[h("small",{text:"ВЫБОРКА"}),h("b",{text:isNum(lot.sample_size)&&lot.sample_size>0?fmt(lot.sample_size)+" аналогов":"Мало данных"})])
+      h("span",{class:"deal-metric"},[h("small",{text:lot.basis==="sales"?"СОВЕРШЁННЫЕ ПРОДАЖИ":"АКТИВНЫЕ ОБЪЯВЛЕНИЯ"}),h("b",{text:isNum(lot.sample_size)&&lot.sample_size>0?fmt(lot.sample_size)+" записей":"Мало данных"})])
     );
     if(histLow!==null)metrics.append(h("span",{class:"deal-metric history-low"},[h("small",{text:"МИНИМУМ В ИСТОРИИ"}),h("b",{text:price(histLow)})]));
     const mini=sparkline(lot._history);
@@ -839,7 +1054,7 @@
     else deals.sort((a,b)=>b.discount_pct-a.discount_pct||a.price-b.price);
     const list=clear($("dealsList"));
     $("dealsCount").textContent=fmt(signals.length)+" сигналов";
-    $("dealsNote").textContent=signals.length?"Сравнение названия + редкости; от 3 аналогов и дисконт от 15%.":"Пока нет подтверждённой группы аналогов";
+    $("dealsNote").textContent=signals.length?"Сначала история продаж; без неё — только устойчивый разброс минимум 5 объявлений.":"Нет достаточных продаж или устойчивой группы объявлений";
     $("belowBest").classList.toggle("hide",!best);
     if (!best) setMascotMood("sad", "Пока нет выгодных лотов… Сканирую дальше");
     else if ($("amnyamMascot").dataset.mood !== "happy") setMascotMood("neutral", "Нашёл выгодные предложения!");
@@ -847,7 +1062,7 @@
       state._belowBestId=String(best.lot_id);
       $("belowBestTitle").textContent=best.title||("Лот #"+best.lot_id);
       $("belowBestPrice").textContent=price(best.price);
-      $("belowBestMeta").textContent="На "+fmt(best.discount_pct)+"% ниже медианы аналогов · экономия "+price(Math.max(0,best.reference_price-best.price))+" · "+fmt(best.sample_size)+" похожих лотов · #"+best.lot_id;
+      $("belowBestMeta").textContent="На "+fmt(best.discount_pct)+"% ниже "+(best.basis==="sales"?"медианы подтверждённых продаж":"устойчивой медианы объявлений")+" · разница "+price(Math.max(0,best.reference_price-best.price))+" · "+fmt(best.sample_size)+(best.basis==="sales"?" продаж":" лотов")+" · "+(best.confidence==="high"?"высокая выборка":best.confidence==="medium"?"средняя выборка":"низкая уверенность")+" · #"+best.lot_id;
       $("belowBestOpen").href=safeUrl(best.lot_url,best.lot_id);
       const bestImage=$("belowBestImage"),bestArt=$("belowBestArt");
       const imageUrl=typeof best.image_url==="string"&&best.image_url.startsWith("https://")&&(best.image_url.includes("huevo.su/")||best.image_url.includes("huevo.departament.site/"))?best.image_url:"";
@@ -857,15 +1072,15 @@
       if(imageUrl&&bestImage.src!==imageUrl)bestImage.src=imageUrl;
       if(!imageUrl)bestImage.removeAttribute("src");
       $("belowBestTarget").value=state.targets[String(best.lot_id)]?String(state.targets[String(best.lot_id)]):"";
-      $("overviewPickHint").textContent="Лучший текущий дисконт: −"+fmt(best.discount_pct)+"% от медианы похожих предложений.";
+      $("overviewPickHint").textContent="Лучший текущий дисконт: −"+fmt(best.discount_pct)+"% от "+(best.basis==="sales"?"медианы подтверждённых продаж":"устойчивого диапазона объявлений")+". "+(best.confidence==="low"?"Ориентир предварительный.":"");
       const pick=clear($("overviewPickLot"));
       if(best.image_url&&/^https:\/\//i.test(best.image_url)){const img=h("img",{class:"pick-img",src:best.image_url,alt:"",loading:"lazy",referrerpolicy:"no-referrer"});img.addEventListener("error",()=>img.replaceWith(h("span",{class:"pick-img",text:"🎁"})));pick.append(img);}
-      pick.append(h("div",{},[h("strong",{text:best.title||("Лот #"+best.lot_id)}),h("span",{class:"pick-price",text:price(best.price)}),h("small",{text:"−"+fmt(best.discount_pct)+"% к медиане · выгода "+price(best.reference_price-best.price)})]));
+      pick.append(h("div",{},[h("strong",{text:best.title||("Лот #"+best.lot_id)}),h("span",{class:"pick-price",text:price(best.price)}),h("small",{text:"−"+fmt(best.discount_pct)+"% к "+(best.basis==="sales"?"продажам":"объявлениям")+" · разница "+price(best.reference_price-best.price)})]));
       deals.slice(0,30).forEach((lot,index)=>list.append(renderDealCard(lot,"#"+(index+1),false)));
     }else{
       state._belowBestId=null;
       $("belowBestTitle").textContent="Пока нет уверенного кандидата";$("belowBestPrice").textContent="—";
-      $("belowBestMeta").textContent="Нужно минимум три похожих активных предложения и цена хотя бы на 15% ниже их медианы.";
+      $("belowBestMeta").textContent="Нужны минимум 5 сопоставимых записей о продажах или 5 объявлений с достаточно узким диапазоном цен. Слишком разрозненные цены не считаем ориентиром.";
       $("belowBestOpen").href="https://huevo.su/market/gifts";$("belowBestTarget").value="";
       $("overviewPickHint").textContent="Когда появится сопоставимая группа, здесь будет показан лучший текущий дисконт.";
       const pick=clear($("overviewPickLot"));pick.append(h("span",{class:"muted",text:"Пока нет группы аналогов для честного сравнения."}));
@@ -943,6 +1158,7 @@
   function showWatchAlert(lot){
     const text=(lot.title||("Лот #"+lot.lot_id))+" достиг целевой цены: "+price(lot.price)+" (цель "+price(state.targets[String(lot.lot_id)])+").";
     $("watchAlertText").textContent=text;$("watchAlertOpen").href=safeUrl(lot.lot_url,lot.lot_id);$("watchAlert").classList.remove("hide");
+    playAlertSound(false);
     if("Notification" in window&&Notification.permission==="granted"){try{new Notification("AMNYAM MODE · цена-цель",{body:text,tag:"amnyam-target-"+lot.lot_id});}catch(_){}}
   }
 
@@ -1223,6 +1439,7 @@
   // ---------- events ----------
   initAppearance();
   initAmbience();
+  initAlertSoundControls();
   const paletteOpen = $("openCommandPalette");
   if (paletteOpen) paletteOpen.addEventListener("click", openCommandPalette);
   $("commandPaletteInput").addEventListener("input", event => filterCommandPalette(event.target.value));
@@ -1316,5 +1533,5 @@
   initSupport();
   pollLive();
   window.setInterval(pollLive, 3000);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) { pollLive(); } });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { pollBackoffUntil = 0; pollFailureCount = 0; pollLive(); } });
 })();

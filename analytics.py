@@ -1,7 +1,8 @@
-"""Pure analytics over lots. Stdlib only.
+"""Privacy-safe market analytics for current offers and confirmed sale history.
 
-All figures describe *current offers* and the app's own observations, never completed sales.
+Listing prices and completed-sale prices are kept as separate evidence sources.
 """
+
 from statistics import median
 
 MIN_GROUP = 3           # need at least this many comparable offers
@@ -146,14 +147,85 @@ def _sale_title(title):
     return _norm(re.sub(r"\s*#\s*\d+.*$", "", str(title or "")))
 
 
-def sales_by_title(rows, min_group=MIN_GROUP, limit=20):
-    """Median confirmed sale price per gift title (serial number stripped); groups below `min_group` are omitted."""
+def sales_by_title(rows, min_group=MIN_GROUP, limit=500):
+    """Privacy-safe confirmed-sale statistics by gift title.
+
+    Sale history points are emitted ONLY when Huevo supplies an explicit timezone-aware
+    sold_at timestamp. The crawler's first_observed time is not substituted for transaction time.
+    """
+    from datetime import datetime
     groups = {}
-    for r in rows:
-        key = _sale_title(r.get("title"))
-        if key and _valid_price(r.get("price")):
-            groups.setdefault(key, []).append(r["price"])
-    out = [{"title": k, "count": len(v), "median": median(v), "min": min(v), "max": max(v)}
-           for k, v in groups.items() if len(v) >= min_group]
-    out.sort(key=lambda g: (-g["count"], g["title"]))
-    return out[:limit]
+    for row in rows:
+        key = _sale_title(row.get("title"))
+        if key and _valid_price(row.get("price")):
+            groups.setdefault(key, []).append(row)
+    out = []
+    for key, items in groups.items():
+        prices = sorted(row["price"] for row in items if _valid_price(row.get("price")))
+        if len(prices) < min_group:
+            continue
+        dated = {}
+        for row in items:
+            if not _valid_price(row.get("price")):
+                continue
+            raw = row.get("sold_at")
+            if not raw:
+                continue
+            try:
+                stamp = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+                if stamp.tzinfo is None:
+                    continue
+                day = stamp.date().isoformat()
+            except (TypeError, ValueError):
+                continue
+            dated.setdefault(day, []).append(row["price"])
+        history = [{"date": day, "median": median(values), "count": len(values)}
+                   for day, values in sorted(dated.items())]
+        out.append({
+            "title": key, "count": len(prices), "median": median(prices),
+            "p25": percentile(prices, .25), "p75": percentile(prices, .75),
+            "min": prices[0], "max": prices[-1],
+            "dated_sales": sum(point["count"] for point in history),
+            "history": history[-180:],
+        })
+    out.sort(key=lambda group: (-group["count"], group["title"]))
+    return out[:max(1, min(int(limit), 1000))]
+
+
+def robust_offer_reference(prices, min_group=MIN_GROUP):
+    """Return a conservative reference from asking prices, resistant to extreme listings.
+
+    Isolated extremes are excluded by a Tukey 1.5*IQR fence. A clearly split market
+    (e.g. three offers near 100k and ten near 1m) is marked ambiguous instead of silently
+    allowing the majority cluster to define a fake "market price".
+    """
+    values = sorted(float(value) for value in prices if _valid_price(value))
+    if len(values) < min_group:
+        return {"reference": None, "sample_size": len(values), "raw_size": len(values),
+                "p25": None, "p75": None, "excluded": 0, "dispersion": None,
+                "ambiguous": False}
+    splits = [(i, values[i] / values[i - 1]) for i in range(3, len(values) - 2)
+              if values[i - 1] > 0 and values[i] / values[i - 1] >= 2.5]
+    if splits:
+        return {"reference": None, "sample_size": len(values), "raw_size": len(values),
+                "p25": percentile(values, .25), "p75": percentile(values, .75),
+                "excluded": 0, "dispersion": max(ratio for _, ratio in splits),
+                "ambiguous": True}
+    q1, q3 = percentile(values, .25), percentile(values, .75)
+    iqr = q3 - q1
+    if iqr > 0 and len(values) >= 4:
+        low, high = q1 - 1.5 * iqr, q3 + 1.5 * iqr
+        core = [value for value in values if low <= value <= high]
+    else:
+        core = values
+    if len(core) < min_group:
+        return {"reference": None, "sample_size": len(core), "raw_size": len(values),
+                "p25": q1, "p75": q3, "excluded": len(values) - len(core),
+                "dispersion": None, "ambiguous": True}
+    core_q1, core_q3 = percentile(core, .25), percentile(core, .75)
+    mid = median(core)
+    dispersion = (core_q3 - core_q1) / mid if mid else None
+    return {"reference": mid, "sample_size": len(core), "raw_size": len(values),
+            "p25": core_q1, "p75": core_q3, "excluded": len(values) - len(core),
+            "dispersion": round(dispersion, 4) if dispersion is not None else None,
+            "ambiguous": False}
