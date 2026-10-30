@@ -15,6 +15,18 @@
 <header class="top">
   <div class="brand"><div class="logo" aria-hidden="true">H</div><div><h1>AMNYAM <span>MODE</span></h1><p>WORKER EDITION · GIFT MARKET INTELLIGENCE</p></div></div>
   <div class="top-right">
+    <div class="mascot-dock" aria-label="AMNYAM mascot">
+      <svg class="mascot-svg" viewBox="0 0 64 64" role="img" aria-label="Зелёный танцующий маскот">
+        <path d="M12 30C12 17 21 10 32 10s20 7 20 20v12c0 8-8 13-20 13S12 50 12 42V30Z" fill="#8eea62" stroke="#b7ff8b" stroke-width="2"/>
+        <path d="M18 20 15 8c7 0 12 3 14 8M46 20l3-12c-7 0-12 3-14 8" fill="#8eea62" stroke="#b7ff8b" stroke-width="2" stroke-linejoin="round"/>
+        <ellipse cx="25" cy="29" rx="4" ry="6" fill="#14221b"/><ellipse cx="39" cy="29" rx="4" ry="6" fill="#14221b"/>
+        <circle cx="26" cy="27" r="1.4" fill="#fff"/><circle cx="40" cy="27" r="1.4" fill="#fff"/>
+        <path d="M24 40c4 5 12 5 16 0" fill="none" stroke="#21452a" stroke-width="2.5" stroke-linecap="round"/>
+        <path d="M13 39 5 35M51 39l8-4" stroke="#8eea62" stroke-width="5" stroke-linecap="round"/>
+      </svg>
+      <span class="mascot-copy"><b>AMNYAM</b><small>На страже выгодных лотов</small></span>
+    </div>
+
     <span class="badge" role="status"><i class="dot" id="stateDot"></i><span id="stateText">Загружаю данные…</span></span>
     <a class="btn secondary" href="https://huevo.su/market/gifts" target="_blank" rel="noopener noreferrer">Войти в рынок ↗</a>
   </div>
@@ -28,6 +40,7 @@
   <button role="tab" aria-selected="false" data-view="analytics" type="button"><span>05</span> Данные</button>
   <button role="tab" aria-selected="false" data-view="favorites" type="button"><span>06</span> Избранное <small id="navFavoritesCount">0</small></button>
   <button role="tab" aria-selected="false" data-view="support" type="button"><span>07</span> Поддержка</button>
+  <button role="tab" aria-selected="false" data-view="appearance" type="button"><span>08</span> Внешний вид</button>
 </nav>
 <div class="command-strip"><span class="command-mark">AMNYAM / WORKER EDITION</span><span>MARKET INTELLIGENCE <i></i> SILENT SYNC 3S</span><label class="command-search"><b>⌕</b><input id="globalSearch" type="search" placeholder="Быстрый поиск по рынку…" autocomplete="off" aria-label="Быстрый поиск"><kbd>ENTER</kbd></label></div>
 
@@ -40,6 +53,17 @@
 <div class="notice hide" id="notice" role="alert"></div>
 <div class="watch-alert hide" id="watchAlert" role="status" aria-live="polite"><span class="watch-alert-mark" aria-hidden="true">↗</span><span id="watchAlertText"></span><a class="btn secondary" id="watchAlertOpen" href="https://huevo.su/market/gifts" target="_blank" rel="noopener noreferrer">Открыть лот ↗</a><button class="btn secondary" id="closeWatchAlert" type="button" aria-label="Закрыть уведомление">✕</button></div>
 
+<section class="panel appearance-panel view-hidden" id="appearancePanel" data-view-section="appearance" aria-labelledby="appearanceTitle">
+  <div class="section-heading"><div><span class="section-index">/ PERSONAL STYLE</span><h2 id="appearanceTitle">Внешний вид</h2><p>Настрой атмосферу AMNYAM MODE. Декоративные эффекты не перекрывают каталог и кнопки покупки.</p></div><span class="view-stat">LOCAL SETTINGS</span></div>
+  <div class="appearance-grid">
+    <label class="appearance-control"><span>Фоновая тема</span><select class="select" id="appearanceBackground"><option value="cosmic">Cosmic Aurora</option><option value="liquid">Liquid Chrome</option><option value="nebula">Deep Nebula</option><option value="minimal">Спокойный фон</option></select><small>Меняет только декоративный фон.</small></label>
+    <label class="appearance-control"><span>Персонаж</span><select class="select" id="appearanceMascot"><option value="omnom">Зелёный маскот</option><option value="none">Скрыть персонажа</option></select><small>Маскот находится в шапке и не перекрывает элементы.</small></label>
+    <label class="appearance-control"><span>Движение</span><select class="select" id="appearanceMotion"><option value="normal">Плавные анимации</option><option value="subtle">Минимальные анимации</option><option value="off">Без анимаций</option></select><small>Можно отключить все декоративные движения.</small></label>
+    <label class="appearance-control appearance-toggle"><span><b>Стеклянные карточки</b><small>Полупрозрачные поверхности и мягкие блики.</small></span><input id="appearanceGlass" type="checkbox" checked></label>
+  </div>
+  <div class="appearance-preview"><div class="preview-orb"></div><div><b>AMNYAM / AURORA MODE</b><small>Космос · хром · мягкое свечение</small></div><span class="preview-chip">LIVE THEME</span></div>
+  <button class="btn secondary" id="resetAppearance" type="button">Сбросить оформление</button>
+</section>
 <div id="loading" class="panel state"><div class="spinner" aria-hidden="true"></div><p>Загружаю data.json…</p></div>
 <div id="error" class="panel state hide" role="alert"><p id="errorText"></p><button class="btn" id="retry" type="button">Повторить</button></div>
 <div id="empty" class="panel state hide"><h3>Данных пока нет</h3><p id="emptyText">Первый полный сбор ещё не опубликован. Статистика не показывается, чтобы не выдавать пустые значения за реальные.</p></div>
