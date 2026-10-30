@@ -613,8 +613,43 @@
     if (typeof dlg.showModal === "function") dlg.showModal(); else dlg.setAttribute("open", "");
   }
 
+  const APPEARANCE_KEY = "amnyam.appearance.v1";
+  const DEFAULT_APPEARANCE = { background: "cosmic", mascot: "omnom", motion: "normal", glass: true };
+  function readAppearance() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(APPEARANCE_KEY) || "{}");
+      return {
+        background: ["cosmic","liquid","nebula","minimal"].includes(saved.background) ? saved.background : DEFAULT_APPEARANCE.background,
+        mascot: saved.mascot === "none" ? "none" : "omnom",
+        motion: ["normal","subtle","off"].includes(saved.motion) ? saved.motion : "normal",
+        glass: saved.glass !== false
+      };
+    } catch (_) { return { ...DEFAULT_APPEARANCE }; }
+  }
+  let appearance = readAppearance();
+  function applyAppearance() {
+    document.body.dataset.bg = appearance.background;
+    document.body.dataset.mascot = appearance.mascot;
+    document.body.dataset.motion = appearance.motion;
+    document.body.classList.toggle("glass-off", !appearance.glass);
+    const bg = $("appearanceBackground"), mascot = $("appearanceMascot"), motion = $("appearanceMotion"), glass = $("appearanceGlass");
+    if (bg) bg.value = appearance.background;
+    if (mascot) mascot.value = appearance.mascot;
+    if (motion) motion.value = appearance.motion;
+    if (glass) glass.checked = appearance.glass;
+    try { localStorage.setItem(APPEARANCE_KEY, JSON.stringify(appearance)); } catch (_) {}
+  }
+  function initAppearance() {
+    applyAppearance();
+    $("appearanceBackground").addEventListener("change", e => { appearance.background = e.target.value; applyAppearance(); });
+    $("appearanceMascot").addEventListener("change", e => { appearance.mascot = e.target.value; applyAppearance(); });
+    $("appearanceMotion").addEventListener("change", e => { appearance.motion = e.target.value; applyAppearance(); });
+    $("appearanceGlass").addEventListener("change", e => { appearance.glass = e.target.checked; applyAppearance(); });
+    $("resetAppearance").addEventListener("click", () => { appearance = { ...DEFAULT_APPEARANCE }; applyAppearance(); });
+  }
+
   function switchView(view, focusSearch) {
-    const allowed = new Set(["overview", "market", "deals", "cheap", "analytics", "favorites", "support"]);
+    const allowed = new Set(["overview", "market", "deals", "cheap", "analytics", "favorites", "support", "appearance"]);
     state.activeView = allowed.has(view) ? view : "overview";
     document.querySelectorAll("[data-view-section]").forEach((section) => {
       section.classList.toggle("view-hidden", section.getAttribute("data-view-section") !== state.activeView);
@@ -968,6 +1003,7 @@
   }
 
   // ---------- events ----------
+  initAppearance();
   document.querySelectorAll("#mainNav [data-view]").forEach(button=>button.addEventListener("click",()=>switchView(button.dataset.view,true)));
   document.querySelectorAll("[data-go-view]").forEach(button=>button.addEventListener("click",()=>switchView(button.dataset.goView,true)));
   $("globalSearch").addEventListener("keydown",event=>{if(event.key!=="Enter")return;event.preventDefault();$("search").value=$("globalSearch").value.trim();state.page=0;switchView("market",true);applyFilters();});
