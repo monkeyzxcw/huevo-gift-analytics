@@ -380,3 +380,24 @@ test("AMNYAM atmosphere: daily picks wrap, seasonal themes persist, and mascot c
   assert.deepEqual(problems, []);
   await browser.close();
 });
+
+
+test("catalog changes panel handles partial payloads and falls back to gone lots and price history", async () => {
+  const data = dataV2();
+  delete data.changes;
+  data.gone_lots = [{ lot_id: "gone-42", title: "Снятый лот", price: 420, rarity: "Редкий" }];
+  data.lots[0].history = [
+    { observed_at: "2026-10-29T10:00:00Z", price: 100 },
+    { observed_at: "2026-10-29T11:00:00Z", price: 125 }
+  ];
+  const { browser, page, problems } = await open(serve(data));
+  await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="analytics"]');
+  assert.match(await page.textContent("#changeList"), /Пока нет данных|Новых лотов не обнаружено|Новых лотов/);
+  await page.click("#tabGone");
+  assert.match(await page.textContent("#changeList"), /Снятый лот/);
+  await page.click("#tabPrice");
+  assert.match(await page.textContent("#changeList"), /100.*125|100 → 125/);
+  assert.deepEqual(problems, []);
+  await browser.close();
+});
