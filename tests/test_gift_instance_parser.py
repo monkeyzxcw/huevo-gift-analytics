@@ -33,6 +33,15 @@ class GiftInstanceParserTests(unittest.TestCase):
         self.assertEqual(result["history"][2]["time_raw"], "вчера в 00:18")
         self.assertTrue(all("price" not in event for event in result["history"]))
 
+    def test_event_ids_do_not_change_when_relative_day_labels_roll_over(self):
+        html = self.read("gift_instance_ok.html")
+        first = parse_gift_instance(html, gift_id="18336")
+        second = parse_gift_instance(html.replace("вчера в 00:18", "сегодня в 00:18"), gift_id="18336")
+        self.assertEqual(
+            [event["event_id"] for event in first["history"]],
+            [event["event_id"] for event in second["history"]],
+        )
+
     def test_empty_history_card_is_a_valid_empty_history(self):
         html = '<div class="vk-card"><div class="vk-card-title">История <span>кто кому</span></div></div><h1 class="mg-gname">Подарок #7 из 20</h1>'
         result = parse_gift_instance(html, gift_id="7")
