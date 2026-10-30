@@ -542,3 +542,20 @@ input:focus,select:focus,.select:focus{border-color:rgba(196,255,88,.48)!importa
   .hero::before,.day-pick-card,.day-pick-card::after,.cards .card,.btn,img.thumb,.pick-img,.group-thumb{animation:none!important;transition:none!important}
 }
 body[data-motion="off"] .hero::before{animation:none!important}
+
+
+/* Featured gift artwork: large visual anchor, no effect on market actions. */
+.deal-hero{grid-template-columns:88px 150px minmax(0,1fr);gap:18px;overflow:hidden;position:relative}
+.deal-hero-art{width:150px;height:150px;position:relative;display:grid;place-items:center;align-self:center;overflow:hidden;border:1px solid rgba(196,255,88,.2);border-radius:14px;background:radial-gradient(circle at 50% 38%,rgba(196,255,88,.17),transparent 68%),linear-gradient(145deg,#1d2815,#10140e);color:var(--amnyam-acid);font-size:48px}
+.deal-hero-art::after{content:"";position:absolute;inset:0;background:linear-gradient(125deg,transparent 25%,rgba(255,255,255,.13) 48%,transparent 66%);transform:translateX(-120%);animation:featuredGiftSweep 7s ease-in-out infinite;pointer-events:none}
+.deal-hero-art img{width:100%;height:100%;object-fit:contain;padding:9px;filter:drop-shadow(0 12px 20px rgba(0,0,0,.3));transition:transform .35s ease}
+.deal-hero-art.has-image>span{display:none}
+.deal-hero:hover .deal-hero-art img{transform:scale(1.055) rotate(-2deg)}
+@keyframes featuredGiftSweep{0%,65%,100%{transform:translateX(-120%)}82%{transform:translateX(120%)}}
+.day-pick-card .thumb{width:68px!important;height:68px!important;object-fit:contain;background:radial-gradient(circle,rgba(196,255,88,.11),transparent 70%);border:1px solid rgba(196,255,88,.15);border-radius:12px;padding:4px}
+.day-pick-card .t img{transition:transform .25s ease,filter .25s ease}
+.day-pick-card:hover .thumb{transform:scale(1.045);filter:drop-shadow(0 5px 10px rgba(196,255,88,.1))}
+@media(max-width:900px){.deal-hero{grid-template-columns:72px 120px minmax(0,1fr);gap:12px}.deal-hero-art{width:120px;height:120px}.deal-hero-stamp{height:82px}}
+@media(max-width:650px){.deal-hero{grid-template-columns:88px minmax(0,1fr);align-items:start}.deal-hero-stamp{display:none}.deal-hero-art{grid-column:1;grid-row:1;width:88px;height:100px}.deal-hero-content{grid-column:2;grid-row:1}.deal-hero-content h3{font-size:18px;overflow-wrap:anywhere}.deal-hero-content>strong{font-size:21px}.deal-hero-content .best-target-tools{grid-column:1/-1}.day-pick-card .thumb{width:56px!important;height:56px!important}}
+@media(prefers-reduced-motion:reduce){.deal-hero-art::after{animation:none!important}.deal-hero-art img,.day-pick-card .thumb{transition:none!important}}
+body[data-motion="off"] .deal-hero-art::after{animation:none!important}

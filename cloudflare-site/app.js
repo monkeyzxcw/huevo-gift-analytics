@@ -849,6 +849,13 @@
       $("belowBestPrice").textContent=price(best.price);
       $("belowBestMeta").textContent="На "+fmt(best.discount_pct)+"% ниже медианы аналогов · экономия "+price(Math.max(0,best.reference_price-best.price))+" · "+fmt(best.sample_size)+" похожих лотов · #"+best.lot_id;
       $("belowBestOpen").href=safeUrl(best.lot_url,best.lot_id);
+      const bestImage=$("belowBestImage"),bestArt=$("belowBestArt");
+      const imageUrl=typeof best.image_url==="string"&&best.image_url.startsWith("https://")&&(best.image_url.includes("huevo.su/")||best.image_url.includes("huevo.departament.site/"))?best.image_url:"";
+      bestArt.classList.toggle("has-image",!!imageUrl);
+      bestImage.hidden=!imageUrl;
+      bestImage.onerror=()=>{bestArt.classList.remove("has-image");bestImage.hidden=true;};
+      if(imageUrl&&bestImage.src!==imageUrl)bestImage.src=imageUrl;
+      if(!imageUrl)bestImage.removeAttribute("src");
       $("belowBestTarget").value=state.targets[String(best.lot_id)]?String(state.targets[String(best.lot_id)]):"";
       $("overviewPickHint").textContent="Лучший текущий дисконт: −"+fmt(best.discount_pct)+"% от медианы похожих предложений.";
       const pick=clear($("overviewPickLot"));
