@@ -269,3 +269,60 @@ tbody tr:hover td{background:#1a2115}
 .watch-alert #watchAlertOpen{white-space:nowrap}
 @media(max-width:1050px){.day-pick-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.day-pick-card:last-child:nth-child(odd){grid-column:1/-1}.best-target-tools{grid-template-columns:1fr 1fr}.best-target-tools .f{grid-column:1/-1}}
 @media(max-width:650px){.day-pick-grid{grid-template-columns:1fr}.day-pick-card:last-child:nth-child(odd){grid-column:auto}.deal-card-rich{grid-template-columns:38px minmax(0,1fr)!important}.deal-card-rich>.p{grid-column:2}.deal-card-rich .deal-actions{display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;margin-top:8px}.deal-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.deal-list-toolbar .f{width:100%;min-width:100%}.best-target-tools{grid-template-columns:1fr}.best-target-tools .f{grid-column:auto}.watch-alert{align-items:flex-start;flex-wrap:wrap}.watch-alert #watchAlertText{min-width:65%}.watch-alert #watchAlertOpen{margin-left:38px}}
+
+
+/* AMNYAM atmosphere v6 — decorative layers stay outside the purchase flow */
+.wrap{position:relative;z-index:1}
+.logo{position:relative;isolation:isolate;animation:logo-glow 5.8s ease-in-out infinite}
+.logo i{position:absolute;inset:-5px;border:1px solid #bcff3b55;border-radius:12px;opacity:0;animation:logo-ring 5.8s ease-in-out infinite;pointer-events:none}
+@keyframes logo-glow{0%,100%{box-shadow:4px 4px 0 #526b24,0 0 8px #bcff3b25}50%{box-shadow:4px 4px 0 #526b24,0 0 24px #bcff3b80}}
+@keyframes logo-ring{0%,70%,100%{transform:scale(.92);opacity:0}82%{transform:scale(1.12);opacity:.8}}
+.amnyam-mascot{display:flex;align-items:center;gap:8px;min-width:0;max-width:220px}
+.amnyam-mascot svg{width:48px;height:48px;flex:none;overflow:visible;filter:drop-shadow(0 0 8px #a6ff4260);animation:mascot-idle 3.6s ease-in-out infinite}
+.mascot-body{fill:#9be33d;stroke:#4b7620;stroke-width:2}
+.mascot-pupil{fill:#17240d}.mascot-mouth{transition:d .2s ease}
+.mascot-speech{font-size:10px;line-height:1.35;color:#c4d6b1;max-width:140px}
+.amnyam-mascot[data-mood="happy"] svg{animation:mascot-happy .48s ease-in-out 5}
+.amnyam-mascot[data-mood="happy"] .mascot-mouth{d:path("M25 42Q36 60 49 41")}
+.amnyam-mascot[data-mood="sad"] svg{filter:drop-shadow(0 0 7px #8da0a0);animation:mascot-sad 2.8s ease-in-out infinite}
+.amnyam-mascot[data-mood="sad"] .mascot-mouth{d:path("M27 51Q36 42 47 51")}
+@keyframes mascot-idle{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-3px) rotate(2deg)}}
+@keyframes mascot-happy{0%,100%{transform:translateY(0) rotate(0)}35%{transform:translateY(-10px) rotate(-9deg)}70%{transform:translateY(-3px) rotate(9deg)}}
+@keyframes mascot-sad{0%,100%{transform:translateY(0)}50%{transform:translateY(3px) rotate(-4deg)}}
+.season-control{display:flex;align-items:center;gap:7px;color:#89927f;font:800 9px ui-monospace,monospace;letter-spacing:.1em}
+.season-control select{border:1px solid #3c4930;border-radius:5px;padding:6px 8px;background:#11160e;color:#dce9d0;font:700 10px ui-monospace,monospace;min-width:110px}
+#ambientLayer{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none;background:radial-gradient(360px circle at var(--mouse-x,80vw) var(--mouse-y,10vh),#bcff3b0b,transparent 72%);transition:background .18s ease}
+.falling-gift{position:absolute;top:-40px;font-size:18px;opacity:0;filter:drop-shadow(0 0 7px #bcff3b55);animation:gift-fall var(--gift-duration,8s) linear forwards}
+@keyframes gift-fall{0%{transform:translate3d(0,-30px,0) rotate(-18deg);opacity:0}12%{opacity:.32}82%{opacity:.24}100%{transform:translate3d(35px,110vh,0) rotate(48deg);opacity:0}}
+#cursorGlow{position:fixed;z-index:2;left:0;top:0;width:150px;height:150px;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;opacity:0;background:radial-gradient(circle,#bcff3b20 0,transparent 68%);transition:opacity .2s ease}
+body.cursor-glow-active #cursorGlow{opacity:1}
+.premium-splash{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,#202b15 0,#090c08 58%,#050605 100%);color:#eff8e5;transition:opacity .55s ease,visibility .55s ease;pointer-events:none}
+.premium-splash.is-hidden{opacity:0;visibility:hidden}
+.splash-mark{display:grid;place-items:center;width:78px;height:78px;border:1px solid #bcff3b;border-radius:20px;background:#bcff3b;color:#0a0d06;font-size:48px;font-weight:1000;font-style:italic;box-shadow:0 0 55px #bcff3b55;animation:splash-mark 1.25s ease-in-out infinite alternate}
+.splash-mark span{color:#47731c}
+.splash-title{margin-top:19px;font-size:22px;font-weight:1000;letter-spacing:.12em}.splash-title b{color:var(--amnyam-acid)}
+.splash-subtitle{margin-top:7px;color:#88977a;font:800 9px ui-monospace,monospace;letter-spacing:.22em}
+.splash-loader{width:150px;height:2px;margin-top:28px;background:#29351d;overflow:hidden}
+.splash-loader i{display:block;width:45%;height:100%;background:var(--amnyam-acid);animation:splash-load 1.1s ease-in-out infinite}
+@keyframes splash-mark{to{transform:translateY(-5px) rotate(-4deg);box-shadow:0 0 75px #bcff3b90}}
+@keyframes splash-load{from{transform:translateX(-110%)}to{transform:translateX(240%)}}
+body[data-season="newyear"]{--amnyam-acid:#8eeaff;--green:#8eeaff;--bar:#8eeaff;--purple:#8eeaff}
+body[data-season="newyear"] #ambientLayer{background:radial-gradient(360px circle at var(--mouse-x,80vw) var(--mouse-y,10vh),#8eeaff16,transparent 72%),radial-gradient(ellipse at 50% 0,#173b4b44,transparent 55%)}
+body[data-season="halloween"]{--amnyam-acid:#ff9b45;--green:#ff9b45;--bar:#ff9b45;--purple:#ff9b45;--amnyam-orange:#ff6a2e}
+body[data-season="halloween"] #ambientLayer{background:radial-gradient(360px circle at var(--mouse-x,80vw) var(--mouse-y,10vh),#ff8b3216,transparent 72%),radial-gradient(ellipse at 80% 0,#421e1244,transparent 55%)}
+body[data-season="spring"]{--amnyam-acid:#c4f58a;--green:#c4f58a;--bar:#c4f58a;--purple:#c4f58a}
+body[data-season="summer"]{--amnyam-acid:#ffd36a;--green:#ffd36a;--bar:#ffd36a;--purple:#ffd36a}
+.day-pick-card,.day-pick-card>*{min-width:0}
+.day-pick-card .t,.day-pick-card .m,.day-pick-card .p{min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:normal}
+.day-pick-card .p{grid-column:1/-1!important;display:flex;align-items:center;justify-content:flex-start;gap:7px;flex-wrap:wrap;text-align:left}
+.day-pick-card .deal-actions{grid-column:1/-1;display:flex;flex-direction:row;justify-content:flex-start;align-items:center;flex-wrap:wrap;gap:7px;min-width:0;max-width:100%}
+.day-pick-card .deal-actions .btn{white-space:normal;max-width:100%;text-align:center}
+.day-pick-card .deal-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+.day-pick-card .deal-metric,.day-pick-card .deal-metric b{min-width:0;overflow-wrap:anywhere;white-space:normal}
+.day-pick-card .deal-target-row{align-items:stretch}
+.day-pick-card .deal-target-row .deal-target-input{flex:1 1 110px;min-width:0!important;max-width:none}
+.purchase-confirm{border-color:#7d9f43;background:#18240f;color:#d9f4b9;box-shadow:none;font-size:10px;padding:7px 9px}
+.purchase-confirm:hover{background:#26391a;color:#efffe0}
+@media(max-width:700px){.amnyam-mascot{max-width:150px}.mascot-speech{max-width:88px}.season-control{flex:1 0 auto}.day-pick-card .deal-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:460px){.amnyam-mascot{max-width:100%;order:3}.amnyam-mascot svg{width:38px;height:38px}.mascot-speech{max-width:180px}.command-strip{align-items:flex-start}.season-control{width:100%}.season-control select{flex:1}}
+@media(prefers-reduced-motion:reduce){.logo,.logo i,.amnyam-mascot svg,.falling-gift,.splash-mark,.splash-loader i{animation:none!important}.premium-splash{transition:none}#ambientLayer,#cursorGlow{display:none}}
