@@ -826,16 +826,12 @@ async function removePushSubscriptions(request, env) {
   const parsed = await readJsonBody(request, 4000);
   if (parsed.error) return jsonResponse(request, env, { ok: false, error: parsed.error }, parsed.status);
   const endpoint = String(parsed.value.endpoint || "");
+  if (!validPushEndpoint(endpoint)) return jsonResponse(request, env, { ok: false, error: "Не удалось определить push-подписку этого браузера." }, 400);
+  const endpointHash = await sha256Hex(endpoint);
   try {
-    if (endpoint) {
-      if (!validPushEndpoint(endpoint)) return jsonResponse(request, env, { ok: false, error: "Некорректный push endpoint." }, 400);
-      const endpointHash = await sha256Hex(endpoint);
-      await env.DB.prepare(
-        "DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint_hash = ?"
-      ).bind(userId, endpointHash).run();
-    } else {
-      await env.DB.prepare("DELETE FROM push_subscriptions WHERE user_id = ?").bind(userId).run();
-    }
+    await env.DB.prepare(
+      "DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint_hash = ?"
+    ).bind(userId, endpointHash).run();
     return jsonResponse(request, env, { ok: true, removed: true });
   } catch (_) {
     return jsonResponse(request, env, { ok: false, error: "Не удалось отключить push." }, 503);
