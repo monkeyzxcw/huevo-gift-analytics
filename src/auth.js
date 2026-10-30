@@ -289,7 +289,7 @@ export async function authenticateHuevoLaunch(request, env, jsonResponse) {
   const launch = await verifyHuevoLaunch(query, configured.clientSecret, 86400);
   if (!launch) return json(jsonResponse, request, env, { ok: false, error: "Подпись запуска huEVO недействительна или устарела. Открой приложение заново через huEVO." }, 401);
   const launchAppId = String(launch.hu_app_id || "");
-  if (!/^\\d{1,20}$/.test(launchAppId)) {
+  if (!/^\d{1,20}$/.test(launchAppId)) {
     return json(jsonResponse, request, env, { ok: false, error: "В подписанном запуске huEVO отсутствует корректный hu_app_id." }, 401);
   }
   // The HMAC was verified with this app's client_secret above. Compare IDs only
@@ -322,7 +322,7 @@ export async function authenticateHuevoLaunch(request, env, jsonResponse) {
           env.DB.prepare(
             "INSERT INTO user_accounts (user_id, hu_user_id, hu_username, display_name, avatar_url, app_id, mode, created_at, updated_at, last_login_at) " +
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-          ).bind(internalId, huUserId, username, displayName, avatarUrl, configured.appId, mode, createdAt, createdAt, createdAt),
+          ).bind(internalId, huUserId, username, displayName, avatarUrl, launchAppId, mode, createdAt, createdAt, createdAt),
           env.DB.prepare("INSERT INTO user_profiles (user_id, profile_json, updated_at) VALUES (?, ?, ?)").bind(internalId, JSON.stringify(profile), createdAt)
         ]);
         userRow = { user_id: internalId, hu_user_id: huUserId };
@@ -335,15 +335,15 @@ export async function authenticateHuevoLaunch(request, env, jsonResponse) {
     const updatedAt = nowIso();
     await env.DB.prepare(
       "UPDATE user_accounts SET hu_username = ?, display_name = ?, avatar_url = ?, app_id = ?, mode = ?, updated_at = ?, last_login_at = ? WHERE user_id = ?"
-    ).bind(username, displayName, avatarUrl, configured.appId, mode, updatedAt, updatedAt, userRow.user_id).run();
+    ).bind(username, displayName, avatarUrl, launchAppId, mode, updatedAt, updatedAt, userRow.user_id).run();
 
     const existing = await authenticatedUser(request, env);
-    if (existing && (String(existing.hu_user_id) !== huUserId || String(existing.app_id) !== configured.appId) && cookieValue(request)) {
+    if (existing && (String(existing.hu_user_id) !== huUserId || String(existing.app_id) !== launchAppId) && cookieValue(request)) {
       await env.DB.prepare("DELETE FROM user_sessions WHERE session_hash = ?").bind(await sha256Hex(cookieValue(request))).run();
     }
     let token = cookieValue(request);
     let setCookie = {};
-    if (!existing || String(existing.hu_user_id) !== huUserId || String(existing.app_id) !== configured.appId) {
+    if (!existing || String(existing.hu_user_id) !== huUserId || String(existing.app_id) !== launchAppId) {
       token = await makeSession(env, userRow.user_id);
       setCookie = { "Set-Cookie": sessionCookie(token) };
     } else {
