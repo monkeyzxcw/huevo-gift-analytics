@@ -291,7 +291,7 @@ def main(argv=None):
                 }
                 details_result = run_gift_detail_crawl(
                     browser, config, store.active_lots(priced_only=False), old_detail_index,
-                    LOG, limit=args.detail_limit,
+                    LOG, limit=args.detail_limit, max_age_days=60,
                 )
         except Exception as exc:
             LOG.error("collector failed: %s", type(exc).__name__)
