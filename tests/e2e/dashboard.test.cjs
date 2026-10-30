@@ -234,7 +234,12 @@ test("gift instance metadata and history feed render in the detail and catalog c
   const data = dataV2();
   data.lots[3].gift_details = {
     gift_id: "18336", gift_url: "https://huevo.su/gift/18336",
-    checked_at: NOW, attributes: {}
+    checked_at: NOW, attributes: {
+      model: { name: "Лунная модель", rarity: "1.2%" },
+      backdrop: "Синий космос",
+      symbol: "Комета",
+      pattern: { value: "Звёздный узор" }
+    }
   };
   data.lots[3].gift_instance = {
     gift_id: "18336", gift_url: "https://huevo.su/gift/18336",
@@ -274,6 +279,10 @@ test("gift instance metadata and history feed render in the detail and catalog c
   const detail = await page.textContent("#dBody");
   assert.match(detail, /№ 4/);
   assert.match(detail, /111/);
+  assert.match(detail, /Лунная модель/);
+  assert.match(detail, /Синий космос/);
+  assert.match(detail, /Комета/);
+  assert.match(detail, /Звёздный узор/);
   assert.ok(detail.replace(/\s/g, "").includes("5555"), "grouped drop price must still be checked");
   assert.match(detail, /Продан в Маркете/);
   assert.match(detail, /teeth/);
@@ -618,6 +627,69 @@ test("target price sound is opt-in and persists locally", async () => {
   await browser.close();
 });
 
+test("collector aggregate detail count is not shown as per-lot analysis when the lot has no attached record", async () => {
+  const data = dataV2();
+  data.collector.gift_details = { status: "ok", pages: 8, updated: 8, message: "Карточки подарков проверены." };
+  const { browser, page, problems } = await open(serve(data));
+  await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="market"]');
+  await page.fill("#search", "1003");
+  await page.click("#rows button");
+  assert.match(await page.textContent("#dBody"), /8 карточек подарков, но характеристики этого экземпляра не прикреплены к лоту/);
+  assert.deepEqual(problems, []);
+  await browser.close();
+});
+
+test("desktop notification fires when a watched lot crosses its target during live polling", async () => {
+  const initial = dataV2();
+  initial.lots[0].price = 180;
+  let latest = initial;
+  const { browser, page, problems } = await open((route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify(latest)
+  }), { width: 1280, height: 900 }, {
+    initScript: () => {
+      localStorage.setItem("amnyam.targets", JSON.stringify({ "1000": 120 }));
+      window.__notifications = [];
+      class FakeNotification {
+        static permission = "granted";
+        constructor(title, options) {
+          this.title = title;
+          this.options = options;
+          window.__notifications.push({ title, options });
+        }
+        close() {}
+      }
+      Object.defineProperty(window, "Notification", { configurable: true, value: FakeNotification });
+    }
+  });
+  await page.waitForSelector("#content:not(.hide)");
+  assert.equal(await page.evaluate(() => window.__notifications.length), 0, "no alert while the ask is above the target");
+  latest = JSON.parse(JSON.stringify(latest));
+  latest.lots[0].price = 100;
+  await page.waitForFunction(() => window.__notifications && window.__notifications.length === 1, { timeout: 10000 });
+  const notification = await page.evaluate(() => window.__notifications[0]);
+  assert.match(notification.title, /AMNYAM/);
+  assert.match(notification.options.body, /достиг целевой цены/);
+  assert.equal(notification.options.tag, "amnyam-target-1000");
+  assert.deepEqual(problems, []);
+  await browser.close();
+});
+
+test("help tab documents main workflows and desktop notification limitations", async () => {
+  const { browser, page, problems } = await open(serve(dataV2()));
+  await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="help"]');
+  assert.equal(await page.locator("#helpPanel:not(.view-hidden)").count(), 1);
+  const guide = await page.textContent("#helpPanel");
+  assert.match(guide, /Маркет/);
+  assert.match(guide, /цена-цель/);
+  assert.match(guide, /уведомления рабочего стола/);
+  assert.match(guide, /браузер полностью закрыт/);
+  assert.match(guide, /HuevoDualScan/);
+  assert.deepEqual(problems, []);
+  await browser.close();
+});
+
 test("malformed snapshot is rejected and retry recovers without showing a false empty market", async () => {
   let calls = 0;
   const { browser, page, problems } = await open((route) => {
@@ -755,10 +827,12 @@ test("main navigation supports ArrowLeft, ArrowRight, Home and End with roving f
     await page.keyboard.press("ArrowLeft");
     assert.equal(await tab("market").getAttribute("aria-selected"), "true");
     await page.keyboard.press("End");
-    assert.equal(await tab("appearance").getAttribute("aria-selected"), "true");
+    assert.equal(await tab("help").getAttribute("aria-selected"), "true");
     await page.keyboard.press("Home");
     assert.equal(await tab("overview").getAttribute("aria-selected"), "true");
     assert.equal(await tab("overview").evaluate(node => document.activeElement === node), true);
+    await tab("help").click();
+    assert.equal(await page.locator("#helpPanel:not(.view-hidden)").count(), 1);
     assert.deepEqual(problems, []);
   } finally {
     await browser.close();
