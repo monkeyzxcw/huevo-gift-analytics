@@ -17,7 +17,9 @@ sys.path.insert(0, str(ROOT))
 
 from analytics import best_value, find_deals, market_summary, price_bins, sales_by_title, sales_summary
 from cookies import ALLOWED_HUEVO_HOSTS
-from crawler import CrawlConfig, run_crawl, run_gift_detail_crawl
+from crawler import CrawlConfig, run_crawl, run_gift_detail_crawl, run_gift_instance_crawl
+from gift_history import (classify_disappearance, delisted_event_record, history_event_record,
+                          merge_instance_record)
 from snapshot import (SnapshotError, category_distribution, compare, is_duplicate_snapshot, migrate,
                       safe_write, snapshot_entry, top_expensive, validate, SCHEMA_VERSION)
 from storage import Store, utcnow
@@ -219,7 +221,10 @@ def main(argv=None):
     )
     parser.add_argument("--detail-limit", type=int,
                         default=max(0, min(int(os.getenv("HUEVO_DETAIL_LIMIT", "8")), 50)),
-                        help="Maximum individual gift pages inspected after a complete catalog pass (0 disables).")
+                        help="Maximum /market/lot pages inspected after a complete pass (0 disables).")
+    parser.add_argument("--instance-limit", type=int,
+                        default=max(0, min(int(os.getenv("HUEVO_INSTANCE_LIMIT", "8")), 30)),
+                        help="Maximum unique /gift/<id> instance-history pages inspected per pass (0 disables).")
     parser.add_argument(
         "--with-sales", action="store_true",
         help="Also publish aggregate sales statistics from the local history.db (only if it has enough confirmed rows).",
@@ -284,22 +289,95 @@ def main(argv=None):
             result = run_crawl(browser, store, config, LOG)
             details_result = {"details": {}, "status": "skipped", "pages": 0,
                               "message": "Каталог не прошёл полный сбор; карточки не запрашивались."}
+            instance_result = {"instances": {}, "status": "skipped", "pages": 0,
+                               "message": "Истории экземпляров не запрашивались."}
             if result.status == "ok" and result.reached_end:
                 old_detail_index = {
-                    str(row.get("lot_id")): row for row in (previous.get("lots") or [])
+                    str(row.get("lot_id")): row for row in
+                    [*(previous.get("lots") or []), *(previous.get("gone_lots") or [])]
                     if row.get("lot_id") is not None
                 }
+                active_rows_for_enrichment = store.active_lots(priced_only=False)
+                active_ids_for_enrichment = {str(row.get("lot_id")) for row in active_rows_for_enrichment}
+                missing_rows_for_enrichment = []
+                for old_row in previous.get("lots") or []:
+                    old_id = str(old_row.get("lot_id") or "")
+                    if not old_id or old_id in active_ids_for_enrichment or not old_row.get("active", True):
+                        continue
+                    missing = dict(old_row)
+                    missing["active"] = True
+                    old_detail = old_row.get("gift_details") if isinstance(old_row.get("gift_details"), dict) else {}
+                    checked = parse_ts(old_detail.get("checked_at"))
+                    missing["_force_detail_check"] = not old_detail.get("gift_id") and (
+                        checked is None or (now_utc() - checked) >= timedelta(days=7))
+                    missing_rows_for_enrichment.append(missing)
+
+                # Older disappeared lots without a discovered gift page are retried weekly,
+                # not on every poll. All disappeared rows are prioritised before active ones.
+                pending_gone_details = []
+                for old_row in previous.get("gone_lots") or []:
+                    old_detail = old_row.get("gift_details") if isinstance(old_row.get("gift_details"), dict) else {}
+                    checked = parse_ts(old_detail.get("checked_at"))
+                    if (not old_detail.get("gift_id")
+                            and (checked is None or (now_utc() - checked) >= timedelta(days=7))):
+                        pending = dict(old_row)
+                        pending["active"] = True
+                        pending["_force_detail_check"] = True
+                        pending_gone_details.append(pending)
+
+                detail_candidates = missing_rows_for_enrichment + pending_gone_details + active_rows_for_enrichment
                 try:
                     details_result = run_gift_detail_crawl(
-                        browser, config, store.active_lots(priced_only=False), old_detail_index,
+                        browser, config, detail_candidates, old_detail_index,
                         LOG, limit=args.detail_limit, max_age_days=60,
                     )
                 except Exception as detail_error:
-                    # Detail parsing is enrichment only: never discard a complete catalog snapshot
-                    # because one optional lot page changed its markup or failed to render.
                     LOG.warning("gift detail pass skipped: %s", type(detail_error).__name__)
                     details_result = {"details": {}, "status": "error", "pages": 0,
                                       "message": "Дополнительный анализ карточек не удался; основной каталог сохранён."}
+
+                # Build a small queue of unique gift pages. A vanished market lot forces a
+                # history check; otherwise recently checked instances stay cached.
+                detail_updates = details_result.get("details") or {}
+                instance_candidates = []
+                for row in active_rows_for_enrichment:
+                    lot_id = str(row.get("lot_id") or "")
+                    old_row = old_detail_index.get(lot_id) or {}
+                    details = detail_updates.get(lot_id) or old_row.get("gift_details") or {}
+                    if details.get("gift_id"):
+                        instance_candidates.append({
+                            **row, "gift_details": details,
+                            "gift_instance": old_row.get("gift_instance") or {},
+                        })
+                for row in missing_rows_for_enrichment:
+                    lot_id = str(row.get("lot_id") or "")
+                    old_row = old_detail_index.get(lot_id) or row
+                    details = detail_updates.get(lot_id) or old_row.get("gift_details") or {}
+                    if details.get("gift_id"):
+                        instance_candidates.append({
+                            **row, "gift_details": details,
+                            "gift_instance": old_row.get("gift_instance") or {},
+                            "_force_history_check": True,
+                        })
+                for row in previous.get("gone_lots") or []:
+                    lot_id = str(row.get("lot_id") or "")
+                    details = detail_updates.get(lot_id) or row.get("gift_details") or {}
+                    if details.get("gift_id"):
+                        instance_candidates.append({
+                            **row, "gift_details": details,
+                            "gift_instance": row.get("gift_instance") or {},
+                            "_force_history_check": row.get("disappearance_status") in
+                                (None, "", "pending_history", "history_baseline"),
+                        })
+                try:
+                    instance_result = run_gift_instance_crawl(
+                        browser, config, instance_candidates, LOG,
+                        limit=args.instance_limit, max_age_days=30,
+                    )
+                except Exception as instance_error:
+                    LOG.warning("gift instance history pass skipped: %s", type(instance_error).__name__)
+                    instance_result = {"instances": {}, "status": "error", "pages": 0,
+                                       "message": "Проверка истории экземпляров не удалась; рыночный снимок сохранён."}
         except Exception as exc:
             LOG.error("collector failed: %s", type(exc).__name__)
             result = None
