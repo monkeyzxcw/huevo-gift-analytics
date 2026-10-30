@@ -70,8 +70,11 @@ function sameOriginMutation(request) {
 }
 
 function credentials(env) {
+  // hu_app_id is the numeric huEVO application ID from signed launch params.
+  // client_id is a separate Apps API credential and must never be compared to hu_app_id.
+  const configuredAppId = String(env.HU_APP_ID || "").trim();
   return {
-    appId: String(env.HU_APP_ID || env.HUEVO_CLIENT_ID || "").trim(),
+    appId: /^\\d{1,20}$/.test(configuredAppId) ? configuredAppId : "",
     clientSecret: String(env.HU_SECRET || env.HUEVO_CLIENT_SECRET || "").trim()
   };
 }
@@ -283,7 +286,15 @@ export async function authenticateHuevoLaunch(request, env, jsonResponse) {
   const query = String(parsed.value.launch_query || "");
   const launch = await verifyHuevoLaunch(query, configured.clientSecret, 86400);
   if (!launch) return json(jsonResponse, request, env, { ok: false, error: "Подпись запуска huEVO недействительна или устарела. Открой приложение заново через huEVO." }, 401);
-  if (String(launch.hu_app_id || "") !== configured.appId) {
+  const launchAppId = String(launch.hu_app_id || "");
+  if (!/^\\d{1,20}$/.test(launchAppId)) {
+    return json(jsonResponse, request, env, { ok: false, error: "В подписанном запуске huEVO отсутствует корректный hu_app_id." }, 401);
+  }
+  // The HMAC was verified with this app's client_secret above. Compare IDs only
+  // when HU_APP_ID contains the actual numeric huEVO app ID. Older deployments
+  // may have stored the alphanumeric Apps API client_id in HU_APP_ID; do not
+  // compare that credential to hu_app_id.
+  if (configured.appId && launchAppId !== configured.appId) {
     return json(jsonResponse, request, env, { ok: false, error: "Подпись принадлежит другому приложению huEVO." }, 401);
   }
   const huUserId = String(launch.hu_user_id || "");
