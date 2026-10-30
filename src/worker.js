@@ -1,4 +1,4 @@
-import { authenticateHuevoLaunch, currentAccount, saveAccountProfile, purgeAuthRecords, authenticatedUserId } from "./auth.js";
+import { authenticateHuevoLaunch, currentAccount, saveAccountProfile, purgeAuthRecords, authenticatedUserId, isHuevoOwner } from "./auth.js";
 import { verifyHuevoLaunch } from "./huevo_launch.js";
 
 const HUEVO_HOSTS = new Set(["huevo.su", "huevo.departament.site"]);
@@ -168,7 +168,7 @@ async function getStorageHealth(env) {
   const supportSchemaReady = await ensureSupportSchema(env);
   try {
     const result = await env.DB.prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('full_snapshot','live_page_state','live_price_history','user_accounts','user_sessions','user_profiles','auth_rate_limits','push_vapid_keys','push_subscriptions','push_alert_state')"
+      "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('full_snapshot','live_page_state','live_price_history','user_accounts','user_sessions','user_profiles','auth_rate_limits','push_vapid_keys','push_subscriptions','push_alert_state','owner_presence')"
     ).all();
     const names = new Set((result.results || []).map((row) => row.name));
     return {
@@ -177,6 +177,7 @@ async function getStorageHealth(env) {
       support_schema_ready: supportSchemaReady,
       accounts_schema_ready: ["user_accounts", "user_sessions", "user_profiles", "auth_rate_limits"].every((name) => names.has(name)),
       push_schema_ready: ["push_vapid_keys", "push_subscriptions", "push_alert_state"].every((name) => names.has(name)),
+      presence_schema_ready: names.has("owner_presence"),
       ingest_enabled: Boolean(env.LIVE_INGEST_TOKEN),
     };
   } catch (_) {
@@ -472,6 +473,58 @@ async function storeFullSnapshot(request, env, ctx) {
   });
 }
 
+
+async function getOwnerPresence(request, env) {
+  const canManage = await isHuevoOwner(request, env);
+  if (!env.DB) return jsonResponse(request, env, {
+    configured: false, available: false, can_manage: canManage, updated_at: null
+  });
+  try {
+    const row = await env.DB.prepare(
+      "SELECT is_available, updated_at FROM owner_presence WHERE id = 1"
+    ).first();
+    return jsonResponse(request, env, {
+      configured: Boolean(row),
+      available: Boolean(row && Number(row.is_available) === 1),
+      can_manage: canManage,
+      updated_at: row ? row.updated_at : null
+    });
+  } catch (_) {
+    return jsonResponse(request, env, {
+      configured: false, available: false, can_manage: canManage, updated_at: null
+    }, 503);
+  }
+}
+
+async function setOwnerPresence(request, env) {
+  if (!isSameOriginMutation(request)) {
+    return jsonResponse(request, env, { ok: false, error: "same-origin request required" }, 403);
+  }
+  if (!(await isHuevoOwner(request, env))) {
+    return jsonResponse(request, env, { ok: false, error: "Изменять статус может только владелец приложения." }, 403);
+  }
+  if (!env.DB) return jsonResponse(request, env, { ok: false, error: "D1 storage unavailable" }, 503);
+  const parsed = await readJsonBody(request, 4000);
+  if (parsed.error) return jsonResponse(request, env, { ok: false, error: parsed.error }, parsed.status);
+  if (typeof parsed.value.available !== "boolean") {
+    return jsonResponse(request, env, { ok: false, error: "available must be a boolean" }, 400);
+  }
+  const now = new Date().toISOString();
+  try {
+    await env.DB.prepare(
+      "INSERT INTO owner_presence (id, is_available, updated_at, updated_by_hu_user_id) " +
+      "VALUES (1, ?, ?, '14188') ON CONFLICT(id) DO UPDATE SET " +
+      "is_available=excluded.is_available, updated_at=excluded.updated_at, " +
+      "updated_by_hu_user_id=excluded.updated_by_hu_user_id"
+    ).bind(parsed.value.available ? 1 : 0, now).run();
+    return jsonResponse(request, env, {
+      ok: true, configured: true, available: parsed.value.available,
+      can_manage: true, updated_at: now
+    });
+  } catch (_) {
+    return jsonResponse(request, env, { ok: false, error: "Не удалось сохранить статус владельца." }, 503);
+  }
+}
 
 const PUSH_ALLOWED_HOSTS = new Set([
   "fcm.googleapis.com",
@@ -1179,6 +1232,8 @@ async function fetchHandler(request, env, ctx) {
   if (request.method === "GET" && path === "/api/health") {
     return jsonResponse(request, env, { ok: true, ...(await getStorageHealth(env)) });
   }
+  if (request.method === "GET" && path === "/api/contact/status") return getOwnerPresence(request, env);
+  if (request.method === "PUT" && path === "/api/contact/status") return setOwnerPresence(request, env);
   if (request.method === "GET" && path === "/api/push/config") return pushConfig(request, env);
   if (request.method === "GET" && path === "/api/push/status") return pushStatus(request, env);
   if (request.method === "POST" && path === "/api/push/subscribe") return savePushSubscription(request, env);
