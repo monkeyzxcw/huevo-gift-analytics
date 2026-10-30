@@ -12,22 +12,22 @@ class RetentionTests(unittest.TestCase):
     def setUp(self): os.environ.pop("HUEVO_RETENTION_HOURS", None)
     def tearDown(self): os.environ.pop("HUEVO_RETENTION_HOURS", None)
 
-    def test_default_is_72_hours_and_env_is_clamped(self):
-        self.assertEqual(cs.retention_hours(), 72)
+    def test_default_is_30_days_and_env_is_clamped(self):
+        self.assertEqual(cs.retention_hours(), 720)
         os.environ["HUEVO_RETENTION_HOURS"] = "0"; self.assertEqual(cs.retention_hours(), 1)
         os.environ["HUEVO_RETENTION_HOURS"] = "99999"; self.assertEqual(cs.retention_hours(), 720)
         os.environ["HUEVO_RETENTION_HOURS"] = "abc"; self.assertEqual(cs.retention_hours(), 72)
 
     def test_is_recent_drops_old_and_unparseable(self):
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=72)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=720)
         self.assertTrue(cs.is_recent(ago(1), cutoff))
-        self.assertFalse(cs.is_recent(ago(100), cutoff))
+        self.assertFalse(cs.is_recent(ago(800), cutoff))
         self.assertFalse(cs.is_recent("garbage", cutoff))
         self.assertFalse(cs.is_recent(None, cutoff))
 
     def test_price_history_is_trimmed_to_window_but_current_price_is_kept(self):
         row = {"lot_id": 1, "title": "t", "price": 500}
-        old = {"1": {"history": [{"observed_at": ago(200), "price": 900}, {"observed_at": ago(5), "price": 700}]}}
+        old = {"1": {"history": [{"observed_at": ago(800), "price": 900}, {"observed_at": ago(5), "price": 700}]}}
         item = cs.snapshot_lot(row, old, ago(0))
         self.assertEqual([p["price"] for p in item["history"]], [700, 500])
 
