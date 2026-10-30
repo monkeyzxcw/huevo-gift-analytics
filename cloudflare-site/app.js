@@ -129,6 +129,8 @@
   let supportConfig = { enabled: false, amounts: [5000, 10000, 25000, 50000, 100000] };
   let supportSdkReady = false;
   let supportInitRunning = false;
+  let supportStatusIntentId = null;
+  let supportStatusLookupRunning = false;
 
   // ---------- load & normalise (tolerates partial / old JSON) ----------
   const comparableKey = (lot) => JSON.stringify([
@@ -1365,8 +1367,8 @@
     const name=state.savedFilters[index].name;state.savedFilters.splice(index,1);writeSavedFilters();renderSavedFilters();$("presetStatus").textContent="Набор «"+name+"» удалён.";
   }
 
-  async function requestSupportApi(path, options) {
-    const response = await fetchWithTimeout(path, { cache: "no-store", ...(options || {}) }, 12000);
+  async function requestSupportApi(path, options, timeoutMs = 12000) {
+    const response = await fetchWithTimeout(path, { cache: "no-store", ...(options || {}) }, timeoutMs);
     let data = {};
     try { data = await response.json(); } catch (_) {}
     if (!response.ok) throw new Error(data.detail || data.error || ("HTTP " + response.status));
@@ -1375,9 +1377,53 @@
 
   function supportMessage(message, kind) {
     const box = $("supportMsg");
-    box.textContent = message || "";
+    $("supportMsgText").textContent = message || "";
     box.hidden = !message;
     box.className = "support-message" + (kind ? " " + kind : "");
+    const retry = $("supportRetryStatus");
+    retry.hidden = !(kind === "pending" && Boolean(supportStatusIntentId));
+    retry.disabled = supportStatusLookupRunning;
+    retry.setAttribute("aria-busy", String(supportStatusLookupRunning));
+  }
+
+  async function refreshSupportPaymentStatus() {
+    const intentId = supportStatusIntentId;
+    if (!intentId || supportStatusLookupRunning) return;
+    supportStatusLookupRunning = true;
+    const retry = $("supportRetryStatus");
+    retry.disabled = true;
+    retry.setAttribute("aria-busy", "true");
+    try {
+      const result = await requestSupportApi(
+        "./api/support/status/" + encodeURIComponent(intentId),
+        {},
+        8000
+      );
+      const status = String(result.status || "pending");
+      if (status === "succeeded") {
+        supportStatusIntentId = null;
+        supportMessage(result.test
+          ? "Тестовый платёж подтверждён. Спасибо!"
+          : "Поддержка подтверждена сервером. Спасибо!", "good");
+        try {
+          const stats = await requestSupportApi("./api/support/stats", {}, 8000);
+          $("supporters").textContent = fmt(Number(stats.supporters) || 0);
+          $("supportTotal").textContent = fmt(Number(stats.total) || 0);
+        } catch (_) {}
+      } else if (status === "pending") {
+        supportMessage("Платёж уже создан и пока ожидает подтверждения. Не создавай повторный платёж. ID: " + intentId, "pending");
+      } else {
+        supportStatusIntentId = null;
+        supportMessage("Платёж завершился со статусом: " + status + ".", "error");
+      }
+    } catch (_) {
+      supportMessage("Платёж уже создан, но сервер пока не вернул статус. Не создавай повторный платёж. Попробуй проверить ещё раз. ID: " + intentId, "pending");
+    } finally {
+      supportStatusLookupRunning = false;
+      retry.disabled = false;
+      retry.removeAttribute("aria-busy");
+      retry.hidden = !supportStatusIntentId;
+    }
   }
 
   function renderSupportLevels() {
@@ -1449,6 +1495,10 @@
   async function makeSupportPayment(amount) {
     const inHuevo = new URLSearchParams(location.search).has("hu_user_id");
     if (supportPaymentRunning) return;
+    if (supportStatusIntentId) {
+      supportMessage("У тебя уже есть созданный платёж без окончательного статуса. Не создавай второй — сначала проверь текущий. ID: " + supportStatusIntentId, "pending");
+      return;
+    }
     if (!supportConfig.enabled) return supportMessage("Приём поддержки не настроен. Проверь настройки huEVO Apps.", "error");
     if (!inHuevo || !supportSdkReady || !window.huevo) return supportMessage("Для оплаты открой AMNYAM MODE внутри huEVO как приложение.", "error");
     supportPaymentRunning = true;
@@ -1468,39 +1518,72 @@
         body: JSON.stringify({ amount: numericAmount, launch_query: location.search })
       });
       if (!intent.intent_id) throw new Error("Сервер не вернул ID платёжного запроса.");
-      supportMessage("Подтверди платёж в официальном окне huEVO" + (intent.test ? " (тестовый режим)." : "."));
+      supportStatusIntentId = String(intent.intent_id);
+      supportMessage("Платёж создан. Подтверди его в официальном окне huEVO" + (intent.test ? " (тестовый режим)." : "."));
       let confirmationTimedOut = false;
       try {
         let confirmTimer;
         await Promise.race([
-          Promise.resolve().then(() => window.huevo.confirmPayment(intent.intent_id)),
+          Promise.resolve().then(() => window.huevo.confirmPayment(supportStatusIntentId)),
           new Promise((_, reject) => {
             confirmTimer = window.setTimeout(() => reject(new Error("Окно huEVO не ответило за 15 секунд.")), 15000);
           })
         ]).finally(() => window.clearTimeout(confirmTimer));
       } catch (_) {
         confirmationTimedOut = true;
-        supportMessage("Ответ окна huEVO не получен. Проверяю итоговый статус на сервере…", "muted");
+        supportMessage("Ответ окна huEVO не получен. Платёж уже создан; проверяю статус на сервере…", "muted");
       }
+
+      const deadline = Date.now() + 80000;
       let status = "pending";
-      for (let attempt = 0; attempt < 40 && status === "pending"; attempt++) {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        const result = await requestSupportApi("./api/support/status/" + encodeURIComponent(intent.intent_id));
-        status = result.status;
+      let statusLookupFailed = false;
+      while (status === "pending" && Date.now() < deadline) {
+        const waitMs = Math.min(2000, deadline - Date.now());
+        if (waitMs > 0) await new Promise((resolve) => window.setTimeout(resolve, waitMs));
+        const remainingMs = deadline - Date.now();
+        if (remainingMs <= 0) break;
+        try {
+          const result = await requestSupportApi(
+            "./api/support/status/" + encodeURIComponent(supportStatusIntentId),
+            {},
+            Math.min(8000, remainingMs)
+          );
+          status = String(result.status || "pending");
+        } catch (_) {
+          statusLookupFailed = true;
+          break;
+        }
       }
-      if (status === "succeeded") supportMessage(intent.test ? "Тестовый платёж подтверждён. Спасибо!" : "Поддержка подтверждена сервером. Спасибо!", "good");
-      else if (status === "pending") supportMessage(confirmationTimedOut
-        ? "Платёж пока не подтверждён сервером. Проверь окно huEVO; повторный платёж пока не создавай."
-        : "Платёж пока не подтверждён. Проверь окно huEVO; статус можно проверить позже.");
-      else supportMessage("Платёж завершился со статусом: " + status + ".", "error");
-      const stats = await requestSupportApi("./api/support/stats");
-      $("supporters").textContent = fmt(Number(stats.supporters) || 0);
-      $("supportTotal").textContent = fmt(Number(stats.total) || 0);
+
+      if (status === "succeeded") {
+        supportStatusIntentId = null;
+        supportMessage(intent.test ? "Тестовый платёж подтверждён. Спасибо!" : "Поддержка подтверждена сервером. Спасибо!", "good");
+        try {
+          const stats = await requestSupportApi("./api/support/stats", {}, 8000);
+          $("supporters").textContent = fmt(Number(stats.supporters) || 0);
+          $("supportTotal").textContent = fmt(Number(stats.total) || 0);
+        } catch (_) {}
+      } else if (status === "pending") {
+        const reason = statusLookupFailed
+          ? "Сервер временно не ответил на проверку статуса."
+          : confirmationTimedOut
+            ? "Подтверждение в окне huEVO не получено за отведённое время."
+            : "Платёж всё ещё ожидает подтверждения.";
+        supportMessage(reason + " Платёж уже создан; не создавай повторный. Проверь статус кнопкой ниже. ID: " + supportStatusIntentId, "pending");
+      } else {
+        supportStatusIntentId = null;
+        supportMessage("Платёж завершился со статусом: " + status + ".", "error");
+      }
     } catch (error) {
-      supportMessage(error && error.message ? error.message : "Не удалось создать платёж.", "error");
+      if (supportStatusIntentId) {
+        supportMessage("Платёж уже создан, но его статус пока не подтверждён. Не создавай повторный платёж. ID: " + supportStatusIntentId, "pending");
+      } else {
+        supportMessage(error && error.message ? error.message : "Не удалось создать платёж.", "error");
+      }
     } finally {
       supportPaymentRunning = false;
       buttons.forEach((button) => { button.disabled = false; button.removeAttribute("aria-busy"); });
+      if (supportStatusIntentId) $("supportRetryStatus").hidden = false;
     }
   }
 
@@ -1939,6 +2022,7 @@
   $("saveBelowBestTarget").addEventListener("click",()=>{const id=state._belowBestId;if(id)saveTarget(id,$("belowBestTarget").value);});
   $("belowBestMinus10").addEventListener("click",()=>{const id=state._belowBestId,lot=state.lots.find(item=>String(item.lot_id)===String(id));if(lot&&isNum(lot.price)&&lot.price>0){$("belowBestTarget").value=String(Math.max(1,Math.floor(lot.price*.9)));saveTarget(id,$("belowBestTarget").value);}});
   $("supportAmounts").addEventListener("click",event=>{const b=event.target.closest("[data-amount]");if(b&&!b.disabled)makeSupportPayment(b.dataset.amount);});
+  $("supportRetryStatus").addEventListener("click", refreshSupportPaymentStatus);
   document.querySelectorAll("[data-catalog-mode]").forEach(b=>b.addEventListener("click",()=>switchCatalogMode(b.dataset.catalogMode)));
   ["search","pmin","pmax"].forEach(id=>$(id).addEventListener("input",()=>{state.page=0;$("globalSearch").value=$("search").value;applyFilters();}));
   ["rarity","status"].forEach(id=>$(id).addEventListener("change",()=>{state.page=0;applyFilters();}));
