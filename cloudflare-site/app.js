@@ -138,6 +138,7 @@
       lots: (lots || []).map((lot) => [
         String(lot.lot_id), lot.title, lot.serial, lot.rarity, lot.price, lot.status,
         lot.active !== false,
+        lot.gift_details && [lot.gift_details.checked_at, lot.gift_details.attributes],
         Array.isArray(lot._history) && lot._history.length
           ? [lot._history.length, lot._history[lot._history.length - 1].observed_at, lot._history[lot._history.length - 1].price]
           : Array.isArray(lot.history) && lot.history.length
@@ -741,34 +742,76 @@
     set("belowStat", fmt(buildDealSignals().length) + " сигналов");
   }
 
+  function normaliseSaleTitle(value) {
+    return String(value || "").trim().toLocaleLowerCase("ru")
+      .replace(/\\s*#\\s*\\d+.*$/, "").replace(/\\s+/g, " ").trim();
+  }
+
+  function salesProfileForGift(lot) {
+    const list = state.data && state.data.sales && Array.isArray(state.data.sales.by_title)
+      ? state.data.sales.by_title : [];
+    const title = normaliseSaleTitle(lot && lot.title);
+    return list.find(item => normaliseSaleTitle(item.title) === title && isNum(item.median) && item.median > 0) || null;
+  }
+
+  function robustOfferReference(prices) {
+    const values = (prices || []).filter(v => isNum(v) && v > 0).slice().sort((a,b) => a-b);
+    if (values.length < 5) return null;
+    const q1 = quantile(values, .25), q3 = quantile(values, .75), iqr = q3 - q1;
+    const core = iqr > 0 ? values.filter(v => v >= q1 - 1.5 * iqr && v <= q3 + 1.5 * iqr) : values;
+    if (core.length < 5) return null;
+    const mid = median(core), low = quantile(core, .25), high = quantile(core, .75);
+    const dispersion = mid > 0 ? (high - low) / mid : Infinity;
+    return { reference: mid, sample_size: core.length, raw_size: values.length,
+      excluded: values.length-core.length, p25: low, p75: high, dispersion };
+  }
+
   function buildDealSignals() {
     const groups = new Map();
-    const active = state.lots.filter((lot) => lot && lot.active !== false && isNum(lot.price) && lot.price > 0 && String(lot.title || "").trim());
+    const active = state.lots.filter(lot => lot && lot.active !== false && isNum(lot.price) &&
+      lot.price > 0 && String(lot.title || "").trim());
     for (const lot of active) {
-      const title = String(lot.title || "").trim().toLocaleLowerCase("ru").replace(/\s+/g, " ");
+      const title = String(lot.title || "").trim().toLocaleLowerCase("ru").replace(/\\s+/g, " ");
       const rarity = String(lot.rarity || "").trim().toLocaleLowerCase("ru");
-      const key = title + "\u0000" + rarity;
+      const key = title + "\\u0000" + rarity;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(lot);
     }
     const signals = [];
     for (const group of groups.values()) {
       if (group.length < 3) continue;
-      const reference = median(group.map((lot) => lot.price));
+      const sales = salesProfileForGift(group[0]);
+      const offers = robustOfferReference(group.map(lot => lot.price));
+      let reference, basis, sampleSize, p25, p75, dispersion, excluded;
+      if (sales && sales.count >= 5) {
+        reference = sales.median; basis = "sales"; sampleSize = sales.count;
+        p25 = isNum(sales.p25) ? sales.p25 : null;
+        p75 = isNum(sales.p75) ? sales.p75 : null;
+        dispersion = p25 != null && p75 != null && reference > 0 ? (p75-p25)/reference : null;
+        excluded = 0;
+      } else {
+        // Asking prices are not transaction prices. Use them only when the distribution
+        // has a sufficiently large, non-dispersed core; otherwise suppress the deal signal.
+        if (!offers || offers.dispersion > .65) continue;
+        reference = offers.reference; basis = "active"; sampleSize = offers.sample_size;
+        p25 = offers.p25; p75 = offers.p75; dispersion = offers.dispersion; excluded = offers.excluded;
+      }
       if (!isNum(reference) || reference <= 0) continue;
       for (const lot of group) {
         if (lot.price >= reference * 0.85) continue;
         const discount = Math.round((1 - lot.price / reference) * 1000) / 10;
         signals.push({
-          ...lot,
-          reference_price: reference,
-          discount_pct: discount,
-          sample_size: group.length,
-          basis: "active",
+          ...lot, reference_price: reference, discount_pct: discount, sample_size: sampleSize,
+          basis, reference_p25: p25, reference_p75: p75, dispersion, excluded_outliers: excluded,
+          confidence: basis === "sales" ? (sampleSize >= 20 ? "high" : "medium") : "low",
+          suspicious: discount > 80,
         });
       }
     }
-    signals.sort((a, b) => b.discount_pct - a.discount_pct || a.price - b.price || String(a.title).localeCompare(String(b.title), "ru"));
+    signals.sort((a,b) => (a.suspicious === b.suspicious ? 0 : a.suspicious ? 1 : -1) ||
+      (a.basis === b.basis ? 0 : a.basis === "sales" ? -1 : 1) ||
+      b.discount_pct-a.discount_pct || a.price-b.price ||
+      String(a.title).localeCompare(String(b.title), "ru"));
     return signals;
   }
 
@@ -807,9 +850,9 @@
     const metrics=h("div",{class:"deal-metrics"});
     metrics.append(
       h("span",{class:"deal-metric ask"},[h("small",{text:"ЦЕНА ЛОТА"}),h("b",{text:price(lot.price)})]),
-      h("span",{class:"deal-metric"},[h("small",{text:"МЕДИАНА АНАЛОГОВ"}),h("b",{text:isNum(lot.reference_price)?price(lot.reference_price):"Нет ориентира"})]),
+      h("span",{class:"deal-metric"},[h("small",{text:lot.basis==="sales"?"МЕДИАНА ПРОДАЖ":"МЕДИАНА ОБЪЯВЛЕНИЙ"}),h("b",{text:isNum(lot.reference_price)?price(lot.reference_price):"Нет ориентира"})]),
       h("span",{class:"deal-metric saving"},[h("small",{text:"РАЗНИЦА"}),h("b",{text:isNum(saved)?price(saved)+" ниже":"Не рассчитана"})]),
-      h("span",{class:"deal-metric"},[h("small",{text:"ВЫБОРКА"}),h("b",{text:isNum(lot.sample_size)&&lot.sample_size>0?fmt(lot.sample_size)+" аналогов":"Мало данных"})])
+      h("span",{class:"deal-metric"},[h("small",{text:lot.basis==="sales"?"СОВЕРШЁННЫЕ ПРОДАЖИ":"АКТИВНЫЕ ОБЪЯВЛЕНИЯ"}),h("b",{text:isNum(lot.sample_size)&&lot.sample_size>0?fmt(lot.sample_size)+" записей":"Мало данных"})])
     );
     if(histLow!==null)metrics.append(h("span",{class:"deal-metric history-low"},[h("small",{text:"МИНИМУМ В ИСТОРИИ"}),h("b",{text:price(histLow)})]));
     const mini=sparkline(lot._history);
@@ -839,7 +882,7 @@
     else deals.sort((a,b)=>b.discount_pct-a.discount_pct||a.price-b.price);
     const list=clear($("dealsList"));
     $("dealsCount").textContent=fmt(signals.length)+" сигналов";
-    $("dealsNote").textContent=signals.length?"Сравнение названия + редкости; от 3 аналогов и дисконт от 15%.":"Пока нет подтверждённой группы аналогов";
+    $("dealsNote").textContent=signals.length?"Сначала история продаж; без неё — только устойчивый разброс минимум 5 объявлений.":"Нет достаточных продаж или устойчивой группы объявлений";
     $("belowBest").classList.toggle("hide",!best);
     if (!best) setMascotMood("sad", "Пока нет выгодных лотов… Сканирую дальше");
     else if ($("amnyamMascot").dataset.mood !== "happy") setMascotMood("neutral", "Нашёл выгодные предложения!");
@@ -847,7 +890,7 @@
       state._belowBestId=String(best.lot_id);
       $("belowBestTitle").textContent=best.title||("Лот #"+best.lot_id);
       $("belowBestPrice").textContent=price(best.price);
-      $("belowBestMeta").textContent="На "+fmt(best.discount_pct)+"% ниже медианы аналогов · экономия "+price(Math.max(0,best.reference_price-best.price))+" · "+fmt(best.sample_size)+" похожих лотов · #"+best.lot_id;
+      $("belowBestMeta").textContent="На "+fmt(best.discount_pct)+"% ниже "+(best.basis==="sales"?"медианы подтверждённых продаж":"устойчивой медианы объявлений")+" · разница "+price(Math.max(0,best.reference_price-best.price))+" · "+fmt(best.sample_size)+(best.basis==="sales"?" продаж":" лотов")+" · "+(best.confidence==="high"?"высокая выборка":best.confidence==="medium"?"средняя выборка":"низкая уверенность")+" · #"+best.lot_id;
       $("belowBestOpen").href=safeUrl(best.lot_url,best.lot_id);
       const bestImage=$("belowBestImage"),bestArt=$("belowBestArt");
       const imageUrl=typeof best.image_url==="string"&&best.image_url.startsWith("https://")&&(best.image_url.includes("huevo.su/")||best.image_url.includes("huevo.departament.site/"))?best.image_url:"";
@@ -857,15 +900,15 @@
       if(imageUrl&&bestImage.src!==imageUrl)bestImage.src=imageUrl;
       if(!imageUrl)bestImage.removeAttribute("src");
       $("belowBestTarget").value=state.targets[String(best.lot_id)]?String(state.targets[String(best.lot_id)]):"";
-      $("overviewPickHint").textContent="Лучший текущий дисконт: −"+fmt(best.discount_pct)+"% от медианы похожих предложений.";
+      $("overviewPickHint").textContent="Лучший текущий дисконт: −"+fmt(best.discount_pct)+"% от "+(best.basis==="sales"?"медианы подтверждённых продаж":"устойчивого диапазона объявлений")+". "+(best.confidence==="low"?"Ориентир предварительный.":"");
       const pick=clear($("overviewPickLot"));
       if(best.image_url&&/^https:\/\//i.test(best.image_url)){const img=h("img",{class:"pick-img",src:best.image_url,alt:"",loading:"lazy",referrerpolicy:"no-referrer"});img.addEventListener("error",()=>img.replaceWith(h("span",{class:"pick-img",text:"🎁"})));pick.append(img);}
-      pick.append(h("div",{},[h("strong",{text:best.title||("Лот #"+best.lot_id)}),h("span",{class:"pick-price",text:price(best.price)}),h("small",{text:"−"+fmt(best.discount_pct)+"% к медиане · выгода "+price(best.reference_price-best.price)})]));
+      pick.append(h("div",{},[h("strong",{text:best.title||("Лот #"+best.lot_id)}),h("span",{class:"pick-price",text:price(best.price)}),h("small",{text:"−"+fmt(best.discount_pct)+"% к "+(best.basis==="sales"?"продажам":"объявлениям")+" · разница "+price(best.reference_price-best.price)})]));
       deals.slice(0,30).forEach((lot,index)=>list.append(renderDealCard(lot,"#"+(index+1),false)));
     }else{
       state._belowBestId=null;
       $("belowBestTitle").textContent="Пока нет уверенного кандидата";$("belowBestPrice").textContent="—";
-      $("belowBestMeta").textContent="Нужно минимум три похожих активных предложения и цена хотя бы на 15% ниже их медианы.";
+      $("belowBestMeta").textContent="Нужны минимум 5 сопоставимых записей о продажах или 5 объявлений с достаточно узким диапазоном цен. Слишком разрозненные цены не считаем ориентиром.";
       $("belowBestOpen").href="https://huevo.su/market/gifts";$("belowBestTarget").value="";
       $("overviewPickHint").textContent="Когда появится сопоставимая группа, здесь будет показан лучший текущий дисконт.";
       const pick=clear($("overviewPickLot"));pick.append(h("span",{class:"muted",text:"Пока нет группы аналогов для честного сравнения."}));
