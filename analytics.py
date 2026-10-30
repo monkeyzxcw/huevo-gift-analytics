@@ -146,8 +146,53 @@ def _sale_title(title):
     return _norm(re.sub(r"\s*#\s*\d+.*$", "", str(title or "")))
 
 
-def sales_by_title(rows, min_group=MIN_GROUP, limit=20):
-    """Median confirmed sale price per gift title (serial number stripped); groups below `min_group` are omitted."""
+def sales_by_title(rows, min_group=MIN_GROUP, limit=500):
+    """Privacy-safe confirmed-sale statistics by gift title.
+
+    Sale history points are emitted ONLY when Huevo supplies an explicit timezone-aware
+    sold_at timestamp. The crawler's first_observed time is not substituted for transaction time.
+    """
+    from datetime import datetime
+    groups = {}
+    for row in rows:
+        key = _sale_title(row.get("title"))
+        if key and _valid_price(row.get("price")):
+            groups.setdefault(key, []).append(row)
+    out = []
+    for key, items in groups.items():
+        prices = sorted(row["price"] for row in items if _valid_price(row.get("price")))
+        if len(prices) < min_group:
+            continue
+        dated = {}
+        for row in items:
+            if not _valid_price(row.get("price")):
+                continue
+            raw = row.get("sold_at")
+            if not raw:
+                continue
+            try:
+                stamp = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+                if stamp.tzinfo is None:
+                    continue
+                day = stamp.date().isoformat()
+            except (TypeError, ValueError):
+                continue
+            dated.setdefault(day, []).append(row["price"])
+        history = [{"date": day, "median": median(values), "count": len(values)}
+                   for day, values in sorted(dated.items())]
+        out.append({
+            "title": key,
+            "count": len(prices),
+            "median": median(prices),
+            "p25": percentile(prices, .25),
+            "p75": percentile(prices, .75),
+            "min": prices[0],
+            "max": prices[-1],
+            "dated_sales": sum(point["count"] for point in history),
+            "history": history[-180:],
+        })
+    out.sort(key=lambda group: (-group["count"], group["title"]))
+    return out[:max(1, min(int(limit), 1000))]    """Median confirmed sale price per gift title (serial number stripped); groups below `min_group` are omitted."""
     groups = {}
     for r in rows:
         key = _sale_title(r.get("title"))
