@@ -236,6 +236,7 @@
         String(lot.lot_id), lot.title, lot.serial, lot.rarity, lot.price, lot.status,
         lot.active !== false,
         canonical(lot.gift_details),
+        canonical(lot.gift_catalog),
         canonical(lot.gift_instance),
         canonical(lot.history)
       ]),
@@ -1458,7 +1459,7 @@
   function openNotificationLotFromUrl(){
     const params=new URLSearchParams(location.search);
     const id=params.get("amnyam_lot");
-    if(!id||!/^\\d{1,20}$/.test(id))return;
+    if(!id||!/^\d{1,20}$/.test(id))return;
     params.delete("amnyam_lot");
     const query=params.toString();
     history.replaceState(null,"",location.pathname+(query?"?"+query:"")+location.hash);
@@ -2262,6 +2263,7 @@
   // ---------- events ----------
   initAccountUI();
   refreshOwnerPresence();
+  window.setInterval(refreshOwnerPresence, 30000);
   initAppearance();
   initAmbience();
   initAlertSoundControls();
