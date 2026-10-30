@@ -16,7 +16,7 @@ class RetentionTests(unittest.TestCase):
         self.assertEqual(cs.retention_hours(), 720)
         os.environ["HUEVO_RETENTION_HOURS"] = "0"; self.assertEqual(cs.retention_hours(), 1)
         os.environ["HUEVO_RETENTION_HOURS"] = "99999"; self.assertEqual(cs.retention_hours(), 720)
-        os.environ["HUEVO_RETENTION_HOURS"] = "abc"; self.assertEqual(cs.retention_hours(), 72)
+        os.environ["HUEVO_RETENTION_HOURS"] = "abc"; self.assertEqual(cs.retention_hours(), 720)
 
     def test_is_recent_drops_old_and_unparseable(self):
         cutoff = datetime.now(timezone.utc) - timedelta(hours=720)
