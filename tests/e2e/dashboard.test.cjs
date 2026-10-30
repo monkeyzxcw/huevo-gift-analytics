@@ -458,6 +458,70 @@ test("AMNYAM atmosphere: daily picks wrap, seasonal themes persist, and mascot c
 });
 
 
+test("live polling refreshes every gift-instance field and event detail", async () => {
+  const data = dataV2();
+  const lot = data.lots[3];
+  lot.gift_instance = {
+    gift_id: "18336", gift_url: "https://huevo.su/gift/18336",
+    title: lot.title, serial: 4, supply: 111, rarity: "Лимитированный",
+    drop_price: 5555, drop_price_text: "5555 монэток",
+    edition_sold_out: null, author: "", collection: "", current_owner: "",
+    history_found: true, checked_at: NOW,
+    history: [{
+      event_id: "stable-event-id", type: "transfer", label: "Первичная запись",
+      from_user: "old_owner", to_user: "unknown", time_raw: "вчера"
+    }]
+  };
+  data.catalog_events = [{
+    event_id: "stable-event-id", type: "transfer", label: "Первичная запись",
+    title: lot.title, lot_id: String(lot.lot_id), gift_id: "18336",
+    serial: "№ 4/111", from_user: "old_owner", to_user: "unknown",
+    time_raw: "вчера", observed_at: NOW,
+    gift_url: "https://huevo.su/gift/18336",
+    lot_url: "https://huevo.su/market/lot/" + lot.lot_id
+  }];
+
+  let latest = data;
+  const liveResponse = (route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify(latest)
+  });
+  const { browser, page, problems } = await open(liveResponse);
+  await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="market"]');
+  await page.fill("#search", String(lot.lot_id));
+  await page.click("#rows button");
+  assert.doesNotMatch(await page.textContent("#dBody"), /Новый автор/);
+  // Keep the detail dialog open while the collector publishes new fields.
+
+  // Keep the cache timestamp, history length and last event ID unchanged. These are
+  // exactly the fields the old signature checked, while the actual visible metadata
+  // and event details have changed.
+  latest = JSON.parse(JSON.stringify(latest));
+  latest.lots[3].gift_instance.author = "Новый автор";
+  latest.lots[3].gift_instance.collection = "Обновлённая коллекция";
+  latest.lots[3].gift_instance.current_owner = "new_owner";
+  latest.lots[3].gift_instance.edition_sold_out = true;
+  latest.lots[3].gift_instance.history[0] = {
+    ...latest.lots[3].gift_instance.history[0],
+    label: "Продан в Маркете", from_user: "seller", to_user: "buyer", time_raw: "28 окт в 21:37"
+  };
+  latest.catalog_events[0] = {
+    ...latest.catalog_events[0],
+    label: "Продан в Маркете", from_user: "seller", to_user: "buyer", time_raw: "28 окт в 21:37"
+  };
+
+  await page.waitForTimeout(3600);
+  const detail = await page.textContent("#dBody");
+  assert.match(detail, /Новый автор/);
+  assert.match(detail, /Обновлённая коллекция/);
+  assert.match(detail, /new_owner/);
+  assert.match(detail, /Тираж разошёлся/);
+  assert.match(detail, /Продан в Маркете/);
+  assert.match(detail, /seller → buyer/);
+  assert.deepEqual(problems, []);
+  await browser.close();
+});
+
 test("catalog changes panel handles partial payloads and falls back to gone lots and price history", async () => {
   const data = dataV2();
   delete data.changes;

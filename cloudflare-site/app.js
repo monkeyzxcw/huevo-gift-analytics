@@ -209,42 +209,39 @@
     const collector = raw && raw.collector && typeof raw.collector === "object" ? raw.collector : {};
     const lastSnapshot = Array.isArray(raw && raw.snapshots) ? raw.snapshots[raw.snapshots.length - 1] : null;
     const changes = raw && raw.changes && raw.changes.counts ? raw.changes.counts : null;
+
+    // Canonicalise complete enrichment objects. The old signature only watched a
+    // handful of gift_instance fields (and only the last event ID), so updates to
+    // author, collection, owner, edition status, event labels/users/times, etc. were
+    // downloaded every 3 seconds but silently ignored by the UI.
+    const canonical = (value) => {
+      if (Array.isArray(value)) return value.map(canonical);
+      if (value && typeof value === "object") {
+        return Object.keys(value).sort().map((key) => [key, canonical(value[key])]);
+      }
+      return value;
+    };
+
     // Ignore last_poll_at and per-lot last_seen: those timestamps move on every poll
     // even when the visible market values did not change.
     return JSON.stringify({
       collector: [collector.status, collector.message, collector.lots, collector.pages,
-        collector.gift_instances && [collector.gift_instances.status, collector.gift_instances.pages, collector.gift_instances.updated]],
+        canonical(collector.gift_instances)],
       live: [live.fingerprint, Number(live.item_count) || 0],
       lots: (lots || []).map((lot) => [
         String(lot.lot_id), lot.title, lot.serial, lot.rarity, lot.price, lot.status,
         lot.active !== false,
-        lot.gift_details && [lot.gift_details.checked_at, lot.gift_details.attributes, lot.gift_details.gift_id],
-        lot.gift_instance && [
-          lot.gift_instance.checked_at, lot.gift_instance.history_found,
-          Array.isArray(lot.gift_instance.history) ? lot.gift_instance.history.length : 0,
-          Array.isArray(lot.gift_instance.history) && lot.gift_instance.history.length
-            ? lot.gift_instance.history[lot.gift_instance.history.length - 1].event_id : null,
-          lot.gift_instance.drop_price, lot.gift_instance.serial, lot.gift_instance.supply
-        ],
-        Array.isArray(lot._history) && lot._history.length
-          ? [lot._history.length, lot._history[lot._history.length - 1].observed_at, lot._history[lot._history.length - 1].price]
-          : Array.isArray(lot.history) && lot.history.length
-            ? [lot.history.length, lot.history[lot.history.length - 1].observed_at, lot.history[lot.history.length - 1].price]
-            : []
+        canonical(lot.gift_details),
+        canonical(lot.gift_instance),
+        canonical(lot.history)
       ]),
       stats: raw && raw.stats,
       sales: raw && raw.sales ? [raw.sales.generated_at, raw.sales.summary, Array.isArray(raw.sales.by_title) ? raw.sales.by_title.length : 0] : null,
       snapshots: Array.isArray(raw && raw.snapshots) ? raw.snapshots.length : 0,
       lastSnapshot: lastSnapshot ? [lastSnapshot.observed_at, lastSnapshot.active_lots, lastSnapshot.median_price] : null,
       changes: changes ? [changes.new, changes.gone, changes.price_up, changes.price_down] : null,
-      gone: Array.isArray(raw && raw.gone_lots) ? raw.gone_lots.map((lot) => [
-        lot.lot_id, lot.disappearance_status, lot.history_checked_at
-      ]) : [],
-      catalogEvents: Array.isArray(raw && raw.catalog_events) ? [
-        raw.catalog_events.length,
-        raw.catalog_events.length ? raw.catalog_events[raw.catalog_events.length - 1].event_id : null,
-        raw.catalog_events.length ? raw.catalog_events[raw.catalog_events.length - 1].observed_at : null
-      ] : []
+      gone: canonical(raw && raw.gone_lots),
+      catalogEvents: canonical(raw && raw.catalog_events)
     });
   }
 
@@ -283,6 +280,13 @@
         }
         lastSnapshotSignature = signature;
         render();
+        // Keep an already-open gift card in sync too; otherwise an enrichment arriving
+        // while the user is viewing that lot would remain hidden until the dialog is reopened.
+        const detailDialog = $("detail");
+        if (detailDialog && detailDialog.open && activeDetailLotId) {
+          const refreshedLot = state.lots.find((lot) => String(lot.lot_id) === activeDetailLotId);
+          if (refreshedLot) openDetail(refreshedLot, lastTrigger);
+        }
       } else {
         // Update non-visual metadata (including last successful full-snapshot time) without
         // rebuilding cards, charts, rows, the active tab, or the search controls.
@@ -910,8 +914,10 @@
 
     // ---------- lot detail ----------
   let lastTrigger = null;
+  let activeDetailLotId = null;
   function openDetail(l, trigger) {
     lastTrigger = trigger;
+    activeDetailLotId = String(l.lot_id);
     $("dTitle").textContent = l.title || ("Лот #" + l.lot_id);
     const body = clear($("dBody"));
     const img = l.image_url && /^https:\/\//i.test(l.image_url) ? h("img", { class: "thumb", src: l.image_url, alt: "", referrerpolicy: "no-referrer" }) : h("span", { class: "thumb", text: "🎁", "aria-hidden": "true" });
@@ -2099,7 +2105,7 @@
   document.querySelectorAll(".tabs [role=tab]").forEach(t=>t.addEventListener("click",()=>{state.changeKind=t.dataset.kind;renderChanges();}));
   $("retry").addEventListener("click",load);
   $("dClose").addEventListener("click",()=>$("detail").close());
-  $("detail").addEventListener("close",()=>{if(lastTrigger&&document.contains(lastTrigger))lastTrigger.focus();});
+  $("detail").addEventListener("close",()=>{activeDetailLotId=null;if(lastTrigger&&document.contains(lastTrigger))lastTrigger.focus();});
   $("detail").addEventListener("click",e=>{if(e.target===$("detail"))$("detail").close();});
   $("savePreset").addEventListener("click",saveFilterPreset);$("applyPreset").addEventListener("click",applyFilterPreset);$("deletePreset").addEventListener("click",deleteFilterPreset);
   $("savedFilterSelect").addEventListener("change",()=>{
