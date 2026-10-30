@@ -420,25 +420,56 @@
     return h("li", { class: "li" }, [img, h("div", {}, [h("div", { class: "t", text: l.title || ("Лот #" + l.lot_id) }), h("div", { class: "m", text: sub })]), h("div", { class: "p" }, right)]);
   }
   function renderChanges() {
-    const ch = state.data.changes, list = clear($("changeList"));
+    const raw = state.data && state.data.changes;
+    const list = clear($("changeList"));
     document.querySelectorAll(".tabs [role=tab]").forEach((t) => t.setAttribute("aria-selected", String(t.dataset.kind === state.changeKind)));
-    if (!ch || !ch.counts) {
+
+    // Worker responses can be older or partial while the live snapshot is being refreshed.
+    // Normalize optional arrays and fall back to the snapshot's own gone-lot/history data.
+    const ch = raw && typeof raw === "object" ? raw : {};
+    const counts = ch.counts && typeof ch.counts === "object" ? ch.counts : {};
+    const goneFallback = Array.isArray(state.data.gone_lots) ? state.data.gone_lots : [];
+    const newRows = Array.isArray(ch.new) ? ch.new : [];
+    const goneRows = Array.isArray(ch.gone) ? ch.gone : goneFallback;
+    let priceRows = Array.isArray(ch.price_changes) ? ch.price_changes : [];
+    if (!priceRows.length) {
+      priceRows = state.lots.flatMap((lot) => {
+        const history = Array.isArray(lot._history) ? lot._history : (Array.isArray(lot.history) ? lot.history : []);
+        if (history.length < 2) return [];
+        const from = Number(history[history.length - 2].price), to = Number(history[history.length - 1].price);
+        if (!Number.isFinite(from) || !Number.isFinite(to) || from <= 0 || to <= 0 || from === to) return [];
+        return [{ ...lot, from, to, pct: (to - from) / from * 100 }];
+      });
+    }
+    const available = Boolean(raw && (raw.counts || raw.new || raw.gone || raw.price_changes)) ||
+      goneFallback.length > 0 || priceRows.length > 0 || (Array.isArray(state.data.snapshots) && state.data.snapshots.length > 1);
+    if (!available) {
       $("changesNote").textContent = "";
-      list.append(h("li", { class: "empty", text: "Сравнение со снимком появится после следующего успешного сбора." }));
+      list.append(h("li", { class: "empty", text: "Пока нет данных для сравнения. После двух успешных снимков здесь появятся новые, исчезнувшие лоты и изменения цен." }));
       return;
     }
-    $("changesNote").textContent = ch.since ? "относительно " + when(ch.since) : "";
+    $("changesNote").textContent = ch.since ? "относительно " + when(ch.since) : (Array.isArray(state.data.snapshots) && state.data.snapshots.length > 1 ? "по последним снимкам" : "история каталога");
     const k = state.changeKind;
-    const rows = k === "new" ? ch.new : k === "gone" ? ch.gone : ch.price_changes;
-    const total = k === "new" ? ch.counts.new : k === "gone" ? ch.counts.gone : ch.counts.price_up + ch.counts.price_down;
-    if (!rows || !rows.length) { list.append(h("li", { class: "empty", text: k === "new" ? "Новых лотов нет." : k === "gone" ? "Исчезнувших лотов нет." : "Изменений цен нет." })); return; }
-    rows.forEach((r) => {
+    const rows = k === "new" ? newRows : k === "gone" ? goneRows : priceRows;
+    const inferredNew = k === "new" && !Array.isArray(ch.new);
+    const total = k === "new" ? (Number.isFinite(Number(counts.new)) ? Number(counts.new) : rows.length)
+      : k === "gone" ? (Number.isFinite(Number(counts.gone)) ? Number(counts.gone) : rows.length)
+      : (Number.isFinite(Number(counts.price_up)) || Number.isFinite(Number(counts.price_down))
+        ? (Number(counts.price_up) || 0) + (Number(counts.price_down) || 0) : rows.length);
+    if (!rows.length) {
+      const message = k === "new" ? (inferredNew ? "Список новых лотов отсутствует в ответе источника." : "Новых лотов не обнаружено.")
+        : k === "gone" ? "Исчезнувших лотов нет в текущем сравнении."
+        : "Изменений цен по доступной истории нет.";
+      list.append(h("li", { class: "empty", text: message }));
+      return;
+    }
+    rows.slice(0, 50).forEach((r) => {
       if (k === "price") {
-        const up = r.to > r.from;
+        const up = Number(r.to) > Number(r.from);
         list.append(lotItem(r, [h("span", { class: up ? "bad" : "good", text: fmt(r.from) + " → " + fmt(r.to) + " ◉" }), h("div", { class: "m", text: (r.pct != null ? (r.pct > 0 ? "+" : "") + fmt(r.pct) + "%" : "") })], "#" + r.lot_id));
       } else list.append(lotItem(r, price(r.price), "#" + r.lot_id + (r.rarity ? " · " + r.rarity : "")));
     });
-    if (total > rows.length) list.append(h("li", { class: "m", text: "Показано " + rows.length + " из " + fmt(total) + "." }));
+    if (total > rows.length) list.append(h("li", { class: "m", text: "Показано " + Math.min(rows.length, 50) + " из " + fmt(total) + "." }));
   }
   function renderTop() {
     const top = (Array.isArray(state.data.top_expensive) && state.data.top_expensive.length ? state.data.top_expensive : state.lots.filter((l) => isNum(l.price)).sort((a, b) => b.price - a.price).slice(0, 10));
