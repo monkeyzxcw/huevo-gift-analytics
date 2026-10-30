@@ -229,7 +229,7 @@ test("old v1 data.json still renders; missing sections show honest placeholders"
   await page.waitForSelector("#content:not(.hide)");
   assert.equal(await page.locator("#chartCats .hbar").count(), 2, "categories computed from lots");
   assert.equal(await page.locator("#topList li").count(), 10);
-  assert.match(await page.textContent("#changeList"), /появится после следующего/);
+  assert.match(await page.textContent("#changeList"), /Список новых лотов отсутствует|Пока нет данных для сравнения/);
   assert.deepEqual(problems, []);
   await browser.close();
 });
@@ -393,7 +393,7 @@ test("catalog changes panel handles partial payloads and falls back to gone lots
   const { browser, page, problems } = await open(serve(data));
   await page.waitForSelector("#content:not(.hide)");
   await page.click('#mainNav [data-view="analytics"]');
-  assert.match(await page.textContent("#changeList"), /Пока нет данных|Новых лотов не обнаружено|Новых лотов/);
+  assert.match(await page.textContent("#changeList"), /Список новых лотов отсутствует|Пока нет данных|Новых лотов/);
   await page.click("#tabGone");
   assert.match(await page.textContent("#changeList"), /Снятый лот/);
   await page.click("#tabPrice");
