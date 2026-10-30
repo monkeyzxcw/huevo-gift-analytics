@@ -42,6 +42,7 @@
   <button role="tab" aria-selected="false" data-view="favorites" type="button"><span>06</span> Избранное <small id="navFavoritesCount">0</small></button>
   <button role="tab" aria-selected="false" data-view="support" type="button"><span>07</span> Поддержка</button>
   <button role="tab" aria-selected="false" data-view="appearance" type="button"><span>08</span> Внешний вид</button>
+  <button role="tab" aria-selected="false" data-view="help" type="button"><span>09</span> Инструкция</button>
 </nav>
 <div class="command-strip"><span class="command-mark">AMNYAM / WORKER EDITION</span><span>MARKET INTELLIGENCE <i></i> SILENT SYNC 3S</span><label class="season-control"><span>ТЕМА</span><select id="seasonTheme" aria-label="Праздничная тема"><option value="default">AMNYAM</option><option value="newyear">Новый год</option><option value="halloween">Хэллоуин</option><option value="spring">Весна</option><option value="summer">Лето</option></select></label><label class="command-search"><b>⌕</b><input id="globalSearch" type="search" placeholder="Быстрый поиск по рынку…" autocomplete="off" aria-label="Быстрый поиск"><kbd>ENTER</kbd></label></div>
 
@@ -152,13 +153,77 @@
   <div class="section-heading"><div><span class="section-index">/ PERSONAL WATCHLIST</span><h2>Избранное</h2><p>Задай целевую цену у любого лота. Цели и сохранённые наборы фильтров хранятся только в этом браузере.</p></div>
     <div class="watch-header-actions"><span class="view-stat" id="favoritesCount">0 лотов</span><button class="btn secondary" id="enableNotifications" type="button">Включить уведомления</button></div>
   </div>
-  <p class="watch-help" id="notificationHint">Целевые цены проверяются при обновлении данных. Браузерные уведомления можно разрешить отдельно; сайт должен быть открыт, чтобы получать актуальные проверки.</p>
+  <p class="watch-help" id="notificationHint">Разреши системные уведомления браузера. Сайт должен оставаться открытым в запущенном браузере, чтобы проверять цены и показывать сигналы на рабочем столе.</p>
   <div class="alert-sound-controls" aria-label="Звуковые сигналы">
     <button class="btn secondary" id="toggleAlertSound" type="button" aria-pressed="false">Звук: выключен</button>
     <button class="btn secondary" id="testAlertSound" type="button">Проверить звук</button>
     <small id="alertSoundHint">Звуковые сигналы отключены. Уведомления браузера работают отдельно.</small>
   </div>
   <ol class="deal-list" id="favoritesList"></ol>
+</section>
+
+<section class="panel help-panel" id="helpPanel" data-view-section="help" aria-labelledby="helpTitle">
+  <div class="section-heading">
+    <div><span class="section-index">/ AMNYAM FIELD MANUAL</span><h2 id="helpTitle">Инструкция по AMNYAM MODE</h2>
+      <p>Краткий справочник по разделам, поиску, мониторингу цен и уведомлениям. Его можно открыть в любой момент, не покидая приложение.</p>
+    </div>
+    <span class="view-stat">USER GUIDE · 01</span>
+  </div>
+  <div class="help-intro">
+    <div class="help-intro-mark" aria-hidden="true">?</div>
+    <div><b>С чего начать</b><p>Открой «Маркет», найди нужный подарок, добавь интересный лот в избранное и задай цену-цель. AMNYAM будет сравнивать новые данные с твоим условием и сообщит, когда цена станет подходящей.</p></div>
+  </div>
+  <div class="help-grid">
+    <article class="help-card">
+      <span class="help-number">01 / ОБЗОР</span><h3>База</h3>
+      <p>Главная панель показывает состояние рынка и ключевые показатели: количество активных лотов, медианную цену, найденные предложения ниже рынка и твой список мониторинга.</p>
+      <ul><li><b>Лот дня</b> — выбранное предложение с привлекательным соотношением цены и рынка.</li><li><b>3 лота дня</b> — короткая подборка разных рыночных возможностей.</li><li>Графики показывают распределение цен и категории подарков.</li></ul>
+    </article>
+    <article class="help-card">
+      <span class="help-number">02 / ПОИСК</span><h3>Маркет</h3>
+      <p>Полный список текущих предложений. Можно искать по названию или ID, фильтровать по редкости и статусу, задавать диапазон цены и менять сортировку.</p>
+      <ul><li>Режим «Отдельные лоты» показывает конкретные объявления.</li><li>Режим «По типам подарков» объединяет похожие предложения и показывает минимум, медиану и максимум.</li><li>Нажми на лот, чтобы открыть подробную карточку.</li></ul>
+    </article>
+    <article class="help-card">
+      <span class="help-number">03 / ВЫГОДА</span><h3>Ниже рынка и дешёвые</h3>
+      <p>«Ниже рынка» ищет предложения дешевле устойчивого ориентира сопоставимых лотов или подтверждённых продаж. «Дешёвые» просто сортирует объявления от меньшей цены к большей.</p>
+      <p class="help-note">Дисконт — ориентир для анализа, а не гарантия прибыли. Проверяй серию, редкость и конкретный лот перед покупкой.</p>
+    </article>
+    <article class="help-card">
+      <span class="help-number">04 / КАРТОЧКА</span><h3>Характеристики и экземпляр</h3>
+      <p>В подробностях подарка блок «Характеристики» описывает модель, фон, символ и другие свойства, которые удалось получить из карточки Huevo.</p>
+      <p>Блок «Экземпляр и тираж» относится к конкретной единице: номер, общий тираж, цена выпуска, автор, коллекция, текущий владелец и доступная история передач/продаж.</p>
+      <p class="help-note">Пустое поле означает, что источник не передал это значение. AMNYAM не придумывает характеристики и суммы сделок.</p>
+    </article>
+    <article class="help-card">
+      <span class="help-number">05 / МОНИТОРИНГ</span><h3>Избранное и цена-цель</h3>
+      <ul><li>Нажми ☆ у лота, чтобы добавить его в «Избранное».</li><li>Укажи целую цену, при которой хочешь получить сигнал.</li><li>Когда цена станет равна цели или ниже, приложение покажет уведомление, воспроизведёт фирменный звук и, при разрешении, отправит системное уведомление.</li><li>Если цена снова поднимется выше цели, условие сбросится и сможет сработать повторно при следующем снижении.</li></ul>
+    </article>
+    <article class="help-card">
+      <span class="help-number">06 / СИГНАЛЫ</span><h3>Звук и уведомления рабочего стола</h3>
+      <ol><li>В «Избранном» включи звук и нажми «Проверить звук».</li><li>Нажми «Разрешить уведомления» и подтверди запрос браузера.</li><li>Проверь тестовое системное уведомление AMNYAM. Если разрешение уже выдано, кнопка запускает повторный тест.</li></ol>
+      <p class="help-note">Для проверки цен в фоне оставь браузер запущенным и не закрывай вкладку AMNYAM. В фоне опрос выполняется реже. Когда браузер полностью закрыт, обычные браузерные уведомления не работают — для этого нужна отдельная серверная push-инфраструктура.</p>
+    </article>
+    <article class="help-card">
+      <span class="help-number">07 / АНАЛИТИКА</span><h3>Данные</h3>
+      <p>Графики показывают динамику количества лотов и медианной цены. «Изменения каталога» позволяет просматривать новые, исчезнувшие и подорожавшие/подешевевшие объявления, а также события по экземплярам.</p>
+      <p>История цены объявления не равна истории завершённых сделок. Сумма сделки показывается только тогда, когда источник действительно её предоставил.</p>
+    </article>
+    <article class="help-card">
+      <span class="help-number">08 / ПРОФИЛЬ</span><h3>Аккаунт и внешний вид</h3>
+      <p>При запуске AMNYAM из huEVO избранное, цели и настройки связываются с подтверждённым профилем huEVO. При обычном открытии в браузере персональные настройки хранятся локально в этом браузере.</p>
+      <p>Во вкладке «Внешний вид» можно менять фон, маскота, анимации и стеклянные карточки. Эти эффекты не должны мешать работе с каталогом.</p>
+    </article>
+    <article class="help-card">
+      <span class="help-number">09 / ОБНОВЛЕНИЯ</span><h3>Откуда берутся данные</h3>
+      <p>AMNYAM показывает сведения, поступающие от сборщика HuevoDualScan. Первая страница маркета обновляется чаще, полный обход каталога и отдельный разбор карточек выполняются своими очередями.</p>
+      <p>Сборщик работает в двух видимых окнах Chrome с ручным входом в huEVO. Если окно сборщика закрыто, вход потерян или источник ограничил доступ, свежие данные могут перестать поступать. Обновление сайта само по себе не запускает сбор Huevo.</p>
+    </article>
+  </div>
+  <div class="help-footer">
+    <b>Полезные сочетания клавиш</b>
+    <span><kbd>/</kbd> поиск по рынку</span><span><kbd>Ctrl</kbd> + <kbd>K</kbd> быстрые команды</span><span><kbd>G</kbd>, затем <kbd>H</kbd> — главная</span><span><kbd>G</kbd>, затем <kbd>I</kbd> — инструкция</span>
+  </div>
 </section>
 
 <section class="panel support-panel" id="supportPanel" data-view-section="support">
@@ -251,6 +316,7 @@
     <button type="button" data-command-item data-command-view="analytics"><span class="palette-icon">⌁</span><span><b>Аналитика</b><small>Графики и изменения рынка</small></span></button>
     <button type="button" data-command-item data-command-view="favorites"><span class="palette-icon">☆</span><span><b>Избранное и цели</b><small>Отслеживаемые подарки и целевые цены</small></span></button>
     <button type="button" data-command-item data-command-view="appearance"><span class="palette-icon">◐</span><span><b>Настройки интерфейса</b><small>Фон, маскот и анимации</small></span></button>
+    <button type="button" data-command-item data-command-view="help"><span class="palette-icon">?</span><span><b>Инструкция</b><small>Как пользоваться всеми разделами AMNYAM</small><kbd>G I</kbd></span></button>
   </div>
   <div class="palette-footer"><span>↑ ↓ навигация · ENTER открыть · ESC закрыть</span><span>AMNYAM COMMAND</span></div>
 </dialog>
@@ -290,6 +356,6 @@
 </main>
 <div id="ambientLayer" aria-hidden="true"></div><div id="cursorGlow" aria-hidden="true"></div>
 <div class="premium-splash" id="premiumSplash" aria-hidden="true"><div class="splash-mark">H<span>•</span></div><div class="splash-title">AMNYAM <b>MODE</b></div><div class="splash-subtitle">GIFT MARKET INTELLIGENCE</div><div class="splash-loader"><i></i></div></div>
-<script src="./app.js?v=amnyam-enrichment-v14" defer></script>
+<script src="./app.js?v=amnyam-desktop-alerts-v15" defer></script>
 </body>
 </html>
