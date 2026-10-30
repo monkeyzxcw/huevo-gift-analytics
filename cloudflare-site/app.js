@@ -299,6 +299,9 @@
         // rebuilding cards, charts, rows, the active tab, or the search controls.
         state.data = n.raw;
         renderState();
+        // Price targets must be evaluated on every successful poll, even when the
+        // visible snapshot signature is unchanged and the background tab is throttled.
+        checkTargetAlerts();
       }
     } catch (_) {
       // Preserve the last valid snapshot and back off network requests on intermittent failures.
