@@ -30,7 +30,7 @@ if errorlevel 1 goto failed
 
 echo.
 echo Launching visible Chrome. Log in when prompted, then return here and press Enter.
-".venv\Scripts\python.exe" scripts\collect_snapshot.py --local-login
+".venv\Scripts\python.exe" scripts\collect_snapshot.py --local-login --with-sales
 if errorlevel 1 (
   echo.
   echo Collection failed. Existing valid market data has been preserved.
