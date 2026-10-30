@@ -255,32 +255,26 @@
 </dialog>
 
 <dialog id="accountDialog" class="account-dialog" aria-labelledby="accountTitle">
-  <div class="dlg-head"><div><span class="section-index">/ PERSONAL ACCOUNT</span><h3 id="accountTitle">Профиль AMNYAM</h3></div><button class="btn secondary" id="accountClose" type="button" aria-label="Закрыть">✕</button></div>
-  <p class="account-intro">Рынок и аналитика общие для всех. Избранное, цели, фильтры и оформление хранятся отдельно в твоём аккаунте и открываются с любого устройства.</p>
+  <div class="dlg-head"><div><span class="section-index">/ HUEVO IDENTITY</span><h3 id="accountTitle">Твой профиль huEVO</h3></div><button class="btn secondary" id="accountClose" type="button" aria-label="Закрыть">✕</button></div>
+  <p class="account-intro">AMNYAM использует твой аккаунт социальной сети huEVO. Отдельная регистрация, логин и пароль не нужны.</p>
+  <p class="account-status" id="accountStatus" role="status" aria-live="polite"></p>
   <div id="accountGuest">
-    <form id="loginForm" class="account-form">
-      <h4>Войти в аккаунт</h4>
-      <label class="account-field"><span>Логин</span><input class="input" id="loginUsername" name="username" autocomplete="username" minlength="3" maxlength="24" required></label>
-      <label class="account-field"><span>Пароль</span><input class="input" id="loginPassword" name="password" type="password" autocomplete="current-password" minlength="12" maxlength="128" required></label>
-      <button class="btn" type="submit">Войти</button>
-      <button class="account-switch" type="button" id="showRegister">Новый пользователь? Создать аккаунт</button>
-    </form>
-    <form id="registerForm" class="account-form hide">
-      <h4>Создать аккаунт</h4>
-      <label class="account-field"><span>Отображаемое имя</span><input class="input" id="registerDisplayName" name="display_name" autocomplete="nickname" minlength="2" maxlength="32" placeholder="Как тебя показывать"></label>
-      <label class="account-field"><span>Логин</span><input class="input" id="registerUsername" name="username" autocomplete="username" minlength="3" maxlength="24" pattern="[A-Za-z0-9_.-]{3,24}" required></label>
-      <label class="account-field"><span>Пароль</span><input class="input" id="registerPassword" name="new-password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required></label>
-      <small class="account-note">Минимум 12 символов. При регистрации перенесём текущее избранное, целевые цены и фильтры с этого устройства. Не используй пароль от Huevo.</small>
-      <button class="btn" type="submit">Создать профиль</button>
-      <button class="account-switch" type="button" id="showLogin">Уже есть аккаунт? Войти</button>
-    </form>
-    <p class="account-status" id="accountStatus" role="status" aria-live="polite"></p>
-    <p class="account-note">Регистрация доступна всем. Почта и восстановление пароля пока не подключены — сохрани пароль в надёжном менеджере.</p>
+    <div class="account-huevo-guest">
+      <div class="account-huevo-mark" aria-hidden="true">H</div>
+      <h4>Вход через huEVO</h4>
+      <p>Открой AMNYAM MODE из huEVO. Подписанные данные игрока будут проверены на сервере, после чего избранное и настройки привяжутся к твоему huEVO ID.</p>
+      <small>В обычном браузере без запуска из huEVO все рыночные вкладки доступны, но персональная синхронизация не включена.</small>
+    </div>
   </div>
   <div id="accountSigned" class="hide">
-    <div class="account-profile-card"><span class="account-avatar" aria-hidden="true">◎</span><div><b id="accountDisplayName">Пользователь</b><small id="accountUsername">@user</small></div><span class="account-sync" id="accountSyncStatus">Синхронизация включена</span></div>
-    <p class="account-note">Профиль синхронизирует избранное, ценовые цели, историю срабатываний, сохранённые фильтры, звук и оформление. Разрешение браузерных уведомлений остаётся настройкой конкретного устройства.</p>
-    <button class="btn secondary" id="logoutButton" type="button">Выйти из аккаунта</button>
+    <div class="account-profile-card">
+      <span class="account-avatar-fallback" id="accountAvatarFallback" aria-hidden="true">◎</span>
+      <img class="account-avatar-image hide" id="accountAvatar" alt="" referrerpolicy="no-referrer">
+      <div><b id="accountDisplayName">Пользователь huEVO</b><small id="accountUsername">hu_user_id</small><small class="account-provider">Аккаунт подтверждён huEVO</small></div>
+      <span class="account-sync" id="accountSyncStatus">Синхронизация включена</span>
+    </div>
+    <p class="account-note">Твои избранные лоты, ценовые цели, сохранённые фильтры и настройки сохраняются отдельно от других пользователей и подтягиваются на каждом устройстве, где ты открываешь приложение через этот аккаунт huEVO.</p>
+    <p class="account-note">Звук работает в открытой вкладке. Разрешение браузерных уведомлений зависит от устройства.</p>
   </div>
 </dialog>
 
@@ -295,6 +289,6 @@
 </main>
 <div id="ambientLayer" aria-hidden="true"></div><div id="cursorGlow" aria-hidden="true"></div>
 <div class="premium-splash" id="premiumSplash" aria-hidden="true"><div class="splash-mark">H<span>•</span></div><div class="splash-title">AMNYAM <b>MODE</b></div><div class="splash-subtitle">GIFT MARKET INTELLIGENCE</div><div class="splash-loader"><i></i></div></div>
-<script src="./app.js?v=amnyam-multi-user-v11" defer></script>
+<script src="./app.js?v=amnyam-huevo-auth-v12" defer></script>
 </body>
 </html>
