@@ -54,12 +54,28 @@ async function open(handler, viewport = { width: 1280, height: 900 }, options = 
   const problems = [];
   if (options.initScript) await page.addInitScript(options.initScript);
   page.on("console", (m) => { if (m.type() === "error") problems.push("console: " + m.text()); });
+  page.on("response", (response) => {
+    if (response.status() === 404) problems.push("http 404: " + response.url());
+  });
   page.on("pageerror", (e) => problems.push("pageerror: " + e.message));
   page.on("dialog", (d) => { problems.push("dialog: " + d.message()); d.dismiss(); });
   await ctx.route("https://huevo.su/**", (r) => r.fulfill({ status: 204, body: "" }));
   await ctx.route("http://site.test/**", async (route) => {
     const u = new URL(route.request().url());
     if (options.supportRoutes && options.supportRoutes[u.pathname]) return options.supportRoutes[u.pathname](route);
+    if (u.pathname === "/api/push/status") {
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        ok: true, authenticated: false, enabled: true, subscriptions: 0
+      }) });
+    }
+    if (u.pathname === "/api/contact/status") {
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        configured: true, available: false, can_manage: false, updated_at: null
+      }) });
+    }
+    if (u.pathname === "/api/push/config") {
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ enabled: true, public_key: "test-public-key" }) });
+    }
     if (u.pathname === "/api/support/config") {
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ enabled: false, amounts: [5000, 10000, 25000, 50000, 100000], sdk_url: "https://huevo.su/static/js/huevo-apps-v1.js", origins: ["huevo.su", "huevo.departament.site"] }) });
     }
@@ -70,6 +86,9 @@ async function open(handler, viewport = { width: 1280, height: 900 }, options = 
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
         ok: true, authenticated: false, profiles_ready: true, user: null, profile: {}, updated_at: null
       }) });
+    }
+    if (u.pathname.startsWith("/api/")) {
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, enabled: false, authenticated: false, subscriptions: 0, amounts: [], supporters: 0, total: 0 }) });
     }
     if (u.pathname === "/data.json") return handler(route);
     const file = path.join(SITE, u.pathname === "/" ? "index.html" : u.pathname.slice(1));
@@ -201,6 +220,87 @@ test("below-market cards show price evidence, quick target controls, and three d
   await browser.close();
 });
 
+test("top reliable discount and absolute cheapest offer are shown as different picks", async () => {
+  const data=dataV2();
+  data.lots=[
+    ...Array.from({length:11},(_,i)=>({
+      lot_id:String(20000+i),title:"Лудобофос",rarity:"Лимитированный",
+      price:i===0?144000:567000,status:"На продаже",active:true,
+      image_url:"https://huevo.su/static/gift.webp",
+      lot_url:"https://huevo.su/market/lot/"+(20000+i),history:[]
+    })),
+    ...Array.from({length:5},(_,i)=>({
+      lot_id:String(21000+i),title:"Нимфа (FUKKERS)",rarity:"Лимитированный",
+      price:i===0?111111:888222,status:"На продаже",active:true,
+      image_url:"https://huevo.su/static/gift.webp",
+      lot_url:"https://huevo.su/market/lot/"+(21000+i),history:[]
+    }))
+  ];
+  data.stats={n_total:data.lots.length};
+  data.collector.lots=data.lots.length;
+  const {browser,page,problems}=await open(serve(data));
+  await page.waitForSelector("#content:not(.hide)");
+  assert.match(await page.textContent("#belowBestTitle"),/Лудобофос/);
+  assert.match(await page.textContent("#belowBestMeta"),/74,6|74\.6/);
+  await page.click('#mainNav [data-view="overview"]');
+  const picks=page.locator("#dayPicks .day-pick-card");
+  assert.equal(await picks.count(),3);
+  assert.match(await picks.nth(0).textContent(),/ЛУЧШИЙ НАДЁЖНЫЙ ДИСКОНТ/);
+  assert.match(await picks.nth(1).textContent(),/САМАЯ НИЗКАЯ ЦЕНА/);
+  assert.match(await picks.nth(1).textContent(),/Нимфа/);
+  assert.match(await picks.nth(1).textContent(),/ПРОВЕРИТЬ/);
+  assert.match(await picks.nth(1).textContent(),/Экстремальный дисконт более 80%/);
+  assert.deepEqual(problems,[]);
+  await browser.close();
+});
+
+test("contact strip shows public availability but hides controls from other Huevo users", async () => {
+  const {browser,page,problems}=await open(serve(dataV2()),{width:1280,height:900},{
+    supportRoutes:{
+      "/api/contact/status":route=>route.fulfill({
+        status:200,contentType:"application/json",
+        body:JSON.stringify({configured:true,available:true,can_manage:false,updated_at:NOW})
+      })
+    }
+  });
+  await page.waitForSelector("#content:not(.hide)");
+  await page.waitForFunction(()=>document.querySelector("#ownerPresenceText").textContent==="Сейчас на месте");
+  assert.equal(await page.locator("#ownerPresenceToggle").isVisible(),false);
+  assert.equal(await page.getAttribute("#ownerPresenceView","data-available"),"true");
+  assert.equal(await page.getAttribute("#contactPanel a.contact-message-btn","href"),"https://huevo.su/messages/monkeyzxcw");
+  assert.deepEqual(problems,[]);
+  await browser.close();
+});
+
+test("only the authenticated owner receives the availability switch and may change it", async () => {
+  let available=false;
+  const {browser,page,problems}=await open(serve(dataV2()),{width:1280,height:900},{
+    query:"?hu_user_id=14188",
+    supportRoutes:{
+      "/api/contact/status":async route=>{
+        if(route.request().method()==="PUT"){
+          const body=route.request().postDataJSON();
+          available=Boolean(body.available);
+        }
+        return route.fulfill({
+          status:200,contentType:"application/json",
+          body:JSON.stringify({configured:true,available,can_manage:true,updated_at:NOW})
+        });
+      }
+    }
+  });
+  await page.waitForSelector("#content:not(.hide)");
+  await page.waitForFunction(()=>!document.querySelector("#ownerPresenceToggle").hidden);
+  const toggle=page.locator("#ownerPresenceToggle");
+  assert.equal(await toggle.getAttribute("aria-checked"),"false");
+  await toggle.click();
+  await page.waitForFunction(()=>document.querySelector("#ownerPresenceToggle").getAttribute("aria-checked")==="true");
+  assert.equal(available,true);
+  assert.match(await page.textContent("#ownerPresenceText"),/Сейчас на месте/);
+  assert.deepEqual(problems,[]);
+  await browser.close();
+});
+
 test("lot without a price sorts last and shows a dash, not zero", async () => {
   const { browser, page } = await open(serve(dataV2()));
   await page.waitForSelector("#content:not(.hide)");
@@ -230,23 +330,33 @@ test("detail dialog: price history, comparison, safe link, Escape closes", async
   await browser.close();
 });
 
-test("gift instance metadata and history feed render in the detail and catalog changes panels", async () => {
+test("gift instance and catalogue edition use separate verified data sources", async () => {
   const data = dataV2();
   data.lots[3].gift_details = {
     gift_id: "18336", gift_url: "https://huevo.su/gift/18336",
     checked_at: NOW, attributes: {
       model: { name: "Лунная модель", rarity: "1.2%" },
-      backdrop: "Синий космос",
-      symbol: "Комета",
-      pattern: { value: "Звёздный узор" }
+      backdrop: "Синий космос", symbol: "Комета", pattern: { value: "Звёздный узор" }
     }
   };
+  data.lots[3].gift_catalog = {
+    catalog_id: "131", gift_catalog_id: "131",
+    gift_catalog_url: "https://huevo.su/gifts/131",
+    title: "Адидас-Тян Зеленая", supply: 222, issued: 220,
+    drop_price: 7777, drop_price_text: "7777 монэток",
+    edition_sold_out: false, rarity: "Лимитированный",
+    author: "Дизайнер каталога", collection: "Каталог Адидас",
+    attributes: { model: "Green Adidas" }, checked_at: NOW,
+    source: "huevo_gift_catalog_page"
+  };
+  // Deliberately conflicting values prove that /gift/{instance_id} is not
+  // allowed to override catalogue supply, drop price, designer or collection.
   data.lots[3].gift_instance = {
     gift_id: "18336", gift_url: "https://huevo.su/gift/18336",
     title: "Адидас-Тян Зеленая", serial: 4, supply: 111,
     rarity: "Лимитированный", drop_price: 5555, drop_price_text: "5555 монэток",
-    edition_sold_out: true, author: "hhiૐvi buritania XVII",
-    collection: "ADIDAS-Тян", current_owner: "monkeyzxcw",
+    edition_sold_out: true, author: "Автор экземпляра (не использовать)",
+    collection: "Чужая коллекция (не использовать)", current_owner: "monkeyzxcw",
     history_found: true, checked_at: NOW,
     history: [
       { event_id: "event-1", type: "purchase", label: "Куплен", from_user: "monkeyzxcw", to_user: "monkeyzxcw", time_raw: "22 окт в 03:35" },
@@ -278,15 +388,24 @@ test("gift instance metadata and history feed render in the detail and catalog c
   await page.click("#rows button");
   const detail = await page.textContent("#dBody");
   assert.match(detail, /№ 4/);
-  assert.match(detail, /111/);
+  assert.match(detail, /Полный тираж/);
+  assert.match(detail, /222/);
+  assert.doesNotMatch(detail, /Полный тираж\s*111/);
   assert.match(detail, /Лунная модель/);
   assert.match(detail, /Синий космос/);
   assert.match(detail, /Комета/);
   assert.match(detail, /Звёздный узор/);
-  assert.ok(detail.replace(/\s/g, "").includes("5555"), "grouped drop price must still be checked");
+  assert.ok(detail.replace(/\s/g, "").includes("7777"), "drop price must come from the /gifts/ catalogue record");
+  assert.doesNotMatch(detail, /5555/, "instance-page price must not appear as catalogue drop price");
+  assert.match(detail, /Дизайнер каталога/);
+  assert.match(detail, /Каталог Адидас/);
+  assert.doesNotMatch(detail, /Автор экземпляра/);
+  assert.doesNotMatch(detail, /Чужая коллекция/);
   assert.match(detail, /Продан в Маркете/);
   assert.match(detail, /teeth/);
-  assert.match(detail, /не содержит сумму каждой сделки/);
+  assert.match(detail, /не содержат сумму каждой сделки/);
+  assert.equal(await page.locator("#dBody a").filter({ hasText: "Открыть страницу подарка и тираж" }).getAttribute("href"), "https://huevo.su/gifts/131");
+  assert.equal(await page.locator("#dBody a").filter({ hasText: "Открыть страницу конкретного экземпляра" }).getAttribute("href"), "https://huevo.su/gift/18336");
   await page.keyboard.press("Escape");
 
   await page.click('#mainNav [data-view="analytics"]');
@@ -481,6 +600,14 @@ test("live polling refreshes every gift-instance field and event detail", async 
       from_user: "old_owner", to_user: "unknown", time_raw: "вчера"
     }]
   };
+  lot.gift_catalog = {
+    catalog_id: "131", gift_catalog_id: "131",
+    gift_catalog_url: "https://huevo.su/gifts/131",
+    title: lot.title, supply: 111, rarity: "Лимитированный",
+    drop_price: 5555, drop_price_text: "5555 монэток",
+    edition_sold_out: null, author: "", collection: "",
+    checked_at: NOW, source: "huevo_gift_catalog_page"
+  };
   data.catalog_events = [{
     event_id: "stable-event-id", type: "transfer", label: "Первичная запись",
     title: lot.title, lot_id: String(lot.lot_id), gift_id: "18336",
@@ -506,10 +633,10 @@ test("live polling refreshes every gift-instance field and event detail", async 
   // exactly the fields the old signature checked, while the actual visible metadata
   // and event details have changed.
   latest = JSON.parse(JSON.stringify(latest));
-  latest.lots[3].gift_instance.author = "Новый автор";
-  latest.lots[3].gift_instance.collection = "Обновлённая коллекция";
+  latest.lots[3].gift_catalog.author = "Новый автор";
+  latest.lots[3].gift_catalog.collection = "Обновлённая коллекция";
+  latest.lots[3].gift_catalog.edition_sold_out = true;
   latest.lots[3].gift_instance.current_owner = "new_owner";
-  latest.lots[3].gift_instance.edition_sold_out = true;
   latest.lots[3].gift_instance.history[0] = {
     ...latest.lots[3].gift_instance.history[0],
     label: "Продан в Маркете", from_user: "seller", to_user: "buyer", time_raw: "28 окт в 21:37"
@@ -683,9 +810,11 @@ test("help tab documents main workflows and desktop notification limitations", a
   const guide = await page.textContent("#helpPanel");
   assert.match(guide, /Маркет/);
   assert.match(guide, /цена-цель/);
-  assert.match(guide, /уведомления рабочего стола/);
-  assert.match(guide, /браузер полностью закрыт/);
+  assert.match(guide, /push на рабочий стол/);
+  assert.match(guide, /Cloudflare Worker/);
   assert.match(guide, /HuevoDualScan/);
+  assert.ok(guide.includes("gifts/{id}"));
+  assert.match(guide, /неоднозначна/);
   assert.deepEqual(problems, []);
   await browser.close();
 });

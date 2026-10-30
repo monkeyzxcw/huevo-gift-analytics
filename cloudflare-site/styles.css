@@ -214,6 +214,28 @@ tbody tr:hover td{background:#1a2115}
 .count-sub{font-size:10px;margin-top:4px}
 @media(max-width:600px){.sort-control{min-width:100%;flex:1 1 100%}.sort-help{font-size:10px}}
 
+
+/* Direct contact and server-controlled owner presence */
+.contact-strip{display:flex;align-items:center;justify-content:space-between;gap:20px;margin:14px 0 22px;padding:18px 20px;border:1px solid rgba(196,255,88,.22);border-radius:13px;background:linear-gradient(110deg,rgba(29,42,20,.94),rgba(12,19,17,.94) 66%,rgba(19,34,28,.9));box-shadow:0 12px 36px rgba(0,0,0,.16)}
+.contact-copy{min-width:0;max-width:620px}
+.contact-copy h2{margin:5px 0 6px;color:#f0f5e9;font-size:clamp(18px,2.4vw,23px);letter-spacing:-.04em}
+.contact-copy p{margin:0;color:#aab6a0;font-size:11px;line-height:1.6}
+.contact-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+.presence-view{display:inline-flex;align-items:center;gap:7px;padding:8px 10px;border:1px solid rgba(255,255,255,.1);border-radius:8px;background:rgba(4,8,7,.3);color:#b2bda9;font-size:10px;font-weight:850;white-space:nowrap}
+.presence-dot{width:8px;height:8px;border-radius:50%;background:#7f887c;box-shadow:0 0 0 3px rgba(127,136,124,.12)}
+.presence-view[data-available=true] .presence-dot{background:#9be66a;box-shadow:0 0 0 3px rgba(155,230,106,.14),0 0 13px rgba(155,230,106,.35)}
+.presence-view[data-available=true]{color:#c9efa9;border-color:rgba(155,230,106,.23)}
+.presence-switch{display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(255,255,255,.13);border-radius:8px;background:#151d14;color:#d5e0cd;padding:7px 10px;font-size:10px;font-weight:850;cursor:pointer}
+.presence-switch[hidden]{display:none}
+.presence-switch-track{position:relative;width:29px;height:16px;border-radius:20px;background:#596052;transition:background .18s ease}
+.presence-switch-track i{position:absolute;left:2px;top:2px;width:12px;height:12px;border-radius:50%;background:#fff;transition:transform .18s ease}
+.presence-switch[aria-checked=true] .presence-switch-track{background:#7ebc45}
+.presence-switch[aria-checked=true] .presence-switch-track i{transform:translateX(13px)}
+.presence-switch:disabled{opacity:.55;cursor:wait}
+.contact-message-btn{white-space:nowrap}
+@media(max-width:760px){.contact-strip{align-items:flex-start;flex-direction:column;padding:15px}.contact-actions{justify-content:flex-start;width:100%}}
+@media(max-width:520px){.contact-actions{display:grid;grid-template-columns:1fr 1fr}.contact-message-btn{grid-column:1/-1;text-align:center}.presence-view,.presence-switch{justify-content:center}}
+
 /* AMNYAM Market Intelligence suite */
 .catalog-header-actions,.watch-header-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .market-tools-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:6px 0 12px}
@@ -695,6 +717,23 @@ button:disabled{cursor:not-allowed;filter:saturate(.55)}
 .support-message #supportRetryStatus{flex:0 0 auto;margin:0}
 .support-message #supportRetryStatus[aria-busy="true"]{cursor:progress;opacity:.7}
 
+
+
+
+.deal-warning{margin:8px 0 0;padding:8px 10px;border:1px solid rgba(255,185,102,.28);border-radius:7px;background:rgba(120,68,21,.13);color:#edc79a;font-size:10px;line-height:1.55}
+.deal-discount{white-space:nowrap}
+
+/* Background Web Push controls */
+.push-controls{display:grid;gap:9px;margin:12px 0 15px;padding:13px 14px;border:1px solid rgba(196,255,88,.2);border-radius:9px;background:linear-gradient(120deg,rgba(23,32,17,.72),rgba(14,18,16,.76))}
+.push-status{font-size:11px;line-height:1.6;color:#aab6a0}
+.push-status[data-state=ok]{color:#bde88f}
+.push-status[data-state=error]{color:#ffb1aa}
+.push-status[data-state=loading]{color:#b5c1ac}
+.push-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.push-actions .btn{font-size:10px;padding:8px 11px}
+.push-actions .btn:disabled{opacity:.45;cursor:not-allowed}
+.push-controls>small{color:#85917e;font-size:10px;line-height:1.55}
+@media(max-width:600px){.push-actions{display:grid;grid-template-columns:1fr}.push-actions .btn{width:100%}}
 
 /* AMNYAM help centre */
 .help-panel{display:grid;gap:18px}

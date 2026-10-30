@@ -43,6 +43,8 @@
     user: null, profilesReady: false, updatedAt: null, dirty: false, hydrating: false, authRevision: 0,
     revision: 0, saving: false, savePromise: null, profilePollRunning: false, saveTimer: null, pollTimer: null, authPromise: null, saveRetryCount: 0
   };
+  let pushState = { loaded: false, authenticated: false, subscriptions: 0, localSubscription: false, error: "" };
+  let presenceState = { available: false, canManage: false, configured: false, loading: true, saving: false, error: "" };
 
   // ---------- safe DOM helpers (no innerHTML anywhere: all text goes through textContent) ----------
   function h(tag, attrs, children) {
@@ -194,6 +196,7 @@
       state.liveFingerprint = n.raw.live && n.raw.live.fingerprint ? String(n.raw.live.fingerprint) : null;
       lastSnapshotSignature = snapshotSignature(n.raw, n.lots);
       render();
+      openNotificationLotFromUrl();
       dismissPremiumSplash();
     } catch (error) {
       $("errorText").textContent = "Не удалось загрузить data.json (" + (error && error.message ? error.message : "ошибка") + "). Последний корректный снимок не заменён.";
@@ -233,6 +236,7 @@
         String(lot.lot_id), lot.title, lot.serial, lot.rarity, lot.price, lot.status,
         lot.active !== false,
         canonical(lot.gift_details),
+        canonical(lot.gift_catalog),
         canonical(lot.gift_instance),
         canonical(lot.history)
       ]),
@@ -1019,53 +1023,91 @@
     }
 
     const instance = l.gift_instance && typeof l.gift_instance === "object" ? l.gift_instance : null;
+    const catalogCandidate = l.gift_catalog && typeof l.gift_catalog === "object" ? l.gift_catalog : null;
+    const catalogId = String(catalogCandidate && (catalogCandidate.catalog_id || catalogCandidate.gift_catalog_id) || "");
+    const giftCatalog = catalogCandidate && catalogCandidate.source === "huevo_gift_catalog_page" && /^\d{1,20}$/.test(catalogId) ? catalogCandidate : null;
     body.append(h("h4", { text: "Экземпляр и тираж" }));
-    if (instance) {
-      const soldOutLabel = instance.edition_sold_out === true ? "Тираж разошёлся"
-        : instance.edition_sold_out === false ? "Распродажа тиража не отмечена" : "Неизвестно";
-      const instanceKv = [
-        ["Номер экземпляра", instance.serial ? "№ " + fmt(instance.serial) : "—"],
-        ["Полный тираж", isNum(instance.supply) ? fmt(instance.supply) : "—"],
-        ["Редкость", instance.rarity || "—"],
-        ["Цена дропа", isNum(instance.drop_price) ? price(instance.drop_price) : (instance.drop_price_text || "—")],
+    if (giftCatalog) {
+      const soldOutLabel = giftCatalog.edition_sold_out === true ? "Тираж разошёлся"
+        : giftCatalog.edition_sold_out === false ? "Тираж ещё доступен / распродажа не отмечена" : "Не указано на странице подарка";
+      const catalogRows = [
+        ["Подарок", giftCatalog.title || l.title || "—"],
+        ["Полный тираж", isNum(giftCatalog.supply) ? fmt(giftCatalog.supply) : "—"],
+        ["Выпущено экземпляров", isNum(giftCatalog.issued) ? fmt(giftCatalog.issued) : "—"],
+        ["Цена выпуска", isNum(giftCatalog.drop_price) ? price(giftCatalog.drop_price) : (giftCatalog.drop_price_text || "—")],
         ["Состояние тиража", soldOutLabel],
-        ["Автор дизайна", instance.author || "—"],
-        ["Коллекция", instance.collection || "—"],
+        ["Редкость", giftCatalog.rarity || "—"],
+        ["Автор дизайна", giftCatalog.author || "—"],
+        ["Коллекция", giftCatalog.collection || "—"]
+      ];
+      body.append(h("dl", { class: "kv gift-attributes" }, catalogRows.map((pair) =>
+        h("div", {}, [h("dt", { text: pair[0] }), h("dd", { text: pair[1] })]))));
+      const catalogAttributes = giftCatalog.attributes && typeof giftCatalog.attributes === "object"
+        ? Object.entries(giftCatalog.attributes) : [];
+      if (catalogAttributes.length) {
+        body.append(h("dl", { class: "kv gift-attributes" }, catalogAttributes
+          .filter(([key, value]) => key && value != null && String(value).trim())
+          .map(([key, value]) => h("div", {}, [
+            h("dt", { text: String(key) }),
+            h("dd", { text: String(value) })
+          ]))));
+      }
+      const catalogId = String(giftCatalog.catalog_id || giftCatalog.gift_catalog_id || "");
+      // Build the catalogue URL from its numeric catalogue ID only; never
+      // reuse an arbitrary source URL or a /gift/<instance> path.
+      const catalogHref = /^\d{1,20}$/.test(catalogId)
+        ? "https://huevo.su/gifts/" + catalogId : "";
+      if (catalogHref) {
+        body.append(h("p", {}, [h("a", { class: "btn secondary", href: catalogHref, target: "_blank", rel: "noopener noreferrer", text: "Открыть страницу подарка и тираж ↗" })]));
+      }
+      body.append(h("p", { class: "muted foot", text: "Данные о тираже, цене выпуска и статусе выпуска загружены со страницы подарка /gifts/{id}. Они не подменяются информацией из личной страницы конкретного экземпляра." }));
+    } else {
+      body.append(h("div", { class: "empty", text: "Информация о тираже ещё не получена со страницы подарка /gifts/{id}. Старые поля с личной страницы /gift/{id} не используются как источник тиража." }));
+    }
+
+    if (instance) {
+      const instanceRows = [
+        ["Номер экземпляра", instance.serial ? "№ " + fmt(instance.serial) : "—"],
+        ["Редкость экземпляра", instance.rarity || "—"],
         ["Текущий владелец", instance.current_owner || "—"]
       ];
-      body.append(h("dl", { class: "kv gift-attributes" }, instanceKv.map((pair) =>
+      body.append(h("dl", { class: "kv gift-attributes" }, instanceRows.map((pair) =>
         h("div", {}, [h("dt", { text: pair[0] }), h("dd", { text: pair[1] })]))));
-      if (instance.gift_url) {
-        body.append(h("a", { class: "btn secondary", href: instance.gift_url, target: "_blank", rel: "noopener noreferrer", text: "Открыть страницу экземпляра ↗" }));
+      const rawInstanceUrl = String(instance.gift_url || "");
+      const instanceHref = /^https:\/\/(?:huevo\.su|huevo\.departament\.site)\/gift\/\d+\/?$/i.test(rawInstanceUrl)
+        ? rawInstanceUrl : "";
+      if (instanceHref) {
+        body.append(h("a", { class: "btn secondary", href: instanceHref, target: "_blank", rel: "noopener noreferrer", text: "Открыть страницу конкретного экземпляра ↗" }));
       }
-      body.append(h("h4", { text: "История экземпляра: кто кому" }));
-      const events = Array.isArray(instance.history) ? instance.history.slice().reverse().slice(0, 20) : [];
-      if (!instance.history_found) {
-        body.append(h("div", { class: "empty", text: "История экземпляра ещё не получена или её блок не удалось распознать." }));
-      } else if (!events.length) {
-        body.append(h("div", { class: "empty", text: "Блок истории доступен, но событий в нём нет." }));
-      } else {
-        const eventList = h("ul", { class: "list" });
-        events.forEach((event) => {
-          const flow = [event.from_user, event.to_user].filter(Boolean).join(" → ") || "Участники не указаны";
-          eventList.append(h("li", { class: "li" }, [
-            h("span", { class: "thumb", text: "↗", "aria-hidden": "true" }),
-            h("div", {}, [
-              h("div", { class: "t", text: event.label || "Изменение истории" }),
-              h("div", { class: "m", text: flow })
-            ]),
-            h("div", { class: "p", text: event.time_raw || "—" })
-          ]));
-        });
-        body.append(eventList);
-        if (instance.history.length > events.length) {
-          body.append(h("p", { class: "muted foot", text: "Показаны последние " + fmt(events.length) + " из " + fmt(instance.history.length) + " событий." }));
-        }
-      }
-      body.append(h("p", { class: "muted foot", text: "Цена дропа — первоначальная цена выпуска, а не текущая цена объявления. История показывает передачи и продажи, но не содержит сумму каждой сделки; отдельный обмен монетами в ней не виден." }));
     } else {
-      body.append(h("div", { class: "empty", text: "Данные экземпляра ещё не собраны. Сборщик получает их отдельной очередью и не открывает страницу при каждом обновлении рынка." }));
+      body.append(h("div", { class: "empty", text: "Данные конкретного экземпляра — номер, владелец и история — ещё не собраны." }));
     }
+
+    body.append(h("h4", { text: "История экземпляра: кто кому" }));
+    const events = Array.isArray(instance && instance.history) ? instance.history.slice().reverse().slice(0, 20) : [];
+    if (!instance || !instance.history_found) {
+      body.append(h("div", { class: "empty", text: "История конкретного экземпляра ещё не получена или её блок не удалось распознать." }));
+    } else if (!events.length) {
+      body.append(h("div", { class: "empty", text: "Блок истории доступен, но событий в нём нет." }));
+    } else {
+      const eventList = h("ul", { class: "list" });
+      events.forEach((event) => {
+        const flow = [event.from_user, event.to_user].filter(Boolean).join(" → ") || "Участники не указаны";
+        eventList.append(h("li", { class: "li" }, [
+          h("span", { class: "thumb", text: "↗", "aria-hidden": "true" }),
+          h("div", {}, [
+            h("div", { class: "t", text: event.label || "Изменение истории" }),
+            h("div", { class: "m", text: flow })
+          ]),
+          h("div", { class: "p", text: event.time_raw || "—" })
+        ]));
+      });
+      body.append(eventList);
+      if (instance.history.length > events.length) {
+        body.append(h("p", { class: "muted foot", text: "Показаны последние " + fmt(events.length) + " из " + fmt(instance.history.length) + " событий." }));
+      }
+    }
+    body.append(h("p", { class: "muted foot", text: "Номер, владелец и история относятся к конкретному экземпляру. Тираж и цена выпуска берутся отдельно со страницы /gifts/{id}. События истории не содержат сумму каждой сделки." }));
 
     const watch=h("div",{class:"detail-watch"});
     const fav=h("button",{class:"btn secondary",type:"button",text:state.favorites.includes(String(l.lot_id))?"★ В избранном":"☆ В избранное"});
@@ -1238,7 +1280,7 @@
     const id=String(lot.lot_id),saved=isNum(lot.reference_price)?Math.max(0,lot.reference_price-lot.price):null;
     const histValues=(Array.isArray(lot._history)?lot._history:[]).filter(p=>isNum(p.price)).map(p=>p.price);
     const histLow=histValues.length>=2?Math.min(...histValues):null;
-    const badgeText=isNum(lot.discount_pct)?"−"+fmt(lot.discount_pct)+"%":(label||"Рыночный лот");
+    const badgeText=isNum(lot.discount_pct)?"−"+fmt(lot.discount_pct)+"%"+(lot.suspicious?" · ПРОВЕРИТЬ":""):(label||"Рыночный лот");
     const fav=state.favorites.includes(id);
     const actions=h("div",{class:"deal-actions"},[
       h("span",{class:"discount-tag deal-discount",text:badgeText}),
@@ -1268,6 +1310,7 @@
     const mini=sparkline(lot._history);
     if(mini)metrics.append(h("div",{class:"deal-sparkline"},[mini,h("small",{text:"История цены"})]));
     row.children[1].append(metrics);
+    if(lot.suspicious)row.children[1].append(h("p",{class:"deal-warning",text:"Экстремальный дисконт более 80%. Не выбран верхним сигналом: проверь совпадение подарка, редкость, статус и возможную ошибку цены."}));
     const target=h("input",{class:"input target-input deal-target-input",type:"number",min:"1",step:"1",inputmode:"numeric",placeholder:"Желаемая цена","aria-label":"Цена-цель для "+(lot.title||id)});
     target.value=state.targets[id]?String(state.targets[id]):"";
     const save=h("button",{class:"btn target-save",type:"button",text:state.targets[id]?"Обновить уведомление":"Уведомить при цене"});
@@ -1280,7 +1323,7 @@
   }
 
   function renderDeals(){
-    const signals=buildDealSignals(),best=signals[0]||null;
+    const signals=buildDealSignals(),best=signals.find(lot=>!lot.suspicious)||null;
     let deals=signals.slice(),sortBy=$("dealSort").value||"discount";
     if(sortBy==="price")deals.sort((a,b)=>a.price-b.price||b.discount_pct-a.discount_pct);
     else if(sortBy==="savings")deals.sort((a,b)=>(b.reference_price-b.price)-(a.reference_price-a.price)||b.discount_pct-a.discount_pct);
@@ -1300,7 +1343,8 @@
       state._belowBestId=String(best.lot_id);
       $("belowBestTitle").textContent=best.title||("Лот #"+best.lot_id);
       $("belowBestPrice").textContent=price(best.price);
-      $("belowBestMeta").textContent="На "+fmt(best.discount_pct)+"% ниже "+(best.basis==="sales"?"медианы подтверждённых продаж":"устойчивой медианы объявлений")+" · разница "+price(Math.max(0,best.reference_price-best.price))+" · "+fmt(best.sample_size)+(best.basis==="sales"?" продаж":" лотов")+" · "+(best.confidence==="high"?"высокая выборка":best.confidence==="medium"?"средняя выборка":"низкая уверенность")+" · #"+best.lot_id;
+      const extremeCount=signals.filter(lot=>lot.suspicious).length;
+      $("belowBestMeta").textContent="На "+fmt(best.discount_pct)+"% ниже "+(best.basis==="sales"?"медианы подтверждённых продаж":"устойчивой медианы объявлений")+" · разница "+price(Math.max(0,best.reference_price-best.price))+" · "+fmt(best.sample_size)+(best.basis==="sales"?" продаж":" лотов")+" · "+(best.confidence==="high"?"высокая выборка":best.confidence==="medium"?"средняя выборка":"низкая уверенность")+" · #"+best.lot_id+(extremeCount?" · "+fmt(extremeCount)+" экстремальных скидок >80% оставлено ниже как подозрительные":"");
       $("belowBestOpen").href=safeUrl(best.lot_url,best.lot_id);
       const bestImage=$("belowBestImage"),bestArt=$("belowBestArt");
       const imageUrl=typeof best.image_url==="string"&&best.image_url.startsWith("https://")&&(best.image_url.includes("huevo.su/")||best.image_url.includes("huevo.departament.site/"))?best.image_url:"";
@@ -1310,7 +1354,7 @@
       if(imageUrl&&bestImage.src!==imageUrl)bestImage.src=imageUrl;
       if(!imageUrl)bestImage.removeAttribute("src");
       $("belowBestTarget").value=state.targets[String(best.lot_id)]?String(state.targets[String(best.lot_id)]):"";
-      $("overviewPickHint").textContent="Лучший текущий дисконт: −"+fmt(best.discount_pct)+"% от "+(best.basis==="sales"?"медианы подтверждённых продаж":"устойчивого диапазона объявлений")+". "+(best.confidence==="low"?"Ориентир предварительный.":"");
+      $("overviewPickHint").textContent="Лучший лот по размеру дисконта, а не по минимальной цене: −"+fmt(best.discount_pct)+"% от "+(best.basis==="sales"?"медианы подтверждённых продаж":"устойчивого диапазона объявлений")+". "+(best.confidence==="low"?"Ориентир предварительный.":"");
       const pick=clear($("overviewPickLot"));
       if(best.image_url&&/^https:\/\//i.test(best.image_url)){const img=h("img",{class:"pick-img",src:best.image_url,alt:"",loading:"lazy",referrerpolicy:"no-referrer"});img.addEventListener("error",()=>img.replaceWith(h("span",{class:"pick-img",text:"🎁"})));pick.append(img);}
       pick.append(h("div",{},[h("strong",{text:best.title||("Лот #"+best.lot_id)}),h("span",{class:"pick-price",text:price(best.price)}),h("small",{text:"−"+fmt(best.discount_pct)+"% к "+(best.basis==="sales"?"продажам":"объявлениям")+" · разница "+price(best.reference_price-best.price)})]));
@@ -1318,24 +1362,29 @@
     }else{
       state._belowBestId=null;
       $("belowBestTitle").textContent="Пока нет уверенного кандидата";$("belowBestPrice").textContent="—";
-      $("belowBestMeta").textContent="Нужны минимум 5 сопоставимых записей о продажах или 5 объявлений с достаточно узким диапазоном цен. Слишком разрозненные цены не считаем ориентиром.";
+      $("belowBestMeta").textContent=signals.length?"Есть экстремальные скидки, но все кандидаты превышают 80% и отмечены как подозрительные. Поэтому верхний сигнал не назначен.":"Нужны минимум 5 сопоставимых записей о продажах или 5 объявлений с достаточно узким диапазоном цен. Слишком разрозненные цены не считаем ориентиром.";
       $("belowBestOpen").href="https://huevo.su/market/gifts";$("belowBestTarget").value="";
-      $("overviewPickHint").textContent="Когда появится сопоставимая группа, здесь будет показан лучший текущий дисконт.";
+      $("overviewPickHint").textContent=signals.length?"Есть только экстремальные скидки >80%; они не выбираются надёжным топ-сигналом.":"Когда появится сопоставимая группа, здесь будет показан лучший надёжный дисконт.";
       const pick=clear($("overviewPickLot"));pick.append(h("span",{class:"muted",text:"Пока нет группы аналогов для честного сравнения."}));
-      list.append(h("li",{class:"empty",text:"Нет лотов на 15% дешевле медианы трёх или более похожих активных предложений."}));
+      list.append(h("li",{class:"empty",text:signals.length?"Кандидаты со скидкой более 80% показаны в каталоге, но не назначены лучшими из-за риска аномальной цены.":"Нет лотов на 15% дешевле медианы трёх или более похожих активных предложений."}));
     }
     updateViewCounts();
   }
 
   function renderDayPicks(){
-    const box=clear($("dayPicks")),signals=buildDealSignals(),chosen=[],seen=new Set();
+    const box=clear($("dayPicks")),signals=buildDealSignals(),reliable=signals.filter(lot=>!lot.suspicious),chosen=[],seen=new Set();
     const add=(lot,tag,description)=>{if(!lot||seen.has(String(lot.lot_id))||chosen.length>=3)return;seen.add(String(lot.lot_id));chosen.push({lot,tag,description});};
-    if(signals.length){
-      add(signals[0],"ЛУЧШИЙ ДИСКОНТ","Самое сильное отличие от медианы аналогов");
-      add(signals.slice().sort((a,b)=>a.price-b.price||b.discount_pct-a.discount_pct)[0],"НИЗКАЯ ЦЕНА","Самая низкая цена среди лотов ниже рынка");
-      add(signals.slice().sort((a,b)=>b.sample_size-a.sample_size||b.discount_pct-a.discount_pct)[0],"БОЛЬШЕ АНАЛОГОВ","Самая широкая выборка похожих предложений");
+    const signalById=new Map(signals.map(lot=>[String(lot.lot_id),lot]));
+    const fallback=state.lots.filter(l=>l&&l.active!==false&&isNum(l.price)&&l.price>0)
+      .slice().sort((a,b)=>a.price-b.price||String(a.title).localeCompare(String(b.title),"ru"))
+      .map(lot=>signalById.get(String(lot.lot_id))||lot);
+    if(reliable.length){
+      add(reliable[0],"ЛУЧШИЙ НАДЁЖНЫЙ ДИСКОНТ","Сильная скидка к аналогам без признака экстремального выброса");
+      add(fallback[0],"САМАЯ НИЗКАЯ ЦЕНА","Самое дешёвое активное объявление — не обязательно выгоднее рынка");
+      add(reliable.slice().sort((a,b)=>b.sample_size-a.sample_size||b.discount_pct-a.discount_pct)[0],"БОЛЬШЕ АНАЛОГОВ","Наиболее широкая выборка для сравнения цены");
+    }else{
+      add(fallback[0],"САМАЯ НИЗКАЯ ЦЕНА","Бюджетный лот; надёжный дисконт к рынку не подтверждён");
     }
-    const fallback=state.lots.filter(l=>l&&l.active!==false&&isNum(l.price)&&l.price>0).slice().sort((a,b)=>a.price-b.price);
     for(const lot of fallback)add(lot,"ДОСТУПНАЯ ЦЕНА","Бюджетный лот; дисконт к медиане не подтверждён");
     $("dayPicksNote").textContent=chosen.length===3?"3 кандидата · по текущему снимку":fmt(chosen.length)+" кандидата";
     if(!chosen.length){box.append(h("div",{class:"empty",text:"Появятся после первого успешного снимка цен."}));return;}
@@ -1368,14 +1417,15 @@
     const reached=found.filter(l=>isNum(state.targets[String(l.lot_id)])&&isNum(l.price)&&l.active!==false&&l.price<=state.targets[String(l.lot_id)]).length;
     const notificationPermission = "Notification" in window ? Notification.permission : "unsupported";
     const notificationNote = notificationPermission === "granted"
-      ? "Системные уведомления разрешены. Оставь браузер запущенным — в фоне проверка продолжается примерно раз в 15 секунд."
+      ? "Разрешение браузера включено. Для уведомлений с закрытой вкладкой отдельно подключи серверный push ниже."
       : notificationPermission === "denied"
         ? "Браузер запретил уведомления. Разреши их в настройках сайта рядом с адресной строкой."
-        : "Разреши системные уведомления кнопкой выше. Приложение должно оставаться открытым в браузере.";
+        : "Для фоновой доставки подключи серверный push; обычные сигналы работают только в открытой странице.";
     $("notificationHint").textContent = (targets
       ? targets+" целевых цен сохранено"+(reached?" · цель достигнута у "+reached+" лотов":"")+". "
       : "Добавь лот в избранное и задай цену, при которой хочешь получить сигнал. ") + notificationNote;
     updateNotificationButton();
+    updatePushControls();
     if(!found.length){list.append(h("li",{class:"empty",text:state.favorites.length?"Сохранённые лоты не попали в текущий снимок. Они останутся в избранном и появятся при следующем обнаружении.":"Пока пусто. Нажми ☆ в каталоге, чтобы сохранить лот в этом браузере."}));return;}
     found.slice().sort((a,b)=>(a.price??Infinity)-(b.price??Infinity)).forEach(lot=>{
       const id=String(lot.lot_id),target=state.targets[id];
@@ -1399,7 +1449,153 @@
     if(!("Notification" in window)){b.disabled=true;b.textContent="Уведомления недоступны";return;}
     if (!window.isSecureContext) { b.disabled=true; b.textContent="Нужен HTTPS"; return; }
     b.disabled=false;
-    b.textContent=Notification.permission==="granted"?"Проверить уведомление":Notification.permission==="denied"?"Разрешение запрещено":"Разрешить уведомления";
+    b.textContent=Notification.permission==="granted"?"Тест уведомления":Notification.permission==="denied"?"Разрешение запрещено":"Разрешить браузер";
+  }
+
+  function renderOwnerPresence(){
+    const view=$("ownerPresenceView"), text=$("ownerPresenceText"), toggle=$("ownerPresenceToggle"), toggleText=$("ownerPresenceToggleText");
+    if(!view||!text||!toggle||!toggleText)return;
+    view.dataset.available=String(presenceState.available);
+    text.textContent=presenceState.loading?"Проверяем статус…":presenceState.error?"Статус временно недоступен":presenceState.available?"Сейчас на месте":"Сейчас не на месте";
+    toggle.hidden=!presenceState.canManage;
+    toggle.disabled=presenceState.saving||!presenceState.configured;
+    toggle.setAttribute("aria-checked",String(presenceState.available));
+    toggleText.textContent=presenceState.saving?"Сохраняем…":presenceState.available?"На месте":"Не на месте";
+    if(presenceState.error)view.title=presenceState.error;else view.removeAttribute("title");
+  }
+
+  async function refreshOwnerPresence(){
+    try{
+      const data=await fetchJson("./api/contact/status?_="+Date.now(),{cache:"no-store"},8000);
+      presenceState={
+        available:Boolean(data.available),
+        canManage:Boolean(data.can_manage),
+        configured:Boolean(data.configured),
+        loading:false,saving:false,error:""
+      };
+    }catch(error){
+      presenceState={...presenceState,loading:false,error:"Не удалось загрузить статус: "+error.message};
+    }
+    renderOwnerPresence();
+  }
+
+  async function setOwnerPresence(available){
+    if(!presenceState.canManage||presenceState.saving)return;
+    presenceState.saving=true;
+    presenceState.error="";
+    renderOwnerPresence();
+    try{
+      const result=await accountRequest("./api/contact/status",{
+        method:"PUT",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({available:Boolean(available)})
+      });
+      presenceState={
+        available:Boolean(result.available),canManage:Boolean(result.can_manage),
+        configured:Boolean(result.configured),loading:false,saving:false,error:""
+      };
+    }catch(error){
+      presenceState.saving=false;
+      presenceState.error=error.message||"Не удалось изменить статус.";
+    }
+    renderOwnerPresence();
+  }
+
+  function openNotificationLotFromUrl(){
+    const params=new URLSearchParams(location.search);
+    const id=params.get("amnyam_lot");
+    if(!id||!/^\d{1,20}$/.test(id))return;
+    params.delete("amnyam_lot");
+    const query=params.toString();
+    history.replaceState(null,"",location.pathname+(query?"?"+query:"")+location.hash);
+    const lot=state.lots.find(item=>String(item.lot_id)===id);
+    switchView("market",false);
+    $("search").value=id;
+    state.page=0;
+    applyFilters();
+    if(lot)openDetail(lot,null);
+  }
+
+  function updatePushControls(){
+    const connect=$("enablePushNotifications"), test=$("testPushNotifications"), disable=$("disablePushNotifications"), status=$("pushStatus");
+    if(!connect||!test||!disable||!status)return;
+    const supported=window.isSecureContext&&("serviceWorker" in navigator)&&("PushManager" in window)&&("Notification" in window);
+    connect.disabled=!supported||!accountState.user;
+    test.disabled=!supported||!accountState.user||!pushState.localSubscription;
+    disable.disabled=!pushState.localSubscription;
+    connect.textContent=!supported?"Push недоступен в этом браузере":!accountState.user?"Сначала войди через huEVO":pushState.subscriptions?"Обновить push-подписку":"Подключить push на рабочий стол";
+    if(pushState.error){status.textContent=pushState.error;status.dataset.state="error";}
+    else if(!pushState.loaded){status.textContent="Проверяем состояние push…";status.dataset.state="loading";}
+    else if(!pushState.authenticated){status.textContent="Push привязывается к аккаунту huEVO. Открой приложение внутри huEVO и дождись подключения профиля.";status.dataset.state="muted";}
+    else if(pushState.subscriptions){status.textContent="Серверный push подключён · устройств: "+pushState.subscriptions+". Уведомления отправляются сервером, даже когда вкладка AMNYAM закрыта.";status.dataset.state="ok";}
+    else{status.textContent="Аккаунт huEVO подключён, но push-подписка этого браузера ещё не создана.";status.dataset.state="muted";}
+  }
+
+  async function refreshPushStatus(){
+    try{
+      const data=await accountRequest("./api/push/status");
+      let localSubscription=false;
+      if("serviceWorker" in navigator&&"PushManager" in window){
+        const registration=await navigator.serviceWorker.getRegistration("./");
+        localSubscription=Boolean(registration&&await registration.pushManager.getSubscription());
+      }
+      pushState={loaded:true,authenticated:Boolean(data.authenticated),subscriptions:Number(data.subscriptions)||0,localSubscription,error:""};
+    }catch(error){
+      pushState={...pushState,loaded:true,error:"Не удалось проверить push-сервер: "+error.message};
+    }
+    updatePushControls();
+  }
+
+  function decodeApplicationServerKey(value){
+    const raw=String(value||"").replace(/-/g,"+").replace(/_/g,"/");
+    const binary=atob(raw+"=".repeat((4-raw.length%4)%4));
+    return Uint8Array.from(binary,char=>char.charCodeAt(0));
+  }
+
+  async function connectPushNotifications(){
+    if(!accountState.user)throw new Error("Сначала открой AMNYAM MODE внутри huEVO, чтобы подтвердить аккаунт.");
+    if(!window.isSecureContext||!("serviceWorker" in navigator)||!("PushManager" in window))throw new Error("Этот браузер не поддерживает push в текущем контексте. Открой AMNYAM в отдельной вкладке HTTPS.");
+    const config=await fetchJson("./api/push/config",{cache:"no-store"},12000);
+    if(!config.enabled||!config.public_key)throw new Error("Серверный push ещё не настроен.");
+    const registration=await navigator.serviceWorker.register("./service-worker.js?v=amnyam-push-v1",{scope:"./",updateViaCache:"none"});
+    await navigator.serviceWorker.ready;
+    let subscription=await registration.pushManager.getSubscription();
+    if(!subscription){
+      subscription=await registration.pushManager.subscribe({
+        userVisibleOnly:true,
+        applicationServerKey:decodeApplicationServerKey(config.public_key)
+      });
+    }
+    await accountRequest("./api/push/subscribe",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(subscription.toJSON())
+    });
+    await refreshPushStatus();
+    if(!pushState.localSubscription)throw new Error("Сервер не подтвердил push-подписку этого браузера.");
+  }
+
+  async function testServerPush(){
+    const result=await accountRequest("./api/push/test",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:"{}"
+    });
+    if(!result.ok||!result.sent)throw new Error("Push не доставлен. Статусы сервера: "+(result.statuses||[]).join(", "));
+    return result.sent;
+  }
+
+  async function disableServerPush(){
+    const registration=await navigator.serviceWorker.getRegistration("./");
+    const subscription=registration?await registration.pushManager.getSubscription():null;
+    if(!subscription)throw new Error("На этом браузере push-подписка не найдена.");
+    await accountRequest("./api/push/unsubscribe",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({endpoint:subscription.endpoint})
+    });
+    await subscription.unsubscribe();
+    await refreshPushStatus();
   }
 
   function showDesktopNotification(title, body, lot){
@@ -1729,7 +1925,7 @@
   function renderCommandCenter() {
     const st = stats();
     const deals = buildDealSignals();
-    const best = deals[0] || null;
+    const best = deals.find((lot) => !lot.suspicious) || null;
     const setText = (id, value) => { const el = $(id); if (el) el.textContent = value; };
     setText("pulseLots", fmt(st.total));
     setText("pulseMedian", price(st.median));
@@ -1737,7 +1933,7 @@
     setText("pulseWatchlist", fmt(state.favorites.length));
     setText("pulseWatchlistNote", fmt(Object.keys(state.targets).length) + " целевых цен · " + fmt(state.favorites.length) + " в избранном");
     setText("pulseBestTitle", best ? (best.title || ("Лот #" + best.lot_id)) : "Пока нет подтверждённой сделки");
-    setText("pulseBestNote", best ? ("Лот #" + best.lot_id + " · " + price(best.price) + " вместо медианы " + price(best.reference_price) + " · " + fmt(best.sample_size) + " аналогов") : "Нужно минимум 3 сопоставимых лота и цена минимум на 15% ниже медианы.");
+    setText("pulseBestNote", best ? ("Лот #" + best.lot_id + " · максимальный дисконт, не минимальная цена · " + price(best.price) + " вместо медианы " + price(best.reference_price) + " · " + fmt(best.sample_size) + " аналогов") : "Нужно минимум 3 сопоставимых лота и цена минимум на 15% ниже медианы.");
     setText("pulseBestDiscount", best ? "−" + fmt(best.discount_pct) + "%" : "—");
   }
 
@@ -1930,6 +2126,8 @@
     if (accountState.saveTimer) window.clearTimeout(accountState.saveTimer);
     applyAccountProfile(data.profile);
     updateAccountUI();
+    refreshPushStatus();
+    refreshOwnerPresence();
     if ($("accountDialog").open) $("accountDialog").close();
     setAccountStatus("Профиль huEVO загружен", "ok");
   }
@@ -1978,12 +2176,16 @@
         }
         updateAccountUI();
         startAccountProfilePolling();
+        refreshPushStatus();
+        refreshOwnerPresence();
       } else {
         accountState.user = null;
         accountState.updatedAt = null;
         accountState.dirty = false;
         restoreGuestProfile();
         updateAccountUI();
+        refreshPushStatus();
+        refreshOwnerPresence();
         setAccountStatus(accountState.profilesReady
           ? "Открой AMNYAM MODE внутри huEVO — профиль подключится автоматически."
           : "Серверное хранилище профилей ещё не подготовлено.", "muted");
@@ -2042,6 +2244,7 @@
     $("accountClose").addEventListener("click", () => $("accountDialog").close());
     $("accountDialog").addEventListener("click", event => { if (event.target === $("accountDialog")) $("accountDialog").close(); });
     checkAccountSession();
+    refreshPushStatus();
   }
 
   // ---------- main render ----------
@@ -2104,6 +2307,8 @@
 
   // ---------- events ----------
   initAccountUI();
+  refreshOwnerPresence();
+  window.setInterval(refreshOwnerPresence, 30000);
   initAppearance();
   initAmbience();
   initAlertSoundControls();
@@ -2208,28 +2413,93 @@
   $("enableNotifications").addEventListener("click",async()=>{
     if(!("Notification" in window)){
       $("notificationHint").textContent="Этот браузер не поддерживает системные уведомления.";
-      updateNotificationButton();
-      return;
+      updateNotificationButton();return;
     }
     if(!window.isSecureContext){
       $("notificationHint").textContent="Системные уведомления доступны только на защищённом HTTPS-соединении.";
-      updateNotificationButton();
-      return;
+      updateNotificationButton();return;
     }
-    let permission = Notification.permission;
-    if(permission === "default"){
-      try { permission = await Notification.requestPermission(); } catch (_) { permission = Notification.permission; }
+    let permission=Notification.permission;
+    if(permission==="default"){
+      try{permission=await Notification.requestPermission();}catch(_){permission=Notification.permission;}
     }
     updateNotificationButton();
-    if(permission === "granted"){
-      $("notificationHint").textContent="Разрешение включено. Это тестовое уведомление AMNYAM; при достижении целевой цены придёт такое же системное сообщение.";
-      showDesktopNotification("AMNYAM · уведомления включены","Отлично! Системные уведомления готовы сообщать о достижении твоих цен-целей.");
-    } else if(permission === "denied"){
+    if(permission==="granted"){
+      $("notificationHint").textContent="Разрешение включено. Это локальное тестовое уведомление; для доставки после закрытия вкладки отдельно подключи push.";
+      showDesktopNotification("AMNYAM · уведомления включены","Локальное уведомление работает. Подключи push ниже, чтобы получать сообщения при закрытой вкладке.");
+    }else if(permission==="denied"){
       $("notificationHint").textContent="Разрешение запрещено. Нажми значок настроек сайта слева от адреса страницы и включи уведомления вручную.";
-    } else {
+    }else{
       $("notificationHint").textContent="Разрешение не получено. Пока будут работать только сигналы внутри приложения.";
     }
   });
+  $("enablePushNotifications").addEventListener("click",async()=>{
+    if(!("Notification" in window)){
+      pushState.error="Браузер не поддерживает системные уведомления.";
+      updatePushControls();return;
+    }
+    if(!window.isSecureContext){
+      pushState.error="Push доступен только по HTTPS.";
+      updatePushControls();return;
+    }
+    if(window.top!==window.self){
+      try{
+        window.open(location.href,"_blank","noopener,noreferrer");
+        pushState.error="AMNYAM открылся в отдельной вкладке. Переключись в неё и повтори подключение push — в iframe браузер может блокировать разрешения и фоновую работу.";
+      }catch(_){
+        pushState.error="Открой AMNYAM отдельной вкладкой HTTPS, затем повтори подключение push.";
+      }
+      updatePushControls();
+      return;
+    }
+    let permission=Notification.permission;
+    if(permission==="default"){
+      try{permission=await Notification.requestPermission();}catch(_){permission=Notification.permission;}
+    }
+    updateNotificationButton();
+    if(permission!=="granted"){
+      pushState.error=permission==="denied"
+        ?"Разрешение запрещено. Включи уведомления в настройках сайта рядом с адресной строкой."
+        :"Браузер не выдал разрешение на уведомления.";
+      updatePushControls();return;
+    }
+    try{
+      $("enablePushNotifications").disabled=true;
+      pushState.error="";
+      updatePushControls();
+      await connectPushNotifications();
+      showDesktopNotification("AMNYAM · push подключён","Серверная подписка создана. Теперь проверь доставку push.");
+      $("pushStatus").textContent="Подписка сохранена. Нажми «Проверить push», затем закрой вкладку для проверки фоновой доставки.";
+      $("pushStatus").dataset.state="ok";
+    }catch(error){
+      pushState.error=error.message||"Не удалось подключить push.";
+      updatePushControls();
+    }
+  });
+  $("testPushNotifications").addEventListener("click",async()=>{
+    try{
+      $("testPushNotifications").disabled=true;
+      $("pushStatus").textContent="Отправляем тестовый push с Cloudflare…";
+      const sent=await testServerPush();
+      $("pushStatus").textContent="Cloudflare отправил тестовый push на "+sent+" устройство(а). Проверь системный центр уведомлений.";
+      $("pushStatus").dataset.state="ok";
+    }catch(error){
+      pushState.error=error.message||"Тестовый push не доставлен.";
+      updatePushControls();
+    }finally{await refreshPushStatus();}
+  });
+  $("disablePushNotifications").addEventListener("click",async()=>{
+    try{
+      $("disablePushNotifications").disabled=true;
+      await disableServerPush();
+      $("pushStatus").textContent="Push отключён для этого браузера.";
+      $("pushStatus").dataset.state="muted";
+    }catch(error){
+      pushState.error=error.message||"Не удалось отключить push.";
+      updatePushControls();
+    }
+  });
+  $("ownerPresenceToggle").addEventListener("click",()=>setOwnerPresence(!presenceState.available));
   $("closeWatchAlert").addEventListener("click",()=>$("watchAlert").classList.add("hide"));
   $("compareSelected").addEventListener("click",openComparison);$("compareClose").addEventListener("click",()=>$("compareDialog").close());
   $("compareDialog").addEventListener("click",e=>{if(e.target===$("compareDialog"))$("compareDialog").close();});

@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://huevo.su; style-src 'self'; img-src 'self' https://huevo.su https://huevo.departament.site data:; connect-src 'self' https://huevo.su https://*.huevo.su; base-uri 'none'; form-action 'none'">
 <title>AMNYAM MODE — Huevo Gift Intelligence</title>
-<link rel="stylesheet" href="./styles.css?v=amnyam-huevo-auth-v12">
+<link rel="stylesheet" href="./styles.css?v=amnyam-server-push-v16">
 </head>
 <body>
 <a class="skip" href="#catalog">К каталогу</a>
@@ -52,6 +52,25 @@
   <dl class="freshness" id="freshness"><div><dt>Последний успешный сбор</dt><dd id="lastOk">—</dd></div><div><dt>Последняя попытка</dt><dd id="lastTry">—</dd></div></dl>
 </section>
 
+<section class="contact-strip" id="contactPanel" aria-labelledby="contactTitle">
+  <div class="contact-copy">
+    <span class="section-index">/ DIRECT CONTACT</span>
+    <h2 id="contactTitle">По всем вопросам</h2>
+    <p>Есть вопрос, идея или заметил ошибку? Напиши мне напрямую в личные сообщения huEVO.</p>
+  </div>
+  <div class="contact-actions">
+    <div class="presence-view" id="ownerPresenceView" role="status" aria-live="polite">
+      <span class="presence-dot" id="ownerPresenceDot" aria-hidden="true"></span>
+      <span id="ownerPresenceText">Проверяем статус…</span>
+    </div>
+    <button class="presence-switch" id="ownerPresenceToggle" type="button" role="switch" aria-checked="false" hidden>
+      <span class="presence-switch-track" aria-hidden="true"><i></i></span>
+      <span id="ownerPresenceToggleText">Не на месте</span>
+    </button>
+    <a class="btn contact-message-btn" href="https://huevo.su/messages/monkeyzxcw" target="_blank" rel="noopener noreferrer">Написать в личку ↗</a>
+  </div>
+</section>
+
 
 <section class="command-center" data-view-section="overview" aria-labelledby="commandCenterTitle">
   <div class="cc-heading"><div><div class="eyebrow">MARKET CONTROL / 01</div><h2 id="commandCenterTitle">Панель рынка</h2><p>Коротко о рынке, сигналах и твоих целях — без ручного поиска по разделам.</p></div><button class="cc-command-trigger" id="openCommandPalette" type="button"><span>⌘</span> Команды <kbd>Ctrl K</kbd></button></div>
@@ -62,7 +81,7 @@
     <article class="cc-metric"><span>МОЙ МОНИТОРИНГ</span><strong id="pulseWatchlist">—</strong><small id="pulseWatchlistNote">избранное и целевые цены</small><i class="cc-metric-icon">◎</i></article>
   </div>
   <div class="cc-lower">
-    <article class="cc-opportunity"><div class="cc-label"><span class="cc-live-dot"></span> ЛУЧШИЙ СИГНАЛ СЕЙЧАС</div><div class="cc-opportunity-main"><div><h3 id="pulseBestTitle">Ищем выгодные предложения…</h3><p id="pulseBestNote">Сигнал появится, когда будут найдены сопоставимые лоты.</p></div><strong id="pulseBestDiscount">—</strong></div><div class="cc-opportunity-actions"><button class="btn" type="button" data-go-view="deals">Открыть сделки <span>↗</span></button><button class="btn secondary" type="button" data-go-view="analytics">Аналитика рынка</button></div></article>
+    <article class="cc-opportunity"><div class="cc-label"><span class="cc-live-dot"></span> ЛУЧШИЙ НАДЁЖНЫЙ СИГНАЛ</div><div class="cc-opportunity-main"><div><h3 id="pulseBestTitle">Ищем выгодные предложения…</h3><p id="pulseBestNote">Сигнал появится, когда будут найдены сопоставимые лоты.</p></div><strong id="pulseBestDiscount">—</strong></div><div class="cc-opportunity-actions"><button class="btn" type="button" data-go-view="deals">Открыть сделки <span>↗</span></button><button class="btn secondary" type="button" data-go-view="analytics">Аналитика рынка</button></div></article>
     <article class="cc-quick"><div class="cc-quick-title"><span>БЫСТРЫЕ ДЕЙСТВИЯ</span><small>SHORTCUTS</small></div><button type="button" data-command="search"><span class="cc-quick-icon">⌕</span><span><b>Найти подарок</b><small>По названию, ID или цене</small></span><kbd>/</kbd></button><button type="button" data-go-view="favorites"><span class="cc-quick-icon">☆</span><span><b>Мой мониторинг</b><small>Избранное и целевые цены</small></span><span class="cc-arrow">↗</span></button><button type="button" data-go-view="cheap"><span class="cc-quick-icon">↘</span><span><b>Самые дешёвые</b><small>Сортировка по цене</small></span><span class="cc-arrow">↗</span></button></article>
   </div>
 </section>
@@ -89,7 +108,7 @@
 
 <section class="panel overview-pick" id="overviewPick" data-view-section="overview">
   <div class="pick-stamp" aria-hidden="true">AM<br>NYAM</div>
-  <div class="pick-copy"><span class="section-index">/ CURRENT BEST PICK</span><h2>Лот дня <span>ниже ориентира</span></h2><p id="overviewPickHint">Ищем лучший лот относительно похожих предложений…</p></div>
+  <div class="pick-copy"><span class="section-index">/ BEST RELIABLE DISCOUNT</span><h2>Лучший надёжный <span>дисконт</span></h2><p id="overviewPickHint">Сравниваем дисконт с аналогами и отдельно отмечаем подозрительно экстремальные цены.</p></div>
   <div id="overviewPickLot" class="pick-lot"><span class="muted">Рынок загружается</span></div>
   <button class="btn secondary" type="button" data-go-view="deals">Все предложения ↗</button>
 </section>
@@ -135,7 +154,7 @@
   <article class="deal-hero" id="belowBest">
     <div class="deal-hero-stamp">AMNYAM<br>SELECT</div>
     <div class="deal-hero-art" id="belowBestArt"><img id="belowBestImage" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer"><span aria-hidden="true">🎁</span></div>
-    <div class="deal-hero-content"><span class="eyebrow">BEST CURRENT PICK</span><h3 id="belowBestTitle">Сканируем каталог…</h3><strong id="belowBestPrice">—</strong><p id="belowBestMeta">Сравнение появится после загрузки рынка.</p><a id="belowBestOpen" class="btn" href="https://huevo.su/market/gifts" target="_blank" rel="noopener noreferrer">Открыть лот ↗</a>
+    <div class="deal-hero-content"><span class="eyebrow">BEST DISCOUNT VS COMPARABLES</span><h3 id="belowBestTitle">Сканируем каталог…</h3><strong id="belowBestPrice">—</strong><p id="belowBestMeta">Сравнение появится после загрузки рынка.</p><a id="belowBestOpen" class="btn" href="https://huevo.su/market/gifts" target="_blank" rel="noopener noreferrer">Открыть лот ↗</a>
       <div class="best-target-tools"><label class="f"><span>Желаемая цена</span><input class="input target-input" id="belowBestTarget" type="number" min="1" max="1000000000000000" step="1" inputmode="numeric" placeholder="Цена-цель"></label><button class="btn secondary" id="saveBelowBestTarget" type="button">Уведомить на этой цене</button><button class="btn secondary" id="belowBestMinus10" type="button">Цель −10%</button></div>
     </div>
   </article>
@@ -150,10 +169,19 @@
 </section>
 
 <section class="panel" id="favoritesPanel" data-view-section="favorites">
-  <div class="section-heading"><div><span class="section-index">/ PERSONAL WATCHLIST</span><h2>Избранное</h2><p>Задай целевую цену у любого лота. Цели и сохранённые наборы фильтров хранятся только в этом браузере.</p></div>
+  <div class="section-heading"><div><span class="section-index">/ PERSONAL WATCHLIST</span><h2>Избранное</h2><p>Задай целевую цену у любого лота. В профиле huEVO цели синхронизируются с аккаунтом; без входа они остаются локальными.</p></div>
     <div class="watch-header-actions"><span class="view-stat" id="favoritesCount">0 лотов</span><button class="btn secondary" id="enableNotifications" type="button">Включить уведомления</button></div>
   </div>
-  <p class="watch-help" id="notificationHint">Разреши системные уведомления браузера. Сайт должен оставаться открытым в запущенном браузере, чтобы проверять цены и показывать сигналы на рабочем столе.</p>
+  <p class="watch-help" id="notificationHint">Обычные уведомления работают только пока открыта страница. Для оповещений после закрытия вкладки подключи серверный push в аккаунте huEVO ниже.</p>
+  <div class="push-controls" aria-label="Серверные push-уведомления">
+    <div class="push-status" id="pushStatus" role="status" aria-live="polite">Проверяем подключение push…</div>
+    <div class="push-actions">
+      <button class="btn" id="enablePushNotifications" type="button">Подключить push на рабочий стол</button>
+      <button class="btn secondary" id="testPushNotifications" type="button" disabled>Проверить push</button>
+      <button class="btn secondary" id="disablePushNotifications" type="button" disabled>Отключить push</button>
+    </div>
+    <small>Push привязан к профилю huEVO и этому браузеру. HuevoDualScan должен продолжать передавать свежие цены независимо от открытой вкладки AMNYAM.</small>
+  </div>
   <div class="alert-sound-controls" aria-label="Звуковые сигналы">
     <button class="btn secondary" id="toggleAlertSound" type="button" aria-pressed="false">Звук: выключен</button>
     <button class="btn secondary" id="testAlertSound" type="button">Проверить звук</button>
@@ -165,7 +193,7 @@
 <section class="panel help-panel" id="helpPanel" data-view-section="help" aria-labelledby="helpTitle">
   <div class="section-heading">
     <div><span class="section-index">/ AMNYAM FIELD MANUAL</span><h2 id="helpTitle">Инструкция по AMNYAM MODE</h2>
-      <p>Краткий справочник по разделам, поиску, мониторингу цен и уведомлениям. Его можно открыть в любой момент, не покидая приложение.</p>
+      <p>Подробный справочник по разделам, мониторингу, push-уведомлениям и проверке типичных проблем.</p>
     </div>
     <span class="view-stat">USER GUIDE · 01</span>
   </div>
@@ -177,7 +205,7 @@
     <article class="help-card">
       <span class="help-number">01 / ОБЗОР</span><h3>База</h3>
       <p>Главная панель показывает состояние рынка и ключевые показатели: количество активных лотов, медианную цену, найденные предложения ниже рынка и твой список мониторинга.</p>
-      <ul><li><b>Лот дня</b> — выбранное предложение с привлекательным соотношением цены и рынка.</li><li><b>3 лота дня</b> — короткая подборка разных рыночных возможностей.</li><li>Графики показывают распределение цен и категории подарков.</li></ul>
+      <ul><li><b>Лучший лот</b> — самое убедительное предложение без экстремального дисконта более 80%. Самый дешёвый активный лот показывается отдельно и не обязательно является самой выгодной покупкой.</li><li><b>3 лота дня</b> — короткая подборка разных рыночных возможностей.</li><li>Графики показывают распределение цен и категории подарков.</li></ul>
     </article>
     <article class="help-card">
       <span class="help-number">02 / ПОИСК</span><h3>Маркет</h3>
@@ -186,23 +214,29 @@
     </article>
     <article class="help-card">
       <span class="help-number">03 / ВЫГОДА</span><h3>Ниже рынка и дешёвые</h3>
-      <p>«Ниже рынка» ищет предложения дешевле устойчивого ориентира сопоставимых лотов или подтверждённых продаж. «Дешёвые» просто сортирует объявления от меньшей цены к большей.</p>
+      <p>«Ниже рынка» ищет предложения дешевле устойчивого ориентира сопоставимых лотов или подтверждённых продаж. Верхний сигнал выбирается среди кандидатов без экстремального дисконта более 80%; такие цены помечаются как подозрительные. «Дешёвые» показывает абсолютный минимум независимо от скидки.</p>
       <p class="help-note">Дисконт — ориентир для анализа, а не гарантия прибыли. Проверяй серию, редкость и конкретный лот перед покупкой.</p>
     </article>
     <article class="help-card">
       <span class="help-number">04 / КАРТОЧКА</span><h3>Характеристики и экземпляр</h3>
       <p>В подробностях подарка блок «Характеристики» описывает модель, фон, символ и другие свойства, которые удалось получить из карточки Huevo.</p>
-      <p>Блок «Экземпляр и тираж» относится к конкретной единице: номер, общий тираж, цена выпуска, автор, коллекция, текущий владелец и доступная история передач/продаж.</p>
-      <p class="help-note">Пустое поле означает, что источник не передал это значение. AMNYAM не придумывает характеристики и суммы сделок.</p>
+      <p>Блок «Экземпляр и тираж» объединяет два отдельных источника: конкретный экземпляр читается со страницы /gift/{id} (номер, владелец, история), а тираж, цена выпуска, автор и коллекция — со страницы подарка /gifts/{id}. ID подарка берётся только из связанной ссылки на странице экземпляра, после чего заголовок /gifts сверяется с названием экземпляра.</p>
+      <p class="help-note">Если ссылка на /gifts/{id} неоднозначна или название страницы не совпадает, данные тиража не прикрепляются. Пустое поле означает, что источник не передал подтверждённое значение. AMNYAM не угадывает ID по названию, номеру или ID лота.</p>
     </article>
     <article class="help-card">
       <span class="help-number">05 / МОНИТОРИНГ</span><h3>Избранное и цена-цель</h3>
-      <ul><li>Нажми ☆ у лота, чтобы добавить его в «Избранное».</li><li>Укажи целую цену, при которой хочешь получить сигнал.</li><li>Когда цена станет равна цели или ниже, приложение покажет уведомление, воспроизведёт фирменный звук и, при разрешении, отправит системное уведомление.</li><li>Если цена снова поднимется выше цели, условие сбросится и сможет сработать повторно при следующем снижении.</li></ul>
+      <ul><li>Нажми ☆ у лота, чтобы добавить его в «Избранное».</li><li>Укажи целую цену, при которой хочешь получить сигнал.</li><li>Когда цена станет равна цели или ниже, AMNYAM покажет сигнал. При подключённом серверном push сообщение придёт и после закрытия вкладки; локальный звук работает только в открытой странице.</li><li>Если цена снова поднимется выше цели, условие сбросится и сможет сработать повторно при следующем снижении.</li></ul>
     </article>
     <article class="help-card">
-      <span class="help-number">06 / СИГНАЛЫ</span><h3>Звук и уведомления рабочего стола</h3>
-      <ol><li>В «Избранном» включи звук и нажми «Проверить звук».</li><li>Нажми «Разрешить уведомления» и подтверди запрос браузера.</li><li>Проверь тестовое системное уведомление AMNYAM. Если разрешение уже выдано, кнопка запускает повторный тест.</li></ol>
-      <p class="help-note">Для проверки цен в фоне оставь браузер запущенным и не закрывай вкладку AMNYAM. В фоне опрос выполняется реже. Когда браузер полностью закрыт, обычные браузерные уведомления не работают — для этого нужна отдельная серверная push-инфраструктура.</p>
+      <span class="help-number">06 / СИГНАЛЫ</span><h3>Звук и push на рабочий стол</h3>
+      <ol>
+        <li>Открой AMNYAM из huEVO и дождись, пока вверху появится подключённый профиль. Push привязан к аккаунту huEVO — одного локального профиля недостаточно.</li>
+        <li>В «Избранном» нажми «Подключить push на рабочий стол» и подтверди разрешение Chrome/Edge. Это создаст подписку браузера и сохранит её на сервере.</li>
+        <li>Убедись, что статус показывает «Серверный push подключён» и число устройств больше нуля.</li>
+        <li>Нажми «Проверить push». Тест должен прийти как системная карточка уведомления от AMNYAM.</li>
+        <li>После успешного теста вкладку приложения можно закрыть. Браузер и системные уведомления должны оставаться разрешёнными.</li>
+      </ol>
+      <p class="help-note">Звук AMNYAM воспроизводится только открытой страницей. Push отправляется Cloudflare Worker независимо от вкладки, когда сборщик присылает новые цены. HuevoDualScan должен продолжать работать и оставаться авторизованным в обоих окнах Chrome. Полное завершение браузера, выключение компьютера, сон системы или режим «Не беспокоить» могут задержать либо скрыть доставку.</p>
     </article>
     <article class="help-card">
       <span class="help-number">07 / АНАЛИТИКА</span><h3>Данные</h3>
@@ -213,6 +247,17 @@
       <span class="help-number">08 / ПРОФИЛЬ</span><h3>Аккаунт и внешний вид</h3>
       <p>При запуске AMNYAM из huEVO избранное, цели и настройки связываются с подтверждённым профилем huEVO. При обычном открытии в браузере персональные настройки хранятся локально в этом браузере.</p>
       <p>Во вкладке «Внешний вид» можно менять фон, маскота, анимации и стеклянные карточки. Эти эффекты не должны мешать работе с каталогом.</p>
+    </article>
+    <article class="help-card">
+      <span class="help-number">10 / ДИАГНОСТИКА</span><h3>Почему push не пришёл</h3>
+      <ul>
+        <li><b>«Сначала войди через huEVO»</b> — открой приложение из huEVO и проверь имя профиля в верхней панели. Анонимные локальные цели серверу недоступны.</li>
+        <li><b>«Разрешение запрещено»</b> — нажми значок слева от адреса сайта → Настройки сайта → Уведомления → Разрешить. После изменения обнови страницу.</li>
+        <li><b>Тест отправлен, но карточки нет</b> — проверь уведомления Windows: Параметры → Система → Уведомления → включить уведомления и Google Chrome/ Microsoft Edge. Отключи «Не беспокоить» и проверь фокус/концентрацию.</li>
+        <li><b>Тест приходит, а цена-цель — нет</b> — проверь, что цель сохранена в Избранном, сборщик работает, а лот снова попадает в актуальные данные. Первая страница обновляется примерно каждые 3 секунды, полный обход — примерно каждые 5 минут.</li>
+        <li><b>Push не активируется внутри окна huEVO</b> — браузер может ограничивать разрешения в стороннем iframe. Открой AMNYAM отдельной вкладкой из подписанного запуска huEVO и повтори подключение.</li>
+      </ul>
+      <p class="help-note">Закрытие только вкладки AMNYAM не должно останавливать push. Полный выход из браузера, выключенный компьютер, режим энергосбережения или системный режим «Не беспокоить» могут задержать или скрыть уведомление. Если остановлен HuevoDualScan, серверу неоткуда узнать, что цена изменилась.</p>
     </article>
     <article class="help-card">
       <span class="help-number">09 / ОБНОВЛЕНИЯ</span><h3>Откуда берутся данные</h3>
@@ -356,6 +401,6 @@
 </main>
 <div id="ambientLayer" aria-hidden="true"></div><div id="cursorGlow" aria-hidden="true"></div>
 <div class="premium-splash" id="premiumSplash" aria-hidden="true"><div class="splash-mark">H<span>•</span></div><div class="splash-title">AMNYAM <b>MODE</b></div><div class="splash-subtitle">GIFT MARKET INTELLIGENCE</div><div class="splash-loader"><i></i></div></div>
-<script src="./app.js?v=amnyam-desktop-alerts-v15" defer></script>
+<script src="./app.js?v=amnyam-server-push-v16" defer></script>
 </body>
 </html>
