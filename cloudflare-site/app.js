@@ -1116,6 +1116,52 @@
     }
   }
 
+  // ---------- command center / market pulse ----------
+  function renderCommandCenter() {
+    const st = stats();
+    const deals = buildDealSignals();
+    const best = deals[0] || null;
+    const setText = (id, value) => { const el = $(id); if (el) el.textContent = value; };
+    setText("pulseLots", fmt(st.total));
+    setText("pulseMedian", price(st.median));
+    setText("pulseDeals", fmt(deals.length));
+    setText("pulseWatchlist", fmt(state.favorites.length));
+    setText("pulseWatchlistNote", fmt(Object.keys(state.targets).length) + " целевых цен · " + fmt(state.favorites.length) + " в избранном");
+    setText("pulseBestTitle", best ? (best.title || ("Лот #" + best.lot_id)) : "Пока нет подтверждённой сделки");
+    setText("pulseBestNote", best ? ("Лот #" + best.lot_id + " · " + price(best.price) + " вместо медианы " + price(best.reference_price) + " · " + fmt(best.sample_size) + " аналогов") : "Нужно минимум 3 сопоставимых лота и цена минимум на 15% ниже медианы.");
+    setText("pulseBestDiscount", best ? "−" + fmt(best.discount_pct) + "%" : "—");
+  }
+
+  function openCommandPalette() {
+    const dialog = $("commandPalette");
+    if (!dialog) return;
+    if (!dialog.open) dialog.showModal();
+    $("commandPaletteInput").value = "";
+    filterCommandPalette("");
+    window.setTimeout(() => $("commandPaletteInput").focus(), 0);
+  }
+  function closeCommandPalette() {
+    const dialog = $("commandPalette");
+    if (dialog && dialog.open) dialog.close();
+  }
+  function filterCommandPalette(query) {
+    const q = String(query || "").trim().toLocaleLowerCase("ru");
+    document.querySelectorAll("[data-command-item]").forEach(button => {
+      button.hidden = !!q && !button.textContent.toLocaleLowerCase("ru").includes(q);
+    });
+  }
+  function runCommand(button) {
+    if (!button) return;
+    const view = button.dataset.commandView;
+    const command = button.dataset.command;
+    closeCommandPalette();
+    if (view) switchView(view, true);
+    if (command === "search") {
+      switchView("market", true);
+      $("search").focus({ preventScroll: true });
+    }
+  }
+
   // ---------- main render ----------
   function render() {
     renderState();
@@ -1132,6 +1178,7 @@
     }
     show("content");
     checkTargetAlerts();
+    renderCommandCenter();
     renderDeals();renderDayPicks();renderCheapest();renderFavorites();
     renderCards(); renderCharts(); renderChanges(); renderTop(); renderSales(); fillFacets();
     renderSavedFilters();setSortMenuOptions();applyFilters();
@@ -1176,6 +1223,35 @@
   // ---------- events ----------
   initAppearance();
   initAmbience();
+  const paletteOpen = $("openCommandPalette");
+  if (paletteOpen) paletteOpen.addEventListener("click", openCommandPalette);
+  $("commandPaletteInput").addEventListener("input", event => filterCommandPalette(event.target.value));
+  $("commandPaletteItems").addEventListener("click", event => {
+    const button = event.target.closest("[data-command-item]");
+    if (button && !button.hidden) runCommand(button);
+  });
+  $("commandPalette").addEventListener("click", event => { if (event.target === $("commandPalette")) closeCommandPalette(); });
+  document.querySelectorAll("[data-command]").forEach(button => button.addEventListener("click", () => runCommand(button)));
+  document.addEventListener("keydown", event => {
+    const typing = event.target && (event.target.matches("input,textarea,select") || event.target.isContentEditable);
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+      event.preventDefault(); openCommandPalette(); return;
+    }
+    if (!typing && !event.altKey && !event.ctrlKey && !event.metaKey && event.key === "/") {
+      event.preventDefault(); switchView("market", true); $("search").focus({ preventScroll: true }); return;
+    }
+    if (!typing && !event.altKey && !event.ctrlKey && !event.metaKey && event.key.toLowerCase() === "g") {
+      window.__amnyamGoPending = Date.now();
+      window.setTimeout(() => { if (Date.now() - window.__amnyamGoPending >= 700) window.__amnyamGoPending = 0; }, 750);
+      return;
+    }
+    if (!typing && window.__amnyamGoPending && Date.now() - window.__amnyamGoPending < 750) {
+      const key = event.key.toLowerCase();
+      const views = { h: "overview", m: "market", d: "deals", c: "cheap", a: "analytics", f: "favorites" };
+      if (views[key]) { event.preventDefault(); switchView(views[key], true); }
+      window.__amnyamGoPending = 0;
+    }
+  });
   document.querySelectorAll("#mainNav [data-view]").forEach(button=>button.addEventListener("click",()=>switchView(button.dataset.view,true)));
   document.querySelectorAll("[data-go-view]").forEach(button=>button.addEventListener("click",()=>switchView(button.dataset.goView,true)));
   $("globalSearch").addEventListener("keydown",event=>{if(event.key!=="Enter")return;event.preventDefault();$("search").value=$("globalSearch").value.trim();state.page=0;switchView("market",true);applyFilters();});
