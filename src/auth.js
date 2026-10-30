@@ -366,6 +366,19 @@ export async function authenticateHuevoLaunch(request, env, jsonResponse) {
   }
 }
 
+export async function isHuevoOwner(request, env) {
+  try {
+    const row = await authenticatedUser(request, env);
+    return Boolean(
+      row &&
+      String(row.hu_user_id) === "14188" &&
+      String(row.hu_username || "").trim().toLocaleLowerCase("en") === "monkeyzxcw"
+    );
+  } catch (_) {
+    return false;
+  }
+}
+
 export async function authenticatedUserId(request, env) {
   try {
     const row = await authenticatedUser(request, env);
