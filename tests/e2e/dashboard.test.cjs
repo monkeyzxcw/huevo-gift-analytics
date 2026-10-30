@@ -241,6 +241,16 @@ test("gift instance metadata and history feed render in the detail and catalog c
       pattern: { value: "Звёздный узор" }
     }
   };
+  data.lots[3].gift_catalog = {
+    catalog_id: "131", gift_catalog_id: "131",
+    gift_catalog_url: "https://huevo.su/gifts/131",
+    title: "Адидас-Тян Зеленая", supply: 222, issued: 220,
+    drop_price: 7777, drop_price_text: "7777 монэток",
+    edition_sold_out: false, rarity: "Лимитированный",
+    author: "Дизайнер каталога", collection: "Каталог Адидас",
+    attributes: { model: "Green Adidas" }, checked_at: NOW,
+    source: "huevo_gift_catalog_page"
+  };
   data.lots[3].gift_instance = {
     gift_id: "18336", gift_url: "https://huevo.su/gift/18336",
     title: "Адидас-Тян Зеленая", serial: 4, supply: 111,
@@ -278,13 +288,13 @@ test("gift instance metadata and history feed render in the detail and catalog c
   await page.click("#rows button");
   const detail = await page.textContent("#dBody");
   assert.match(detail, /№ 4/);
-  assert.match(detail, /111/);
+  assert.match(detail, /Полный тираж/);\n  assert.match(detail, /222/);\n  assert.doesNotMatch(detail, /Полный тираж\\s*111/);
   assert.match(detail, /Лунная модель/);
   assert.match(detail, /Синий космос/);
   assert.match(detail, /Комета/);
   assert.match(detail, /Звёздный узор/);
   assert.ok(detail.replace(/\s/g, "").includes("5555"), "grouped drop price must still be checked");
-  assert.match(detail, /Продан в Маркете/);
+  assert.match(detail, /Продан в Маркете/);\n  assert.equal(await page.locator("#dBody a").filter({ hasText: "Открыть страницу подарка и тираж" }).getAttribute("href"), "https://huevo.su/gifts/131");\n  assert.equal(await page.locator("#dBody a").filter({ hasText: "Открыть страницу конкретного экземпляра" }).getAttribute("href"), "https://huevo.su/gift/18336");
   assert.match(detail, /teeth/);
   assert.match(detail, /не содержит сумму каждой сделки/);
   await page.keyboard.press("Escape");
