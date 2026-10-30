@@ -566,10 +566,68 @@ async function createSupportIntent(request, env) {
   if (!launch || !/^\d{1,20}$/.test(String(launch.hu_user_id || "")) || !Number.isSafeInteger(Number(launch.hu_user_id))) {
     return jsonResponse(request, env, { ok: false, detail: "Откройте AMNYAM MODE внутри huEVO: подпись запуска не подтверждена." }, 401);
   }
+  const huUserId = String(launch.hu_user_id);
   const test = launch.hu_mode !== "live";
-  const idempotencyKey = "amnyam-" + crypto.randomUUID().replace(/-/g, "");
+  const testFlag = test ? 1 : 0;
+
+  // A pending intent is authoritative even when the browser's localStorage was
+  // cleared or the request is repeated from another device. Reconcile it with
+  // huEVO first; if the provider cannot be reached, keep the existing intent
+  // instead of risking a second charge.
+  let pending;
+  try {
+    pending = await env.DB.prepare(
+      "SELECT intent_id, amount, test, status FROM support_payments " +
+      "WHERE user_id = ? AND test = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1"
+    ).bind(huUserId, testFlag).first();
+  } catch (_) {
+    return jsonResponse(request, env, { ok: false, detail: "Не удалось проверить существующий платёж. Повторную оплату пока не создавай." }, 503);
+  }
+  if (pending) {
+    const remote = await callHuevoApps(env, "GET", "/payments/" + encodeURIComponent(String(pending.intent_id)));
+    const remoteStatus = remote.body && String(remote.body.status || "");
+    if (remote.status === 200 && SUPPORT_FINAL_STATUSES.has(remoteStatus)) {
+      try {
+        await env.DB.prepare(
+          "UPDATE support_payments SET status = ?, error = ?, updated_at = ? WHERE intent_id = ? AND status = 'pending'"
+        ).bind(
+          remoteStatus,
+          String(remote.body.error && (remote.body.error.message || remote.body.error.code) || "").slice(0, 500),
+          new Date().toISOString(),
+          String(pending.intent_id)
+        ).run();
+      } catch (_) {
+        return jsonResponse(request, env, { ok: false, detail: "Не удалось обновить статус существующего платежа. Новый платёж не создан." }, 503);
+      }
+    } else {
+      return jsonResponse(request, env, {
+        ok: true,
+        reused: true,
+        status: "pending",
+        intent_id: String(pending.intent_id),
+        amount: Number(pending.amount),
+        test: Boolean(pending.test),
+      });
+    }
+  }
+
+  // Derive the provider idempotency key from the latest stored intent and a
+  // short time window. Concurrent requests from the same user therefore share
+  // one key; after a completed intent is recorded, a later intentional payment
+  // gets a new key.
+  let previousIntentId = "first";
+  try {
+    const previous = await env.DB.prepare(
+      "SELECT intent_id FROM support_payments WHERE user_id = ? AND test = ? ORDER BY created_at DESC LIMIT 1"
+    ).bind(huUserId, testFlag).first();
+    if (previous && previous.intent_id) previousIntentId = String(previous.intent_id);
+  } catch (_) {
+    return jsonResponse(request, env, { ok: false, detail: "Не удалось проверить историю платежей. Новый платёж не создан." }, 503);
+  }
+  const timeBucket = Math.floor(Date.now() / 60000);
+  const idempotencyKey = "amnyam-" + (await sha256Hex(huUserId + "|" + testFlag + "|" + previousIntentId + "|" + timeBucket)).slice(0, 32);
   const response = await callHuevoApps(env, "POST", "/payments", {
-    user_id: Number(launch.hu_user_id),
+    user_id: Number(huUserId),
     amount,
     description: "Поддержка автора AMNYAM MODE",
     idempotency_key: idempotencyKey,
@@ -583,7 +641,7 @@ async function createSupportIntent(request, env) {
   try {
     await env.DB.prepare(
       "INSERT OR IGNORE INTO support_payments (intent_id, user_id, amount, test, status, created_at, updated_at, error) VALUES (?, ?, ?, ?, 'pending', ?, ?, NULL)"
-    ).bind(String(response.body.intent_id), String(launch.hu_user_id), amount, test ? 1 : 0, now, now).run();
+    ).bind(String(response.body.intent_id), huUserId, amount, testFlag, now, now).run();
   } catch (_) {
     return jsonResponse(request, env, { ok: false, detail: "Не удалось записать состояние платежа. Обратитесь к автору." }, 503);
   }
