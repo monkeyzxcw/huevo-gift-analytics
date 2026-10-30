@@ -1,4 +1,4 @@
-import { authenticateHuevoLaunch, currentAccount, saveAccountProfile, purgeAuthRecords } from "./auth.js";
+import { authenticateHuevoLaunch, currentAccount, saveAccountProfile, purgeAuthRecords, authenticatedUserId } from "./auth.js";
 import { verifyHuevoLaunch } from "./huevo_launch.js";
 
 const HUEVO_HOSTS = new Set(["huevo.su", "huevo.departament.site"]);
@@ -168,7 +168,7 @@ async function getStorageHealth(env) {
   const supportSchemaReady = await ensureSupportSchema(env);
   try {
     const result = await env.DB.prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('full_snapshot','live_page_state','live_price_history','user_accounts','user_sessions','user_profiles','auth_rate_limits')"
+      "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('full_snapshot','live_page_state','live_price_history','user_accounts','user_sessions','user_profiles','auth_rate_limits','push_vapid_keys','push_subscriptions','push_alert_state')"
     ).all();
     const names = new Set((result.results || []).map((row) => row.name));
     return {
@@ -176,6 +176,7 @@ async function getStorageHealth(env) {
       schema_ready: names.has("full_snapshot") && names.has("live_page_state") && names.has("live_price_history"),
       support_schema_ready: supportSchemaReady,
       accounts_schema_ready: ["user_accounts", "user_sessions", "user_profiles", "auth_rate_limits"].every((name) => names.has(name)),
+      push_schema_ready: ["push_vapid_keys", "push_subscriptions", "push_alert_state"].every((name) => names.has(name)),
       ingest_enabled: Boolean(env.LIVE_INGEST_TOKEN),
     };
   } catch (_) {
@@ -218,7 +219,7 @@ async function sha256Hex(value) {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function ingestLivePage(request, env) {
+async function ingestLivePage(request, env, ctx) {
   if (!env.DB) return jsonResponse(request, env, { ok: false, error: "Cloudflare D1 is not bound yet" }, 503);
   if (!env.LIVE_INGEST_TOKEN) return jsonResponse(request, env, { ok: false, error: "LIVE_INGEST_TOKEN is not configured" }, 503);
   if (!hasIngestAuth(request, env)) return jsonResponse(request, env, { ok: false, error: "unauthorized" }, 401);
@@ -276,6 +277,7 @@ async function ingestLivePage(request, env) {
   } catch (_) {
     return jsonResponse(request, env, { ok: false, error: "could not write live state; check D1 migrations" }, 503);
   }
+  schedulePushEvaluation(env, items, ctx);
   return jsonResponse(request, env, {
     ok: true, accepted: items.length, fingerprint, observed_at: observedAt,
   }, 200);
@@ -443,7 +445,7 @@ async function liveStatus(request, env) {
   });
 }
 
-async function storeFullSnapshot(request, env) {
+async function storeFullSnapshot(request, env, ctx) {
   if (!env.DB) return jsonResponse(request, env, { ok: false, error: "Cloudflare D1 is not bound yet" }, 503);
   if (!env.LIVE_INGEST_TOKEN) return jsonResponse(request, env, { ok: false, error: "LIVE_INGEST_TOKEN is not configured" }, 503);
   if (!hasIngestAuth(request, env)) return jsonResponse(request, env, { ok: false, error: "unauthorized" }, 401);
@@ -463,10 +465,428 @@ async function storeFullSnapshot(request, env) {
   } catch (_) {
     return jsonResponse(request, env, { ok: false, error: "could not store snapshot; check D1 migrations" }, 503);
   }
+  schedulePushEvaluation(env, data.lots, ctx);
   return jsonResponse(request, env, {
     ok: true, stored_at: writtenAt, generated_at: data.generated_at, lots: data.lots.length,
     collector_status: data.collector && data.collector.status || "unknown",
   });
+}
+
+
+const PUSH_ALLOWED_HOSTS = new Set([
+  "fcm.googleapis.com",
+  "updates.push.services.mozilla.com",
+  "web.push.apple.com"
+]);
+const PUSH_DEFAULT_TTL = 60 * 60 * 24;
+
+function bytesToBase64Url(bytes) {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function base64UrlToBytes(value) {
+  const raw = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
+  const padded = raw + "=".repeat((4 - raw.length % 4) % 4);
+  return Uint8Array.from(atob(padded), (char) => char.charCodeAt(0));
+}
+
+function concatBytes(...chunks) {
+  const length = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const result = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return result;
+}
+
+function randomBytes(length) {
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
+  return bytes;
+}
+
+async function ensureVapidKeys(env) {
+  if (!env.DB) return null;
+  let row = await env.DB.prepare(
+    "SELECT public_key, private_jwk FROM push_vapid_keys WHERE id = 1"
+  ).first();
+  if (row && row.public_key && row.private_jwk) return row;
+
+  const pair = await crypto.subtle.generateKey(
+    { name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]
+  );
+  const publicJwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
+  const privateJwk = await crypto.subtle.exportKey("jwk", pair.privateKey);
+  const publicBytes = concatBytes(
+    new Uint8Array([4]),
+    base64UrlToBytes(publicJwk.x),
+    base64UrlToBytes(publicJwk.y)
+  );
+  const publicKey = bytesToBase64Url(publicBytes);
+  const privateKey = JSON.stringify({
+    kty: "EC", crv: "P-256", x: privateJwk.x, y: privateJwk.y,
+    d: privateJwk.d, ext: true, key_ops: ["sign"]
+  });
+  await env.DB.prepare(
+    "INSERT OR IGNORE INTO push_vapid_keys (id, public_key, private_jwk, created_at) VALUES (1, ?, ?, ?)"
+  ).bind(publicKey, privateKey, new Date().toISOString()).run();
+  row = await env.DB.prepare(
+    "SELECT public_key, private_jwk FROM push_vapid_keys WHERE id = 1"
+  ).first();
+  return row && row.public_key && row.private_jwk ? row : null;
+}
+
+function isSameOriginMutation(request) {
+  const origin = request.headers.get("Origin");
+  return Boolean(origin && origin === new URL(request.url).origin);
+}
+
+function validPushEndpoint(value) {
+  try {
+    const url = new URL(String(value || ""));
+    const host = url.hostname.toLowerCase();
+    const allowed = PUSH_ALLOWED_HOSTS.has(host) ||
+      host.endsWith(".fcm.googleapis.com") ||
+      host.endsWith(".push.services.mozilla.com") ||
+      host.endsWith(".notify.windows.com");
+    return url.protocol === "https:" && allowed && !url.username && !url.password && url.href.length <= 2048;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function hmacSha256(keyBytes, dataBytes) {
+  const key = await crypto.subtle.importKey(
+    "raw", keyBytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  return new Uint8Array(await crypto.subtle.sign("HMAC", key, dataBytes));
+}
+
+async function hkdfExpand(prk, info, length) {
+  const blocks = [];
+  let previous = new Uint8Array(0);
+  let generated = 0;
+  for (let counter = 1; generated < length; counter++) {
+    previous = await hmacSha256(prk, concatBytes(previous, info, new Uint8Array([counter])));
+    blocks.push(previous);
+    generated += previous.length;
+  }
+  return concatBytes(...blocks).slice(0, length);
+}
+
+function uint16be(value) {
+  return new Uint8Array([(value >>> 8) & 255, value & 255]);
+}
+
+function uint32be(value) {
+  return new Uint8Array([(value >>> 24) & 255, (value >>> 16) & 255, (value >>> 8) & 255, value & 255]);
+}
+
+async function vapidAuthorization(endpoint, keys) {
+  const audience = new URL(endpoint).origin;
+  const header = bytesToBase64Url(new TextEncoder().encode(JSON.stringify({ typ: "JWT", alg: "ES256" })));
+  const payload = bytesToBase64Url(new TextEncoder().encode(JSON.stringify({
+    aud: audience,
+    exp: Math.floor(Date.now() / 1000) + 12 * 60 * 60,
+    sub: "https://github.com/monkeyzxcw/huevo-gift-analytics"
+  })));
+  const unsigned = header + "." + payload;
+  const privateJwk = JSON.parse(keys.private_jwk);
+  const signingKey = await crypto.subtle.importKey(
+    "jwk", privateJwk, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]
+  );
+  const signature = new Uint8Array(await crypto.subtle.sign(
+    { name: "ECDSA", hash: "SHA-256" }, signingKey, new TextEncoder().encode(unsigned)
+  ));
+  return "vapid t=" + unsigned + "." + bytesToBase64Url(signature) + ", k=" + keys.public_key;
+}
+
+async function encryptPushPayload(subscription, payload) {
+  const uaPublic = base64UrlToBytes(subscription.p256dh);
+  const authSecret = base64UrlToBytes(subscription.auth_secret);
+  if (uaPublic.length !== 65 || authSecret.length !== 16 || uaPublic[0] !== 4) {
+    throw new Error("invalid push subscription key material");
+  }
+  const clientKey = await crypto.subtle.importKey(
+    "raw", uaPublic, { name: "ECDH", namedCurve: "P-256" }, false, []
+  );
+  const senderKeys = await crypto.subtle.generateKey(
+    { name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]
+  );
+  const asPublic = new Uint8Array(await crypto.subtle.exportKey("raw", senderKeys.publicKey));
+  const sharedSecret = new Uint8Array(await crypto.subtle.deriveBits(
+    { name: "ECDH", public: clientKey }, senderKeys.privateKey, 256
+  ));
+
+  const keyInfo = concatBytes(
+    new TextEncoder().encode("WebPush: info\0"), uaPublic, asPublic
+  );
+  const authPrk = await hmacSha256(authSecret, sharedSecret);
+  const inputKeyMaterial = await hkdfExpand(authPrk, keyInfo, 32);
+  const salt = randomBytes(16);
+  const prk = await hmacSha256(salt, inputKeyMaterial);
+  const context = concatBytes(
+    new TextEncoder().encode("P-256\0"),
+    uint16be(uaPublic.length), uaPublic,
+    uint16be(asPublic.length), asPublic
+  );
+  const cek = await hkdfExpand(
+    prk, concatBytes(new TextEncoder().encode("Content-Encoding: aes128gcm\0"), context), 16
+  );
+  const nonce = await hkdfExpand(
+    prk, concatBytes(new TextEncoder().encode("Content-Encoding: nonce\0"), context), 12
+  );
+  const aesKey = await crypto.subtle.importKey("raw", cek, { name: "AES-GCM" }, false, ["encrypt"]);
+  const plaintext = concatBytes(new TextEncoder().encode(JSON.stringify(payload)), new Uint8Array([2]));
+  const ciphertext = new Uint8Array(await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: nonce, tagLength: 128 }, aesKey, plaintext
+  ));
+  return concatBytes(salt, uint32be(4096), new Uint8Array([asPublic.length]), asPublic, ciphertext);
+}
+
+async function sendWebPush(env, keys, subscription, payload) {
+  const endpoint = subscription.endpoint;
+  if (!validPushEndpoint(endpoint)) return { ok: false, status: 400 };
+  try {
+    const body = await encryptPushPayload(subscription, payload);
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Authorization": await vapidAuthorization(endpoint, keys),
+        "Content-Type": "application/octet-stream",
+        "Content-Encoding": "aes128gcm",
+        "TTL": String(PUSH_DEFAULT_TTL),
+        "Urgency": "high"
+      },
+      body
+    });
+    if (response.status === 404 || response.status === 410) {
+      await env.DB.prepare("DELETE FROM push_subscriptions WHERE endpoint_hash = ?")
+        .bind(subscription.endpoint_hash).run().catch(() => undefined);
+    }
+    return { ok: response.status >= 200 && response.status < 300, status: response.status };
+  } catch (_) {
+    return { ok: false, status: 0 };
+  }
+}
+
+async function pushConfig(request, env) {
+  const keys = await ensureVapidKeys(env).catch(() => null);
+  return jsonResponse(request, env, {
+    enabled: Boolean(keys && keys.public_key),
+    public_key: keys ? keys.public_key : null
+  }, keys ? 200 : 503);
+}
+
+async function pushStatus(request, env) {
+  const userId = await authenticatedUserId(request, env);
+  if (!userId) {
+    return jsonResponse(request, env, { ok: true, authenticated: false, enabled: false, subscriptions: 0 });
+  }
+  try {
+    const row = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM push_subscriptions WHERE user_id = ?"
+    ).bind(userId).first();
+    return jsonResponse(request, env, {
+      ok: true, authenticated: true, enabled: true, subscriptions: Number(row && row.count) || 0
+    });
+  } catch (_) {
+    return jsonResponse(request, env, { ok: false, error: "push storage unavailable" }, 503);
+  }
+}
+
+async function savePushSubscription(request, env) {
+  if (!isSameOriginMutation(request)) return jsonResponse(request, env, { ok: false, error: "same-origin request required" }, 403);
+  const userId = await authenticatedUserId(request, env);
+  if (!userId) return jsonResponse(request, env, { ok: false, error: "Открой AMNYAM внутри huEVO и войди в профиль, чтобы подключить push." }, 401);
+  if (!(await ensureVapidKeys(env).catch(() => null))) {
+    return jsonResponse(request, env, { ok: false, error: "Web Push сейчас не настроен на сервере." }, 503);
+  }
+  const parsed = await readJsonBody(request, 12000);
+  if (parsed.error) return jsonResponse(request, env, { ok: false, error: parsed.error }, parsed.status);
+  const payload = parsed.value;
+  const endpoint = String(payload.endpoint || "");
+  const p256dh = String(payload.keys && payload.keys.p256dh || "");
+  const authSecret = String(payload.keys && payload.keys.auth || "");
+  if (!validPushEndpoint(endpoint)) return jsonResponse(request, env, { ok: false, error: "Неподдерживаемый push endpoint браузера." }, 400);
+  try {
+    if (base64UrlToBytes(p256dh).length !== 65 || base64UrlToBytes(authSecret).length !== 16) {
+      throw new Error("bad key lengths");
+    }
+  } catch (_) {
+    return jsonResponse(request, env, { ok: false, error: "Некорректные ключи push-подписки." }, 400);
+  }
+  const endpointHash = await sha256Hex(endpoint);
+  const now = new Date().toISOString();
+  try {
+    await env.DB.prepare(
+      "INSERT INTO push_subscriptions (endpoint_hash, user_id, endpoint, p256dh, auth_secret, created_at, updated_at) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(endpoint_hash) DO UPDATE SET " +
+      "user_id=excluded.user_id, endpoint=excluded.endpoint, p256dh=excluded.p256dh, " +
+      "auth_secret=excluded.auth_secret, updated_at=excluded.updated_at"
+    ).bind(endpointHash, userId, endpoint, p256dh, authSecret, now, now).run();
+    return jsonResponse(request, env, { ok: true, saved: true });
+  } catch (_) {
+    return jsonResponse(request, env, { ok: false, error: "Не удалось сохранить push-подписку в D1." }, 503);
+  }
+}
+
+async function pushTest(request, env) {
+  if (!isSameOriginMutation(request)) return jsonResponse(request, env, { ok: false, error: "same-origin request required" }, 403);
+  const userId = await authenticatedUserId(request, env);
+  if (!userId) return jsonResponse(request, env, { ok: false, error: "Требуется активный профиль huEVO." }, 401);
+  const keys = await ensureVapidKeys(env).catch(() => null);
+  if (!keys) return jsonResponse(request, env, { ok: false, error: "Ключ сервера push недоступен." }, 503);
+  let result;
+  try {
+    result = await env.DB.prepare(
+      "SELECT endpoint_hash, endpoint, p256dh, auth_secret FROM push_subscriptions WHERE user_id = ?"
+    ).bind(userId).all();
+  } catch (_) {
+    return jsonResponse(request, env, { ok: false, error: "Хранилище push-подписок не готово." }, 503);
+  }
+  const subscriptions = result.results || [];
+  if (!subscriptions.length) return jsonResponse(request, env, { ok: false, error: "Сначала подключи push на этом устройстве." }, 409);
+  const outcomes = await Promise.all(subscriptions.map((subscription) => sendWebPush(env, keys, subscription, {
+    title: "AMNYAM · тестовый push",
+    body: "Отлично! Серверное уведомление доставлено даже без открытой вкладки приложения.",
+    url: "/?view=favorites",
+    tag: "amnyam-push-test",
+    kind: "test",
+    sent_at: new Date().toISOString()
+  })));
+  const sent = outcomes.filter((item) => item.ok).length;
+  return jsonResponse(request, env, {
+    ok: sent > 0, sent, failed: outcomes.length - sent,
+    statuses: outcomes.map((item) => item.status)
+  }, sent > 0 ? 200 : 502);
+}
+
+async function removePushSubscriptions(request, env) {
+  if (!isSameOriginMutation(request)) return jsonResponse(request, env, { ok: false, error: "same-origin request required" }, 403);
+  const userId = await authenticatedUserId(request, env);
+  if (!userId) return jsonResponse(request, env, { ok: false, error: "Требуется активный профиль huEVO." }, 401);
+  try {
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM push_subscriptions WHERE user_id = ?").bind(userId),
+      env.DB.prepare("DELETE FROM push_alert_state WHERE user_id = ?").bind(userId)
+    ]);
+    return jsonResponse(request, env, { ok: true, removed: true });
+  } catch (_) {
+    return jsonResponse(request, env, { ok: false, error: "Не удалось отключить push." }, 503);
+  }
+}
+
+async function evaluatePushTargets(env, incomingLots) {
+  if (!env.DB || !Array.isArray(incomingLots) || !incomingLots.length) return;
+  let keys;
+  let rows;
+  let states;
+  try {
+    const count = await env.DB.prepare("SELECT COUNT(*) AS count FROM push_subscriptions").first();
+    if (!Number(count && count.count)) return;
+    keys = await ensureVapidKeys(env);
+    if (!keys) return;
+    rows = await env.DB.prepare(
+      "SELECT p.user_id, p.profile_json, s.endpoint_hash, s.endpoint, s.p256dh, s.auth_secret " +
+      "FROM user_profiles p JOIN push_subscriptions s ON s.user_id = p.user_id"
+    ).all();
+    states = await env.DB.prepare(
+      "SELECT user_id, lot_id, target_price FROM push_alert_state"
+    ).all();
+  } catch (_) {
+    return;
+  }
+  const lots = new Map();
+  for (const lot of incomingLots) {
+    if (!lot || lot.lot_id == null || lot.active === false) continue;
+    const id = String(lot.lot_id);
+    const price = lot.price == null ? null : Number(lot.price);
+    if (!/^\d{1,20}$/.test(id) || !Number.isFinite(price) || price < 0) continue;
+    lots.set(id, {
+      lot_id: id, title: String(lot.title || ("Лот #" + id)).slice(0, 180),
+      price, lot_url: "https://huevo.su/market/lot/" + encodeURIComponent(id)
+    });
+  }
+
+  const users = new Map();
+  for (const row of rows.results || []) {
+    let user = users.get(String(row.user_id));
+    if (!user) {
+      let profile = {};
+      try { profile = JSON.parse(row.profile_json || "{}"); } catch (_) {}
+      const targets = profile && profile.targets && typeof profile.targets === "object" && !Array.isArray(profile.targets)
+        ? profile.targets : {};
+      user = { targets, subscriptions: [], states: new Map() };
+      users.set(String(row.user_id), user);
+    }
+    user.subscriptions.push(row);
+  }
+  for (const row of states.results || []) {
+    const user = users.get(String(row.user_id));
+    if (user) user.states.set(String(row.lot_id), Number(row.target_price));
+  }
+
+  const tasks = [];
+  const now = new Date().toISOString();
+  for (const [userId, user] of users) {
+    const targetEntries = Object.entries(user.targets).filter(([id, value]) =>
+      /^\d{1,20}$/.test(id) && Number.isSafeInteger(value) && value > 0 && value <= 1e15
+    );
+    const targetIds = new Set(targetEntries.map(([id]) => id));
+    for (const oldId of user.states.keys()) {
+      if (!targetIds.has(oldId)) {
+        tasks.push(env.DB.prepare("DELETE FROM push_alert_state WHERE user_id = ? AND lot_id = ?").bind(userId, oldId).run());
+        user.states.delete(oldId);
+      }
+    }
+    for (const [lotId, target] of targetEntries) {
+      const lot = lots.get(lotId);
+      if (!lot) continue;
+      const oldTarget = user.states.get(lotId);
+      if (lot.price > target) {
+        if (oldTarget != null) {
+          tasks.push(env.DB.prepare("DELETE FROM push_alert_state WHERE user_id = ? AND lot_id = ?").bind(userId, lotId).run());
+          user.states.delete(lotId);
+        }
+        continue;
+      }
+      // SQLite's conditional UPSERT is an atomic one-shot claim: concurrent live
+      // and full-snapshot ingests cannot send duplicate alerts for the same target.
+      const claim = await env.DB.prepare(
+        "INSERT INTO push_alert_state (user_id, lot_id, target_price, alerted_at) VALUES (?, ?, ?, ?) " +
+        "ON CONFLICT(user_id, lot_id) DO UPDATE SET target_price=excluded.target_price, alerted_at=excluded.alerted_at " +
+        "WHERE push_alert_state.target_price != excluded.target_price RETURNING lot_id"
+      ).bind(userId, lotId, target, now).first().catch(() => null);
+      if (!claim) continue;
+      const payload = {
+        title: "AMNYAM · достигнута цена-цель",
+        body: lot.title + ": " + lot.price.toLocaleString("ru-RU") +
+          " монэток (цель " + target.toLocaleString("ru-RU") + ").",
+        url: lot.lot_url,
+        tag: "amnyam-target-" + lotId,
+        kind: "target",
+        lot_id: lotId,
+        price: lot.price,
+        target_price: target,
+        sent_at: now
+      };
+      for (const subscription of user.subscriptions) {
+        tasks.push(sendWebPush(env, keys, subscription, payload));
+      }
+    }
+  }
+  if (tasks.length) await Promise.allSettled(tasks);
+}
+
+function schedulePushEvaluation(env, lots, ctx) {
+  const task = evaluatePushTargets(env, lots).catch(() => undefined);
+  if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(task);
+  else return task;
 }
 
 const SUPPORT_AMOUNTS = [5000, 10000, 25000, 50000, 100000];
@@ -741,6 +1161,11 @@ async function fetchHandler(request, env, ctx) {
   if (request.method === "GET" && path === "/api/health") {
     return jsonResponse(request, env, { ok: true, ...(await getStorageHealth(env)) });
   }
+  if (request.method === "GET" && path === "/api/push/config") return pushConfig(request, env);
+  if (request.method === "GET" && path === "/api/push/status") return pushStatus(request, env);
+  if (request.method === "POST" && path === "/api/push/subscribe") return savePushSubscription(request, env);
+  if (request.method === "POST" && path === "/api/push/test") return pushTest(request, env);
+  if (request.method === "POST" && path === "/api/push/unsubscribe") return removePushSubscriptions(request, env);
   if (request.method === "GET" && path === "/api/support/config") return supportConfig(request, env);
   if (request.method === "GET" && path === "/api/support/stats") return supportStats(request, env);
   if (request.method === "POST" && path === "/api/support/intent") return createSupportIntent(request, env);
@@ -748,8 +1173,8 @@ async function fetchHandler(request, env, ctx) {
   const supportStatusMatch = path.match(new RegExp("^/api/support/status/(pi_[A-Za-z0-9_-]{1,80})$"));
   if (request.method === "GET" && supportStatusMatch) return getSupportPaymentStatus(request, env, supportStatusMatch[1]);
   if (request.method === "GET" && path === "/api/live/status") return liveStatus(request, env);
-  if (request.method === "POST" && path === "/api/live/page") return ingestLivePage(request, env);
-  if (request.method === "POST" && path === "/api/snapshot") return storeFullSnapshot(request, env);
+  if (request.method === "POST" && path === "/api/live/page") return ingestLivePage(request, env, ctx);
+  if (request.method === "POST" && path === "/api/snapshot") return storeFullSnapshot(request, env, ctx);
   if (request.method === "GET" && path === "/data.json") return loadPublishedSnapshot(request, env);
   if (path.startsWith("/api/")) return jsonResponse(request, env, { ok: false, error: "not found" }, 404);
   if (!env.ASSETS) return jsonResponse(request, env, { ok: false, error: "static asset binding unavailable" }, 404);
