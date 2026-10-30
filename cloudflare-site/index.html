@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://huevo.su; style-src 'self'; img-src 'self' https://huevo.su https://huevo.departament.site data:; connect-src 'self' https://huevo.su https://*.huevo.su; base-uri 'none'; form-action 'none'">
 <title>AMNYAM MODE — Huevo Gift Intelligence</title>
-<link rel="stylesheet" href="./styles.css?v=amnyam-huevo-auth-v12">
+<link rel="stylesheet" href="./styles.css?v=amnyam-server-push-v16">
 </head>
 <body>
 <a class="skip" href="#catalog">К каталогу</a>
@@ -153,7 +153,16 @@
   <div class="section-heading"><div><span class="section-index">/ PERSONAL WATCHLIST</span><h2>Избранное</h2><p>Задай целевую цену у любого лота. Цели и сохранённые наборы фильтров хранятся только в этом браузере.</p></div>
     <div class="watch-header-actions"><span class="view-stat" id="favoritesCount">0 лотов</span><button class="btn secondary" id="enableNotifications" type="button">Включить уведомления</button></div>
   </div>
-  <p class="watch-help" id="notificationHint">Разреши системные уведомления браузера. Сайт должен оставаться открытым в запущенном браузере, чтобы проверять цены и показывать сигналы на рабочем столе.</p>
+  <p class="watch-help" id="notificationHint">Обычные уведомления работают только пока открыта страница. Для оповещений после закрытия вкладки подключи серверный push в аккаунте huEVO ниже.</p>
+  <div class="push-controls" aria-label="Серверные push-уведомления">
+    <div class="push-status" id="pushStatus" role="status" aria-live="polite">Проверяем подключение push…</div>
+    <div class="push-actions">
+      <button class="btn" id="enablePushNotifications" type="button">Подключить push на рабочий стол</button>
+      <button class="btn secondary" id="testPushNotifications" type="button" disabled>Проверить push</button>
+      <button class="btn secondary" id="disablePushNotifications" type="button" disabled>Отключить push</button>
+    </div>
+    <small>Push привязан к профилю huEVO и этому браузеру. Цены проверяет работающий HuevoDualScan, а не открытая вкладка сайта.</small>
+  </div>
   <div class="alert-sound-controls" aria-label="Звуковые сигналы">
     <button class="btn secondary" id="toggleAlertSound" type="button" aria-pressed="false">Звук: выключен</button>
     <button class="btn secondary" id="testAlertSound" type="button">Проверить звук</button>
@@ -356,6 +365,6 @@
 </main>
 <div id="ambientLayer" aria-hidden="true"></div><div id="cursorGlow" aria-hidden="true"></div>
 <div class="premium-splash" id="premiumSplash" aria-hidden="true"><div class="splash-mark">H<span>•</span></div><div class="splash-title">AMNYAM <b>MODE</b></div><div class="splash-subtitle">GIFT MARKET INTELLIGENCE</div><div class="splash-loader"><i></i></div></div>
-<script src="./app.js?v=amnyam-desktop-alerts-v15" defer></script>
+<script src="./app.js?v=amnyam-server-push-v16" defer></script>
 </body>
 </html>
