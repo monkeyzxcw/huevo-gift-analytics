@@ -368,8 +368,8 @@ def main(argv=None):
                         instance_candidates.append({
                             **row, "gift_details": details,
                             "gift_instance": row.get("gift_instance") or {},
-                            "_force_history_check": row.get("disappearance_status") in
-                                (None, "", "pending_history", "history_baseline"),
+                            # Previous gone rows use their normal 2/30-day cache; only a
+                            # newly disappeared listing above forces an immediate refresh.
                         })
                 try:
                     instance_result = run_gift_instance_crawl(
