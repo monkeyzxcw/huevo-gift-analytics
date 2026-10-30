@@ -1277,7 +1277,7 @@
     const id=String(lot.lot_id),saved=isNum(lot.reference_price)?Math.max(0,lot.reference_price-lot.price):null;
     const histValues=(Array.isArray(lot._history)?lot._history:[]).filter(p=>isNum(p.price)).map(p=>p.price);
     const histLow=histValues.length>=2?Math.min(...histValues):null;
-    const badgeText=isNum(lot.discount_pct)?"−"+fmt(lot.discount_pct)+"%":(label||"Рыночный лот");
+    const badgeText=isNum(lot.discount_pct)?"−"+fmt(lot.discount_pct)+"%"+(lot.suspicious?" · ПРОВЕРИТЬ":""):(label||"Рыночный лот");
     const fav=state.favorites.includes(id);
     const actions=h("div",{class:"deal-actions"},[
       h("span",{class:"discount-tag deal-discount",text:badgeText}),
@@ -1307,6 +1307,7 @@
     const mini=sparkline(lot._history);
     if(mini)metrics.append(h("div",{class:"deal-sparkline"},[mini,h("small",{text:"История цены"})]));
     row.children[1].append(metrics);
+    if(lot.suspicious)row.children[1].append(h("p",{class:"deal-warning",text:"Экстремальный дисконт более 80%. Не выбран верхним сигналом: проверь совпадение подарка, редкость, статус и возможную ошибку цены."}));
     const target=h("input",{class:"input target-input deal-target-input",type:"number",min:"1",step:"1",inputmode:"numeric",placeholder:"Желаемая цена","aria-label":"Цена-цель для "+(lot.title||id)});
     target.value=state.targets[id]?String(state.targets[id]):"";
     const save=h("button",{class:"btn target-save",type:"button",text:state.targets[id]?"Обновить уведомление":"Уведомить при цене"});
@@ -1319,7 +1320,7 @@
   }
 
   function renderDeals(){
-    const signals=buildDealSignals(),best=signals[0]||null;
+    const signals=buildDealSignals(),best=signals.find(lot=>!lot.suspicious)||null;
     let deals=signals.slice(),sortBy=$("dealSort").value||"discount";
     if(sortBy==="price")deals.sort((a,b)=>a.price-b.price||b.discount_pct-a.discount_pct);
     else if(sortBy==="savings")deals.sort((a,b)=>(b.reference_price-b.price)-(a.reference_price-a.price)||b.discount_pct-a.discount_pct);
@@ -1339,7 +1340,8 @@
       state._belowBestId=String(best.lot_id);
       $("belowBestTitle").textContent=best.title||("Лот #"+best.lot_id);
       $("belowBestPrice").textContent=price(best.price);
-      $("belowBestMeta").textContent="На "+fmt(best.discount_pct)+"% ниже "+(best.basis==="sales"?"медианы подтверждённых продаж":"устойчивой медианы объявлений")+" · разница "+price(Math.max(0,best.reference_price-best.price))+" · "+fmt(best.sample_size)+(best.basis==="sales"?" продаж":" лотов")+" · "+(best.confidence==="high"?"высокая выборка":best.confidence==="medium"?"средняя выборка":"низкая уверенность")+" · #"+best.lot_id;
+      const extremeCount=signals.filter(lot=>lot.suspicious).length;
+      $("belowBestMeta").textContent="На "+fmt(best.discount_pct)+"% ниже "+(best.basis==="sales"?"медианы подтверждённых продаж":"устойчивой медианы объявлений")+" · разница "+price(Math.max(0,best.reference_price-best.price))+" · "+fmt(best.sample_size)+(best.basis==="sales"?" продаж":" лотов")+" · "+(best.confidence==="high"?"высокая выборка":best.confidence==="medium"?"средняя выборка":"низкая уверенность")+" · #"+best.lot_id+(extremeCount?" · "+fmt(extremeCount)+" экстремальных скидок >80% оставлено ниже как подозрительные":"");
       $("belowBestOpen").href=safeUrl(best.lot_url,best.lot_id);
       const bestImage=$("belowBestImage"),bestArt=$("belowBestArt");
       const imageUrl=typeof best.image_url==="string"&&best.image_url.startsWith("https://")&&(best.image_url.includes("huevo.su/")||best.image_url.includes("huevo.departament.site/"))?best.image_url:"";
@@ -1357,24 +1359,27 @@
     }else{
       state._belowBestId=null;
       $("belowBestTitle").textContent="Пока нет уверенного кандидата";$("belowBestPrice").textContent="—";
-      $("belowBestMeta").textContent="Нужны минимум 5 сопоставимых записей о продажах или 5 объявлений с достаточно узким диапазоном цен. Слишком разрозненные цены не считаем ориентиром.";
+      $("belowBestMeta").textContent=signals.length?"Есть экстремальные скидки, но все кандидаты превышают 80% и отмечены как подозрительные. Поэтому верхний сигнал не назначен.":"Нужны минимум 5 сопоставимых записей о продажах или 5 объявлений с достаточно узким диапазоном цен. Слишком разрозненные цены не считаем ориентиром.";
       $("belowBestOpen").href="https://huevo.su/market/gifts";$("belowBestTarget").value="";
-      $("overviewPickHint").textContent="Когда появится сопоставимая группа, здесь будет показан лучший текущий дисконт.";
+      $("overviewPickHint").textContent=signals.length?"Есть только экстремальные скидки >80%; они не выбираются надёжным топ-сигналом.":"Когда появится сопоставимая группа, здесь будет показан лучший надёжный дисконт.";
       const pick=clear($("overviewPickLot"));pick.append(h("span",{class:"muted",text:"Пока нет группы аналогов для честного сравнения."}));
-      list.append(h("li",{class:"empty",text:"Нет лотов на 15% дешевле медианы трёх или более похожих активных предложений."}));
+      list.append(h("li",{class:"empty",text:signals.length?"Кандидаты со скидкой более 80% показаны в каталоге, но не назначены лучшими из-за риска аномальной цены.":"Нет лотов на 15% дешевле медианы трёх или более похожих активных предложений."}));
     }
     updateViewCounts();
   }
 
   function renderDayPicks(){
-    const box=clear($("dayPicks")),signals=buildDealSignals(),chosen=[],seen=new Set();
+    const box=clear($("dayPicks")),signals=buildDealSignals(),reliable=signals.filter(lot=>!lot.suspicious),chosen=[],seen=new Set();
     const add=(lot,tag,description)=>{if(!lot||seen.has(String(lot.lot_id))||chosen.length>=3)return;seen.add(String(lot.lot_id));chosen.push({lot,tag,description});};
-    if(signals.length){
-      add(signals[0],"МАКСИМАЛЬНЫЙ ДИСКОНТ","Наибольшая скидка к медиане аналогов — не обязательно самая низкая цена");
-      add(signals.slice().sort((a,b)=>a.price-b.price||b.discount_pct-a.discount_pct)[0],"САМАЯ НИЗКАЯ ЦЕНА","Минимальная абсолютная цена среди лотов ниже рынка");
-      add(signals.slice().sort((a,b)=>b.sample_size-a.sample_size||b.discount_pct-a.discount_pct)[0],"БОЛЬШЕ АНАЛОГОВ","Самая широкая выборка похожих предложений");
+    const fallback=state.lots.filter(l=>l&&l.active!==false&&isNum(l.price)&&l.price>0)
+      .slice().sort((a,b)=>a.price-b.price||String(a.title).localeCompare(String(b.title),"ru"));
+    if(reliable.length){
+      add(reliable[0],"ЛУЧШИЙ НАДЁЖНЫЙ ДИСКОНТ","Сильная скидка к аналогам без признака экстремального выброса");
+      add(fallback[0],"САМАЯ НИЗКАЯ ЦЕНА","Самое дешёвое активное объявление — не обязательно выгоднее рынка");
+      add(reliable.slice().sort((a,b)=>b.sample_size-a.sample_size||b.discount_pct-a.discount_pct)[0],"БОЛЬШЕ АНАЛОГОВ","Наиболее широкая выборка для сравнения цены");
+    }else{
+      add(fallback[0],"САМАЯ НИЗКАЯ ЦЕНА","Бюджетный лот; надёжный дисконт к рынку не подтверждён");
     }
-    const fallback=state.lots.filter(l=>l&&l.active!==false&&isNum(l.price)&&l.price>0).slice().sort((a,b)=>a.price-b.price);
     for(const lot of fallback)add(lot,"ДОСТУПНАЯ ЦЕНА","Бюджетный лот; дисконт к медиане не подтверждён");
     $("dayPicksNote").textContent=chosen.length===3?"3 кандидата · по текущему снимку":fmt(chosen.length)+" кандидата";
     if(!chosen.length){box.append(h("div",{class:"empty",text:"Появятся после первого успешного снимка цен."}));return;}
@@ -1407,10 +1412,10 @@
     const reached=found.filter(l=>isNum(state.targets[String(l.lot_id)])&&isNum(l.price)&&l.active!==false&&l.price<=state.targets[String(l.lot_id)]).length;
     const notificationPermission = "Notification" in window ? Notification.permission : "unsupported";
     const notificationNote = notificationPermission === "granted"
-      ? "Системные уведомления разрешены. Оставь браузер запущенным — в фоне проверка продолжается примерно раз в 15 секунд."
+      ? "Разрешение браузера включено. Для уведомлений с закрытой вкладкой отдельно подключи серверный push ниже."
       : notificationPermission === "denied"
         ? "Браузер запретил уведомления. Разреши их в настройках сайта рядом с адресной строкой."
-        : "Разреши системные уведомления кнопкой выше. Приложение должно оставаться открытым в браузере.";
+        : "Для фоновой доставки подключи серверный push; обычные сигналы работают только в открытой странице.";
     $("notificationHint").textContent = (targets
       ? targets+" целевых цен сохранено"+(reached?" · цель достигнута у "+reached+" лотов":"")+". "
       : "Добавь лот в избранное и задай цену, при которой хочешь получить сигнал. ") + notificationNote;
@@ -1915,7 +1920,7 @@
   function renderCommandCenter() {
     const st = stats();
     const deals = buildDealSignals();
-    const best = deals[0] || null;
+    const best = deals.find((lot) => !lot.suspicious) || null;
     const setText = (id, value) => { const el = $(id); if (el) el.textContent = value; };
     setText("pulseLots", fmt(st.total));
     setText("pulseMedian", price(st.median));
