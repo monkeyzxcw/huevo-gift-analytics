@@ -770,12 +770,16 @@ async function removePushSubscriptions(request, env) {
   if (!isSameOriginMutation(request)) return jsonResponse(request, env, { ok: false, error: "same-origin request required" }, 403);
   const userId = await authenticatedUserId(request, env);
   if (!userId) return jsonResponse(request, env, { ok: false, error: "Требуется активный профиль huEVO." }, 401);
+  const parsed = await readJsonBody(request, 4000);
+  if (parsed.error) return jsonResponse(request, env, { ok: false, error: parsed.error }, parsed.status);
+  const endpoint = String(parsed.value.endpoint || "");
+  if (!validPushEndpoint(endpoint)) return jsonResponse(request, env, { ok: false, error: "Не удалось определить push-подписку этого браузера." }, 400);
+  const endpointHash = await sha256Hex(endpoint);
   try {
-    await env.DB.batch([
-      env.DB.prepare("DELETE FROM push_subscriptions WHERE user_id = ?").bind(userId),
-      env.DB.prepare("DELETE FROM push_alert_state WHERE user_id = ?").bind(userId)
-    ]);
-    return jsonResponse(request, env, { ok: true, removed: true });
+    const result = await env.DB.prepare(
+      "DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint_hash = ?"
+    ).bind(userId, endpointHash).run();
+    return jsonResponse(request, env, { ok: true, removed: Number(result.meta && result.meta.changes) || 0 });
   } catch (_) {
     return jsonResponse(request, env, { ok: false, error: "Не удалось отключить push." }, 503);
   }
