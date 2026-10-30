@@ -280,6 +280,13 @@
         }
         lastSnapshotSignature = signature;
         render();
+        // Keep an already-open gift card in sync too; otherwise an enrichment arriving
+        // while the user is viewing that lot would remain hidden until the dialog is reopened.
+        const detailDialog = $("detail");
+        if (detailDialog && detailDialog.open && activeDetailLotId) {
+          const refreshedLot = state.lots.find((lot) => String(lot.lot_id) === activeDetailLotId);
+          if (refreshedLot) openDetail(refreshedLot, lastTrigger);
+        }
       } else {
         // Update non-visual metadata (including last successful full-snapshot time) without
         // rebuilding cards, charts, rows, the active tab, or the search controls.
@@ -907,8 +914,10 @@
 
     // ---------- lot detail ----------
   let lastTrigger = null;
+  let activeDetailLotId = null;
   function openDetail(l, trigger) {
     lastTrigger = trigger;
+    activeDetailLotId = String(l.lot_id);
     $("dTitle").textContent = l.title || ("Лот #" + l.lot_id);
     const body = clear($("dBody"));
     const img = l.image_url && /^https:\/\//i.test(l.image_url) ? h("img", { class: "thumb", src: l.image_url, alt: "", referrerpolicy: "no-referrer" }) : h("span", { class: "thumb", text: "🎁", "aria-hidden": "true" });
@@ -2096,7 +2105,7 @@
   document.querySelectorAll(".tabs [role=tab]").forEach(t=>t.addEventListener("click",()=>{state.changeKind=t.dataset.kind;renderChanges();}));
   $("retry").addEventListener("click",load);
   $("dClose").addEventListener("click",()=>$("detail").close());
-  $("detail").addEventListener("close",()=>{if(lastTrigger&&document.contains(lastTrigger))lastTrigger.focus();});
+  $("detail").addEventListener("close",()=>{activeDetailLotId=null;if(lastTrigger&&document.contains(lastTrigger))lastTrigger.focus();});
   $("detail").addEventListener("click",e=>{if(e.target===$("detail"))$("detail").close();});
   $("savePreset").addEventListener("click",saveFilterPreset);$("applyPreset").addEventListener("click",applyFilterPreset);$("deletePreset").addEventListener("click",deleteFilterPreset);
   $("savedFilterSelect").addEventListener("change",()=>{
