@@ -371,13 +371,14 @@ def main(argv=None):
                             # Previous gone rows use their normal 2/30-day cache; only a
                             # newly disappeared listing above forces an immediate refresh.
                         })
-                if details_result.get("status") == "blocked":
-                    # A rate-limit response ends ALL optional Huevo page work for this run.
+                if details_result.get("status") in ("blocked", "login", "network_error", "server_error", "wrong_host"):
+                    # A block, login page, or source/network failure ends ALL optional Huevo
+                    # page work for this run; do not immediately retry the same broken session.
                     instance_result = {
-                        "instances": {}, "status": "blocked", "pages": 0,
+                        "instances": {}, "status": details_result.get("status"), "pages": 0,
                         "http_status": details_result.get("http_status"),
                         "retry_after": details_result.get("retry_after"),
-                        "message": "Очередь истории не запускалась после блокировки при чтении карточки лота.",
+                        "message": "Очередь истории не запускалась после ошибки чтения карточки лота.",
                     }
                 else:
                     try:
