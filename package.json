@@ -3,10 +3,12 @@
   "private": true,
   "description": "Browser tests only (collector and UI). The app itself is Python.",
   "scripts": {
-    "check": "node --check static/app.js && node --check static/browser_collector.js",
-    "test:e2e": "node --test tests/e2e/collector.test.cjs tests/e2e/ui.test.cjs tests/e2e/dashboard.test.cjs tests/e2e/cloudflare-account.test.cjs"
+    "check": "node --check static/app.js && node --check static/browser_collector.js && node --check src/auth.js",
+    "test:e2e": "node --test tests/worker/*.test.mjs tests/e2e/collector.test.cjs tests/e2e/ui.test.cjs tests/e2e/dashboard.test.cjs tests/e2e/cloudflare-account.test.cjs",
+    "test:unit:worker": "node --test tests/worker/*.test.mjs"
   },
   "devDependencies": {
     "playwright": "1.63.0"
-  }
+  },
+  "type": "module"
 }
