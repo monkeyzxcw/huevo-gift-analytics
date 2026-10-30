@@ -737,7 +737,7 @@
       state._belowBestId=String(best.lot_id);
       $("belowBestTitle").textContent=best.title||("Лот #"+best.lot_id);
       $("belowBestPrice").textContent=price(best.price);
-      $("belowBestMeta").textContent="Экономия к медиане: "+price(Math.max(0,best.reference_price-best.price))+" · −"+fmt(best.discount_pct)+"% · "+fmt(best.sample_size)+" похожих лотов · #"+best.lot_id;
+      $("belowBestMeta").textContent="На "+fmt(best.discount_pct)+"% ниже медианы аналогов · экономия "+price(Math.max(0,best.reference_price-best.price))+" · "+fmt(best.sample_size)+" похожих лотов · #"+best.lot_id;
       $("belowBestOpen").href=safeUrl(best.lot_url,best.lot_id);
       $("belowBestTarget").value=state.targets[String(best.lot_id)]?String(state.targets[String(best.lot_id)]):"";
       $("overviewPickHint").textContent="Лучший текущий дисконт: −"+fmt(best.discount_pct)+"% от медианы похожих предложений.";
