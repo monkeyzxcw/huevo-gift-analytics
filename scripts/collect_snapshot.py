@@ -206,6 +206,8 @@ def snapshot_lot(row, old_by_id, observed_at, gift_details=None):
     cached_details = gift_details or old.get("gift_details")
     if isinstance(cached_details, dict):
         item["gift_details"] = cached_details
+    if isinstance(old.get("gift_instance"), dict):
+        item["gift_instance"] = old["gift_instance"]
     return item
 
 
@@ -456,7 +458,11 @@ def main(argv=None):
             return 2
 
         gone_by_id = {}
-        gone_fields = ("lot_id", "title", "serial", "rarity", "price", "status", "image_url", "lot_url", "first_seen", "last_seen", "active")
+        gone_fields = (
+            "lot_id", "title", "serial", "rarity", "price", "status", "image_url",
+            "lot_url", "first_seen", "last_seen", "active", "gift_details", "gift_instance",
+            "disappearance_status", "disappeared_at", "history_checked_at",
+        )
         for row in previous.get("gone_lots") or []:
             if row.get("lot_id") is not None:
                 gone_by_id[str(row["lot_id"])] = {key: row.get(key) for key in gone_fields}
@@ -466,11 +472,64 @@ def main(argv=None):
                 gone = {key: row.get(key) for key in gone_fields}
                 gone["active"] = False
                 gone["status"] = "Не найден в последнем полном проходе"
+                gone["disappeared_at"] = observed_at
+                gone["disappearance_status"] = "pending_history"
+                gone["history_checked_at"] = None
+                if new_details.get(lot_id):
+                    gone["gift_details"] = new_details[lot_id]
                 gone_by_id[lot_id] = gone
-        # "Not found" is not proof of a sale; forget such lots after the retention window.
+
+        # A just-disappeared item is checked even if other market pages remain cached.
+        for lot_id, row in gone_by_id.items():
+            if new_details.get(lot_id):
+                row["gift_details"] = new_details[lot_id]
         keep_after = now_utc() - timedelta(hours=retention_hours())
         gone_lots = [row for row in gone_by_id.values()
                      if is_recent(row.get("last_seen"), keep_after)][-5000:]
+
+        # Merge newly fetched /gift/<id> pages into both active and gone market rows.
+        fetched_instances = instance_result.get("instances") or {}
+        catalog_events = list(previous.get("catalog_events") or [])
+        known_catalog_event_ids = {str(item.get("event_id")) for item in catalog_events if item.get("event_id")}
+        newly_detected_events = []
+
+        def apply_instance(row, is_gone=False):
+            details = row.get("gift_details") if isinstance(row.get("gift_details"), dict) else {}
+            gift_id = str(details.get("gift_id") or "")
+            if not gift_id:
+                return
+            old_instance = row.get("gift_instance") if isinstance(row.get("gift_instance"), dict) else {}
+            fresh_instance = fetched_instances.get(gift_id)
+            merged = merge_instance_record(old_instance, fresh_instance) if fresh_instance else old_instance
+            if merged:
+                row["gift_instance"] = merged
+            if fresh_instance and fresh_instance.get("history_found"):
+                row["history_checked_at"] = fresh_instance.get("checked_at")
+            if is_gone and fresh_instance:
+                row["disappearance_status"] = classify_disappearance(old_instance, merged)
+            elif is_gone and not row.get("disappearance_status"):
+                row["disappearance_status"] = "pending_history"
+
+            # The first history read is a baseline, not a newly observed market event.
+            if fresh_instance and fresh_instance.get("history_found") and old_instance.get("history_found"):
+                for event in merged.get("new_events") or []:
+                    record = history_event_record(row, event, observed_at)
+                    if record and record["event_id"] not in known_catalog_event_ids:
+                        known_catalog_event_ids.add(record["event_id"])
+                        newly_detected_events.append(record)
+            if is_gone and row.get("disappearance_status") == "delisted":
+                record = delisted_event_record(row, observed_at)
+                if record and record["event_id"] not in known_catalog_event_ids:
+                    known_catalog_event_ids.add(record["event_id"])
+                    newly_detected_events.append(record)
+
+        for row in lots:
+            apply_instance(row, is_gone=False)
+        for row in gone_lots:
+            apply_instance(row, is_gone=True)
+
+        catalog_events.extend(newly_detected_events)
+        catalog_events = catalog_events[-1000:]
 
         changes = compare([l for l in old_lots if l.get("active", True)], lots) if old_lots else None
         if changes:
