@@ -76,14 +76,26 @@
   let supportInitRunning = false;
 
   // ---------- load & normalise (tolerates partial / old JSON) ----------
+  const comparableKey = (lot) => JSON.stringify([
+    String(lot.title || "").trim().toLocaleLowerCase("ru"),
+    String(lot.rarity || "").trim().toLocaleLowerCase("ru")
+  ]);
+
   function normalise(d) {
     const raw = d && typeof d === "object" && !Array.isArray(d) ? d : {};
     const lots = (Array.isArray(raw.lots) ? raw.lots : []).filter((l) => l && typeof l === "object" && l.lot_id != null).map((l) => {
       const hist = Array.isArray(l.history) ? l.history.filter((p) => p && isNum(p.price)) : [];
       let delta = null;
       if (hist.length > 1 && hist[hist.length - 2].price > 0) delta = (hist[hist.length - 1].price - hist[hist.length - 2].price) / hist[hist.length - 2].price * 100;
-      return Object.assign({}, l, { price: isNum(l.price) ? l.price : null, _history: hist, _delta: delta, _text: [l.lot_id, l.title, l.serial, l.rarity, l.status].join(" ").toLocaleLowerCase("ru") });
+      return Object.assign({}, l, { price: isNum(l.price) ? l.price : null, _history: hist, _delta: delta, _lotCount: 0, _text: [l.lot_id, l.title, l.serial, l.rarity, l.status].join(" ").toLocaleLowerCase("ru") });
     });
+    const groupCounts = new Map();
+    lots.forEach((lot) => {
+      if (lot.active === false || !isNum(lot.price) || lot.price <= 0) return;
+      const key = comparableKey(lot);
+      groupCounts.set(key, (groupCounts.get(key) || 0) + 1);
+    });
+    lots.forEach((lot) => { lot._lotCount = groupCounts.get(comparableKey(lot)) || 0; });
     return { raw, lots };
   }
 
@@ -418,13 +430,19 @@
         && (lower === -Infinity || (l.price != null && l.price >= lower))
         && (upper === Infinity || (l.price != null && l.price <= upper));
     });
-    const val = (l) => key === "price" ? l.price : key === "delta" ? l._delta : key === "first_seen" ? (l.first_seen ? Date.parse(l.first_seen) : null) : String(l[key] || "").toLocaleLowerCase("ru");
+    const val = (l) => key === "price" ? l.price
+      : key === "lot_count" ? l._lotCount
+      : key === "delta" ? l._delta
+      : key === "first_seen" ? (l.first_seen && Number.isFinite(Date.parse(l.first_seen)) ? Date.parse(l.first_seen) : null)
+      : key === "lot_id" ? String(l.lot_id || "")
+      : String(l[key] || "").toLocaleLowerCase("ru");
     rows.sort((a, b) => {
       const x = val(a), y = val(b);
-      if (x == null && y == null) return 0;
+      if (x == null && y == null) return String(a.lot_id).localeCompare(String(b.lot_id), "ru", { numeric: true });
       if (x == null) return 1;
       if (y == null) return -1;
-      return (typeof x === "string" ? x.localeCompare(y, "ru") : x - y) * dir;
+      const compare = (typeof x === "string" ? x.localeCompare(y, "ru", { numeric: true }) : x - y) * dir;
+      return compare || String(a.lot_id).localeCompare(String(b.lot_id), "ru", { numeric: true });
     });
     state.view = rows;
     state.page = Math.min(state.page, Math.max(0, Math.ceil(rows.length / PAGE) - 1));
@@ -440,7 +458,7 @@
       const b = th.querySelector(".sort");
       th.setAttribute("aria-sort", b && b.dataset.key === state.sort.key ? (state.sort.dir > 0 ? "ascending" : "descending") : "none");
     });
-    if (!total) { body.append(h("tr", {}, [h("td", { colspan: 6, class: "empty", text: "По вашим условиям лотов нет. Измените или сбросьте фильтры." })])); return; }
+    if (!total) { body.append(h("tr", {}, [h("td", { colspan: 7, class: "empty", text: "По вашим условиям лотов нет. Измените или сбросьте фильтры." })])); return; }
     state.view.slice(state.page * PAGE, (state.page + 1) * PAGE).forEach((l) => {
       const img = l.image_url && /^https:\/\//i.test(l.image_url) ? h("img", { class: "thumb", src: l.image_url, alt: "", loading: "lazy", referrerpolicy: "no-referrer" }) : h("span", { class: "thumb", text: "🎁", "aria-hidden": "true" });
       img.addEventListener("error", () => img.replaceWith(h("span", { class: "thumb", text: "🎁", "aria-hidden": "true" })));
@@ -453,6 +471,7 @@
       body.append(h("tr", {}, [
         h("td", {}, [h("div", { class: "lot" }, [img, h("div", {}, [h("strong", { text: l.title || "Без названия" }), h("small", { text: "#" + l.lot_id + (l.serial ? " · " + l.serial : "") })])])]),
         h("td", { class: "price", text: price(l.price) }),
+        h("td", {}, [h("span", { class: "count-pill", text: fmt(l._lotCount) }), h("div", { class: "muted count-sub", text: "той же серии" })]),
         h("td", {}, [h("span", { class: "chip", text: l.rarity || "Не указана" }), h("div", { class: "muted", text: l.status || "" })]),
         h("td", {}, [delta]),
         h("td", { text: l.first_seen ? when(l.first_seen) : "—" }),
@@ -812,10 +831,22 @@
   ["search", "pmin", "pmax"].forEach((id) => $(id).addEventListener("input", () => { state.page = 0; $("globalSearch").value = $("search").value; applyFilters(); }));
   ["rarity", "status"].forEach((id) => $(id).addEventListener("change", () => { state.page = 0; applyFilters(); }));
   $("filters").addEventListener("submit", (e) => e.preventDefault());
-  $("reset").addEventListener("click", () => { ["search", "pmin", "pmax", "rarity", "status", "globalSearch"].forEach((id) => { $(id).value = ""; }); state.page = 0; applyFilters(); });
+  $("reset").addEventListener("click", () => {
+    ["search", "pmin", "pmax", "rarity", "status", "globalSearch"].forEach((id) => { $(id).value = ""; });
+    state.sort = { key: "price", dir: 1 };
+    $("sortBy").value = "price:1";
+    state.page = 0; applyFilters();
+  });
+  $("sortBy").addEventListener("change", () => {
+    const [key, rawDir] = $("sortBy").value.split(":");
+    state.sort = { key, dir: Number(rawDir) || 1 };
+    state.page = 0; applyFilters();
+  });
   document.querySelectorAll(".sort").forEach((b) => b.addEventListener("click", () => {
     const key = b.dataset.key;
-    state.sort = { key, dir: state.sort.key === key ? -state.sort.dir : (key === "title" || key === "rarity" ? 1 : key === "price" ? 1 : -1) };
+    const defaultDir = { title: 1, price: 1, rarity: 1, delta: 1, first_seen: -1, lot_count: -1, lot_id: -1 };
+    state.sort = { key, dir: state.sort.key === key ? -state.sort.dir : defaultDir[key] };
+    $("sortBy").value = key + ":" + state.sort.dir;
     state.page = 0; applyFilters();
   }));
   $("prev").addEventListener("click", () => { state.page = Math.max(0, state.page - 1); renderRows(); });
