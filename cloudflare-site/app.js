@@ -5,11 +5,43 @@
   const PAGE = 50;
   const STALE_HOURS = 24;
   const HUEVO_HOSTS = /^https:\/\/(huevo\.su|huevo\.departament\.site)\//i;
+  const TARGET_PRICE_MAX = 1e15;
+
+  async function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, {
+        ...options,
+        headers: { "Accept": "application/json", ...(options.headers || {}) },
+        signal: controller.signal
+      });
+    } catch (error) {
+      if (controller.signal.aborted || (error && error.name === "AbortError")) {
+        throw new Error("Превышено время ожидания ответа сервера (" + Math.ceil(timeoutMs / 1000) + " сек.).");
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timer);
+    }
+  }
+
+  async function fetchJson(url, options = {}, timeoutMs = 12000) {
+    const response = await fetchWithTimeout(url, options, timeoutMs);
+    if (!response.ok) throw new Error("HTTP " + response.status);
+    let data;
+    try { data = await response.json(); }
+    catch (_) { throw new Error("Сервер вернул некорректный JSON."); }
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      throw new Error("Сервер вернул неожиданный формат данных.");
+    }
+    return data;
+  }
 
   const ACCOUNT_PROFILE_URL = "./api/me";
   let accountState = {
     user: null, profilesReady: false, updatedAt: null, dirty: false, hydrating: false, authRevision: 0,
-    revision: 0, saving: false, savePromise: null, profilePollRunning: false, saveTimer: null, pollTimer: null
+    revision: 0, saving: false, savePromise: null, profilePollRunning: false, saveTimer: null, pollTimer: null, authPromise: null, saveRetryCount: 0
   };
 
   // ---------- safe DOM helpers (no innerHTML anywhere: all text goes through textContent) ----------
@@ -82,6 +114,8 @@
     targets:readTargets(),alertedTargets:readAlertedTargets(),savedFilters:readSavedFilters()
   };
   let livePollRunning = false;
+  let snapshotLoadRunning = false;
+  let supportPaymentRunning = false;
   let pollFailureCount = 0;
   let pollBackoffUntil = 0;
   let lastSnapshotSignature = "";
@@ -114,11 +148,12 @@
   }
 
   async function load() {
+    if (snapshotLoadRunning) return;
+    snapshotLoadRunning = true;
     show("loading");
     try {
-      const response = await fetch("./data.json?_=" + Date.now(), { cache: "no-store" });
-      if (!response.ok) throw new Error("HTTP " + response.status);
-      const json = await response.json();
+      const json = await fetchJson("./data.json?_=" + Date.now(), { cache: "no-store" }, 12000);
+      if (!Array.isArray(json.lots)) throw new Error("В снимке отсутствует обязательный список lots.");
       const n = normalise(json);
       state.data = n.raw; state.lots = n.lots;
       state.liveFingerprint = n.raw.live && n.raw.live.fingerprint ? String(n.raw.live.fingerprint) : null;
@@ -126,10 +161,12 @@
       render();
       dismissPremiumSplash();
     } catch (error) {
-      $("errorText").textContent = "Не удалось загрузить data.json (" + (error && error.message ? error.message : "ошибка") + "). Данные могут быть ещё не опубликованы.";
+      $("errorText").textContent = "Не удалось загрузить data.json (" + (error && error.message ? error.message : "ошибка") + "). Последний корректный снимок не заменён.";
       setBadge("err", "Данные недоступны");
       show("error");
       dismissPremiumSplash();
+    } finally {
+      snapshotLoadRunning = false;
     }
   }
 
@@ -184,13 +221,11 @@
     if (livePollRunning || !state.data || document.visibilityState !== "visible" || Date.now() < pollBackoffUntil) return;
     livePollRunning = true;
     try {
-      const response = await fetch("./data.json?_=" + Date.now(), {
+      const json = await fetchJson("./data.json?_=" + Date.now(), {
         cache: "no-store",
         headers: { "Accept": "application/json" }
-      });
-      if (!response.ok) throw new Error("HTTP " + response.status);
-      const json = await response.json();
-      if (!json || typeof json !== "object" || !Array.isArray(json.lots)) throw new Error("Некорректный снимок рынка");
+      }, 10000);
+      if (!Array.isArray(json.lots)) throw new Error("Некорректный снимок рынка: отсутствует список lots.");
       pollFailureCount = 0;
       pollBackoffUntil = 0;
       const n = normalise(json);
@@ -1271,10 +1306,13 @@
   }
 
   function saveTarget(lotId,raw){
-    const id=String(lotId),value=String(raw||"").trim()===""?null:Number(raw);
-    if(value!==null&&(!Number.isFinite(value)||value<=0)){$("watchAlertText").textContent="Введи целевую цену больше нуля.";$("watchAlert").classList.remove("hide");return false;}
+    const id=String(lotId),textValue=String(raw == null ? "" : raw).trim(),value=textValue===""?null:Number(textValue);
+    if(value!==null&&(!Number.isSafeInteger(value)||value<=0||value>TARGET_PRICE_MAX)){
+      $("watchAlertText").textContent="Введи целую целевую цену от 1 до "+fmt(TARGET_PRICE_MAX)+".";
+      $("watchAlert").classList.remove("hide");return false;
+    }
     if(value===null){delete state.targets[id];state.alertedTargets=state.alertedTargets.filter(v=>v!==id);}
-    else{state.targets[id]=Math.round(value);if(!state.favorites.includes(id))state.favorites=[...state.favorites,id].slice(-5000);}
+    else{state.targets[id]=value;if(!state.favorites.includes(id))state.favorites=[...state.favorites,id].slice(-5000);}
     writeTargets();writeAlertedTargets();writeFavorites();checkTargetAlerts();renderFavorites();renderRows();renderDeals();renderDayPicks();updateViewCounts();return true;
   }
 
@@ -1315,7 +1353,7 @@
   }
 
   async function requestSupportApi(path, options) {
-    const response = await fetch(path, { cache: "no-store", ...(options || {}) });
+    const response = await fetchWithTimeout(path, { cache: "no-store", ...(options || {}) }, 12000);
     let data = {};
     try { data = await response.json(); } catch (_) {}
     if (!response.ok) throw new Error(data.detail || data.error || ("HTTP " + response.status));
@@ -1397,19 +1435,40 @@
 
   async function makeSupportPayment(amount) {
     const inHuevo = new URLSearchParams(location.search).has("hu_user_id");
+    if (supportPaymentRunning) return;
     if (!supportConfig.enabled) return supportMessage("Приём поддержки не настроен. Проверь настройки huEVO Apps.", "error");
     if (!inHuevo || !supportSdkReady || !window.huevo) return supportMessage("Для оплаты открой AMNYAM MODE внутри huEVO как приложение.", "error");
+    supportPaymentRunning = true;
     const buttons = Array.from(document.querySelectorAll("#supportAmounts [data-amount]"));
-    buttons.forEach((button) => { button.disabled = true; });
+    buttons.forEach((button) => { button.disabled = true; button.setAttribute("aria-busy", "true"); });
     try {
+      const numericAmount = Number(amount);
+      const configuredAmounts = (supportConfig.amounts || []).map(Number);
+      if (!Number.isSafeInteger(numericAmount) || numericAmount < 5000 || numericAmount > 100000 ||
+          (configuredAmounts.length && !configuredAmounts.includes(numericAmount))) {
+        throw new Error("Недопустимая сумма поддержки.");
+      }
       supportMessage("Создаём запрос на поддержку…");
       const intent = await requestSupportApi("./api/support/intent", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Accept": "application/json" },
-        body: JSON.stringify({ amount: Number(amount), launch_query: location.search })
+        body: JSON.stringify({ amount: numericAmount, launch_query: location.search })
       });
+      if (!intent.intent_id) throw new Error("Сервер не вернул ID платёжного запроса.");
       supportMessage("Подтверди платёж в официальном окне huEVO" + (intent.test ? " (тестовый режим)." : "."));
-      try { await window.huevo.confirmPayment(intent.intent_id); } catch (_) {}
+      let confirmationTimedOut = false;
+      try {
+        let confirmTimer;
+        await Promise.race([
+          Promise.resolve().then(() => window.huevo.confirmPayment(intent.intent_id)),
+          new Promise((_, reject) => {
+            confirmTimer = window.setTimeout(() => reject(new Error("Окно huEVO не ответило за 15 секунд.")), 15000);
+          })
+        ]).finally(() => window.clearTimeout(confirmTimer));
+      } catch (_) {
+        confirmationTimedOut = true;
+        supportMessage("Ответ окна huEVO не получен. Проверяю итоговый статус на сервере…", "muted");
+      }
       let status = "pending";
       for (let attempt = 0; attempt < 40 && status === "pending"; attempt++) {
         await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -1417,7 +1476,9 @@
         status = result.status;
       }
       if (status === "succeeded") supportMessage(intent.test ? "Тестовый платёж подтверждён. Спасибо!" : "Поддержка подтверждена сервером. Спасибо!", "good");
-      else if (status === "pending") supportMessage("Платёж пока не подтверждён. Статус проверяется отдельно; проверь окно huEVO.");
+      else if (status === "pending") supportMessage(confirmationTimedOut
+        ? "Платёж пока не подтверждён сервером. Проверь окно huEVO; повторный платёж пока не создавай."
+        : "Платёж пока не подтверждён. Проверь окно huEVO; статус можно проверить позже.");
       else supportMessage("Платёж завершился со статусом: " + status + ".", "error");
       const stats = await requestSupportApi("./api/support/stats");
       $("supporters").textContent = fmt(Number(stats.supporters) || 0);
@@ -1425,7 +1486,8 @@
     } catch (error) {
       supportMessage(error && error.message ? error.message : "Не удалось создать платёж.", "error");
     } finally {
-      buttons.forEach((button) => { button.disabled = false; });
+      supportPaymentRunning = false;
+      buttons.forEach((button) => { button.disabled = false; button.removeAttribute("aria-busy"); });
     }
   }
 
@@ -1496,7 +1558,7 @@
     const p = profile && typeof profile === "object" ? profile : {};
     state.favorites = Array.isArray(p.favorites) ? [...new Set(p.favorites.map(String).filter(id => /^\d{1,20}$/.test(id)))].slice(0, 5000) : [];
     state.targets = p.targets && typeof p.targets === "object" && !Array.isArray(p.targets)
-      ? Object.fromEntries(Object.entries(p.targets).filter(([id, value]) => /^\d{1,20}$/.test(id) && isNum(value) && value > 0).slice(0, 5000)) : {};
+      ? Object.fromEntries(Object.entries(p.targets).filter(([id, value]) => /^\d{1,20}$/.test(id) && Number.isSafeInteger(value) && value > 0 && value <= TARGET_PRICE_MAX).slice(0, 5000)) : {};
     state.alertedTargets = Array.isArray(p.alertedTargets) ? [...new Set(p.alertedTargets.map(String).filter(id => /^\d{1,20}$/.test(id)))].slice(0, 5000) : [];
     state.savedFilters = Array.isArray(p.savedFilters) ? p.savedFilters.filter(item => item && typeof item.name === "string" && item.name.trim() && item.filters && typeof item.filters === "object").slice(0, 25) : [];
     const prefs = p.preferences && typeof p.preferences === "object" ? p.preferences : {};
@@ -1563,12 +1625,12 @@
   }
 
   async function accountRequest(path, options) {
-    const response = await fetch(path, {
+    const response = await fetchWithTimeout(path, {
       cache: "no-store",
       credentials: "same-origin",
       ...(options || {}),
       headers: { "Accept": "application/json", ...((options && options.headers) || {}) }
-    });
+    }, 12000);
     let data = {};
     try { data = await response.json(); } catch (_) {}
     if (!response.ok) throw new Error(data.error || ("HTTP " + response.status));
@@ -1603,10 +1665,12 @@
           body: JSON.stringify({ profile: payload })
         });
         accountState.updatedAt = result.updated_at || accountState.updatedAt;
+        accountState.saveRetryCount = 0;
         if (revision === accountState.revision) setAccountStatus("Все изменения сохранены", "ok");
         else accountState.dirty = true;
       } catch (error) {
         accountState.dirty = true;
+        accountState.saveRetryCount = Math.min((accountState.saveRetryCount || 0) + 1, 5);
         setAccountStatus("Не удалось синхронизировать: " + error.message, "error");
       }
     })();
@@ -1618,7 +1682,8 @@
       accountState.saving = false;
       if (accountState.dirty && accountState.user) {
         if (accountState.saveTimer) window.clearTimeout(accountState.saveTimer);
-        accountState.saveTimer = window.setTimeout(saveAccountProfile, 2500);
+        const retryDelays = [2500, 5000, 10000, 20000, 30000];
+        accountState.saveTimer = window.setTimeout(saveAccountProfile, retryDelays[(accountState.saveRetryCount || 1) - 1]);
       }
     }
   }
@@ -1643,16 +1708,21 @@
 
   async function authenticateFromHuevo() {
     if (!hasHuevoLaunch()) return false;
-    setAccountStatus("Проверяем подписанный профиль huEVO…", "muted");
-    const data = await accountRequest("./api/auth/launch", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ launch_query: location.search, profile: profilePayload() })
-    });
-    if (!data.authenticated || !data.user) throw new Error("huEVO не подтвердил пользователя.");
-    acceptAccountSession(data);
-    startAccountProfilePolling();
-    return true;
+    if (accountState.authPromise) return accountState.authPromise;
+    accountState.authPromise = (async () => {
+      setAccountStatus("Проверяем подписанный профиль huEVO…", "muted");
+      const data = await accountRequest("./api/auth/launch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ launch_query: location.search, profile: profilePayload() })
+      });
+      if (!data.authenticated || !data.user) throw new Error("huEVO не подтвердил пользователя.");
+      acceptAccountSession(data);
+      startAccountProfilePolling();
+      return true;
+    })();
+    try { return await accountState.authPromise; }
+    finally { accountState.authPromise = null; }
   }
 
   async function checkAccountSession() {

@@ -544,3 +544,45 @@ test("target price sound is opt-in and persists locally", async () => {
   assert.deepEqual(problems, []);
   await browser.close();
 });
+
+
+test("malformed snapshot is rejected and retry recovers without showing a false empty market", async () => {
+  let calls = 0;
+  const { browser, page, problems } = await open((route) => {
+    calls += 1;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(calls === 1 ? { schema_version: 3, lots: "not-an-array" } : dataV2())
+    });
+  });
+  await page.waitForSelector("#error:not(.hide)");
+  assert.match(await page.textContent("#errorText"), /список lots/);
+  assert.equal(await page.locator("#empty:not(.hide)").count(), 0, "malformed data is not a genuine empty-market response");
+  await page.click("#retry");
+  await page.waitForSelector("#content:not(.hide)");
+  assert.equal(await page.locator("#rows tr").count(), 50);
+  assert.deepEqual(problems, []);
+  await browser.close();
+});
+
+test("target prices reject fractional and unsafe values but blank input clears a target", async () => {
+  const { browser, page, problems } = await open(serve(dataV2()));
+  await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="deals"]');
+  await page.fill("#belowBestTarget", "12.5");
+  await page.click("#saveBelowBestTarget");
+  assert.match(await page.textContent("#watchAlertText"), /целую целевую цену/);
+  assert.equal(await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem("amnyam.targets") || "{}")).length), 0);
+  await page.fill("#belowBestTarget", "1000000000000001");
+  await page.click("#saveBelowBestTarget");
+  assert.match(await page.textContent("#watchAlertText"), /целую целевую цену/);
+  await page.fill("#belowBestTarget", "1000");
+  await page.click("#saveBelowBestTarget");
+  assert.equal(await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem("amnyam.targets") || "{}")).every(Number.isSafeInteger)), true);
+  await page.fill("#belowBestTarget", "");
+  await page.click("#saveBelowBestTarget");
+  assert.equal(await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem("amnyam.targets") || "{}")).length), 0);
+  assert.deepEqual(problems, []);
+  await browser.close();
+});

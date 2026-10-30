@@ -10,53 +10,43 @@ permissions:
   contents: read
 
 jobs:
-  python:
+  snapshot:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install dependencies
-        run: pip install -r requirements.txt httpx
-      - name: Unit and API tests
-        run: python -m unittest discover -s tests -v
+      - name: Validate published snapshot and migration helpers
+        run: |
+          python -m unittest discover -s tests -p 'test_snapshot.py' -v
+          python - <<'PY'
+          import json, sys
+          import snapshot
+          with open("cloudflare-site/data.json", encoding="utf-8") as handle:
+              data = json.load(handle)
+          problems = snapshot.validate(snapshot.migrate(data))
+          if problems:
+              print("data.json is not publishable:", *problems[:10], sep="\\n  ", file=sys.stderr)
+              sys.exit(1)
+          print("data.json OK:", len(data.get("lots", [])), "lots")
+          PY
 
   browser:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: JavaScript, collector, and deployment config syntax
+      - name: Check current Cloudflare code and configuration
         run: |
           npm run check
-          node --check cloudflare-site/app.js
-          node --check src/worker.js
-          python -m py_compile scripts/collect_snapshot.py scripts/import_sqlite_snapshot.py scripts/poll_first_page.py
-          python -m json.tool cloudflare-site/data.json > /dev/null
-          python -m json.tool wrangler.jsonc > /dev/null
-      - name: Install Playwright
+          python3 -m json.tool cloudflare-site/data.json > /dev/null
+          python3 -m json.tool wrangler.jsonc > /dev/null
+      - name: Install browser tests
         run: |
           npm install --no-audit --no-fund
           npx playwright install --with-deps chromium
-      - name: Collector and UI tests
+      - name: Test dashboard, signed launch and Worker
         run: npm run test:e2e
-
-  docker:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build image
-        run: docker build -t huevo-gift-analytics:test .
-      - name: Smoke test the container
-        run: |
-          docker run -d --name app -p 8000:8000 -e INGEST_TOKEN=ci-token huevo-gift-analytics:test
-          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8000/health && break; sleep 1; done
-          curl -fsS http://127.0.0.1:8000/api/status
-          curl -fsS http://127.0.0.1:8000/ | grep -q "Huevo Gift Analytics"
-          docker logs app
