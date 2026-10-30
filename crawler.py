@@ -256,7 +256,7 @@ def _finish(pages, seen, new, changed, reached_end, reason):
 
 
 
-def _detail_cache_fresh(record, now=None, max_age_days=14):
+def _detail_cache_fresh(record, now=None, max_age_days=60):
     """True when we inspected this lot page recently, even if it exposed no whitelisted fields."""
     from datetime import datetime, timezone
     record = record if isinstance(record, dict) else {}
@@ -272,7 +272,7 @@ def _detail_cache_fresh(record, now=None, max_age_days=14):
 
 
 def run_gift_detail_crawl(browser, cfg, lots, previous_by_id=None, log=None, limit=12,
-                          max_age_days=14, should_stop=lambda: False):
+                          max_age_days=60, should_stop=lambda: False):
     """Inspect a small, rotating set of individual lot pages without expanding request volume.
 
     Details are cached per lot id. A page that renders but exposes no known attributes is still
