@@ -4,6 +4,7 @@ only reports `reached_end` when a normal page after page 1 has no new lots.
 
 Nothing here bypasses protection: on 403/418/429 (or a login/challenge page) it stops.
 """
+import re
 import time
 from dataclasses import dataclass, field
 
@@ -296,7 +297,8 @@ def run_gift_detail_crawl(browser, cfg, lots, previous_by_id=None, log=None, lim
         if not lot_id or lot.get("active") is False:
             continue
         old = previous_by_id.get(lot_id) or {}
-        if _detail_cache_fresh(old.get("gift_details"), now=current, max_age_days=max_age_days):
+        if (_detail_cache_fresh(old.get("gift_details"), now=current, max_age_days=max_age_days)
+                and not lot.get("_force_detail_check")):
             continue
         url = str(lot.get("lot_url") or "")
         if not url.startswith(cfg.base_url + "/market/lot/"):
@@ -359,6 +361,105 @@ def run_gift_detail_crawl(browser, cfg, lots, previous_by_id=None, log=None, lim
     return {"details": details, "status": status, "pages": pages, "message": message,
             "http_status": http_status, "retry_after": retry_after}
 
+
+
+def run_gift_instance_crawl(browser, cfg, candidates, log=None, limit=8,
+                            max_age_days=30, should_stop=lambda: False):
+    """Read a bounded queue of unique /gift/<id> pages.
+
+    Candidates are market lots whose /market/lot page exposed a gift_id/gift_url.
+    Disappeared lots can set _force_history_check=True to bypass the normal cache.
+    One /gift page is fetched per unique gift_id, never per repeated market listing.
+    """
+    import logging
+    from datetime import datetime, timezone
+    from gift_instance_parser import parse_gift_instance
+
+    logger = log or logging.getLogger(__name__)
+    max_pages = max(0, min(int(limit), 30))
+    if not max_pages:
+        return {"instances": {}, "status": "disabled", "pages": 0,
+                "message": "Проверка истории экземпляров выключена."}
+
+    now = datetime.now(timezone.utc)
+    by_gift_id = {}
+    for row in candidates or []:
+        details = row.get("gift_details") if isinstance(row.get("gift_details"), dict) else {}
+        gift_id = str(details.get("gift_id") or row.get("gift_id") or "").strip()
+        if not re.fullmatch(r"\d{1,20}", gift_id):
+            continue
+        gift_url = str(details.get("gift_url") or row.get("gift_url") or
+                       f"{cfg.base_url.rstrip('/')}/gift/{gift_id}")
+        if not gift_url.startswith(cfg.base_url.rstrip("/") + "/gift/"):
+            continue
+        old = row.get("gift_instance") if isinstance(row.get("gift_instance"), dict) else {}
+        force = bool(row.get("_force_history_check"))
+        cache_age = max_age_days if old.get("history_found") else min(max_age_days, 2)
+        if not force and _detail_cache_fresh(old, now=now, max_age_days=cache_age):
+            continue
+        item = {"gift_id": gift_id, "gift_url": gift_url, "old": old, "force": force,
+                "lot_id": str(row.get("lot_id") or "")}
+        previous = by_gift_id.get(gift_id)
+        if previous is None or (force and not previous["force"]):
+            by_gift_id[gift_id] = item
+
+    queue = sorted(by_gift_id.values(), key=lambda item: (not item["force"], item["gift_id"]))
+    instances = {}
+    pages = 0
+    status = "ok"
+    message = "Истории экземпляров проверены."
+    http_status = retry_after = None
+
+    for item in queue[:max_pages]:
+        if should_stop():
+            status, message = "stopped", "Проверка историй остановлена оператором."
+            break
+        parsed = {}
+        checked_at = datetime.now(timezone.utc).isoformat()
+
+        def parser(html):
+            nonlocal parsed
+            parsed = parse_gift_instance(html, gift_id=item["gift_id"],
+                                         base_url=cfg.base_url, observed_at=checked_at) or {}
+            if not parsed:
+                parsed = {"gift_id": item["gift_id"], "gift_url": item["gift_url"],
+                          "history_found": False, "history": [], "checked_at": checked_at,
+                          "status": "no_recognised_instance_data",
+                          "source": "huevo_gift_instance_page"}
+            return [parsed], 1
+
+        path = "/gift/" + item["gift_id"]
+        probe, _, _, _ = observe_with_retry(browser, cfg, path, logger, parser=parser)
+        pages += 1
+        verdict = probe.get("verdict")
+        if verdict == "blocked":
+            status, message = "blocked", "Huevo ограничил доступ при проверке историй экземпляров. Очередь остановлена."
+            http_status = probe.get("http_status") or probe.get("status_class_inferred")
+            retry_after = probe.get("retry_after")
+            logger.warning("gift instance block gift=%s http=%s; stopping queue", item["gift_id"], http_status)
+            break
+        if verdict in ("network_error", "server_error", "login", "wrong_host", "not_found", "empty"):
+            status, message = verdict, "Проверка историй прервана: " + verdict
+            http_status = probe.get("http_status") or probe.get("status_class_inferred")
+            retry_after = probe.get("retry_after")
+            logger.warning("gift instance inspection stopped gift=%s verdict=%s", item["gift_id"], verdict)
+            break
+        if parsed:
+            old_events = {str(event.get("event_id")) for event in (item["old"].get("history") or [])
+                          if event.get("event_id")}
+            new_events = parsed.get("history") or []
+            parsed["new_events"] = [event for event in new_events
+                                    if event.get("event_id") and str(event["event_id"]) not in old_events]
+            parsed["history_delta_known"] = bool(item["old"].get("history_found"))
+            instances[item["gift_id"]] = parsed
+            logger.info("gift instance gift=%s history=%s events=%d new_events=%d",
+                        item["gift_id"], bool(parsed.get("history_found")), len(new_events),
+                        len(parsed["new_events"]))
+        if pages < min(max_pages, len(queue)):
+            cfg.sleep(max(float(cfg.delay), 3.0))
+
+    return {"instances": instances, "status": status, "pages": pages, "message": message,
+            "http_status": http_status, "retry_after": retry_after}
 
 def run_history_crawl(browser, store, cfg, log, max_pages=5, should_stop=lambda: False):
     """Collect confirmed sales from /market/history into `store.sales`.

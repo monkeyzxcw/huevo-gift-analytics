@@ -32,6 +32,18 @@ class GiftDetailParserTests(unittest.TestCase):
         self.assertEqual(result["attributes"], {"model": "Classic", "backdrop": "Blue", "symbol": "Star"})
         self.assertNotIn("somebody", repr(result))
 
+    def test_discovers_the_current_instance_not_the_author_badge(self):
+        html = """<h1>Адидас-Тян Зеленая</h1>
+        <div class="ga-line"><a class="hue-gbadge" href="/gift/13678"
+          data-tip="Это коллекционный подарок «BLOOD BAG», №1 из 100.">badge</a></div>
+        <div class="mg-r"><span>Владелец</span><span>
+          <a class="hue-gbadge" href="/gift/18336"
+          data-tip="Это коллекционный подарок «Адидас-Тян Зеленая», №4 из 111.">badge</a>
+        </span></div>"""
+        result = parse_gift_detail(html, lot_id="101")
+        self.assertEqual(result["gift_id"], "18336")
+        self.assertEqual(result["gift_url"], "https://huevo.su/gift/18336")
+
     def test_invalid_id_and_empty_markup_are_rejected(self):
         self.assertIsNone(parse_gift_detail("<html><body>Вход</body></html>", lot_id="not-an-id"))
         self.assertIsNone(parse_gift_detail("<html><body></body></html>", lot_id="123"))

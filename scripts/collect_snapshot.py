@@ -17,7 +17,9 @@ sys.path.insert(0, str(ROOT))
 
 from analytics import best_value, find_deals, market_summary, price_bins, sales_by_title, sales_summary
 from cookies import ALLOWED_HUEVO_HOSTS
-from crawler import CrawlConfig, run_crawl, run_gift_detail_crawl
+from crawler import CrawlConfig, run_crawl, run_gift_detail_crawl, run_gift_instance_crawl
+from gift_history import (classify_disappearance, delisted_event_record, history_event_record,
+                          merge_instance_record)
 from snapshot import (SnapshotError, category_distribution, compare, is_duplicate_snapshot, migrate,
                       safe_write, snapshot_entry, top_expensive, validate, SCHEMA_VERSION)
 from storage import Store, utcnow
@@ -204,6 +206,8 @@ def snapshot_lot(row, old_by_id, observed_at, gift_details=None):
     cached_details = gift_details or old.get("gift_details")
     if isinstance(cached_details, dict):
         item["gift_details"] = cached_details
+    if isinstance(old.get("gift_instance"), dict):
+        item["gift_instance"] = old["gift_instance"]
     return item
 
 
@@ -219,7 +223,10 @@ def main(argv=None):
     )
     parser.add_argument("--detail-limit", type=int,
                         default=max(0, min(int(os.getenv("HUEVO_DETAIL_LIMIT", "8")), 50)),
-                        help="Maximum individual gift pages inspected after a complete catalog pass (0 disables).")
+                        help="Maximum /market/lot pages inspected after a complete pass (0 disables).")
+    parser.add_argument("--instance-limit", type=int,
+                        default=max(0, min(int(os.getenv("HUEVO_INSTANCE_LIMIT", "8")), 30)),
+                        help="Maximum unique /gift/<id> instance-history pages inspected per pass (0 disables).")
     parser.add_argument(
         "--with-sales", action="store_true",
         help="Also publish aggregate sales statistics from the local history.db (only if it has enough confirmed rows).",
@@ -284,22 +291,105 @@ def main(argv=None):
             result = run_crawl(browser, store, config, LOG)
             details_result = {"details": {}, "status": "skipped", "pages": 0,
                               "message": "Каталог не прошёл полный сбор; карточки не запрашивались."}
+            instance_result = {"instances": {}, "status": "skipped", "pages": 0,
+                               "message": "Истории экземпляров не запрашивались."}
             if result.status == "ok" and result.reached_end:
                 old_detail_index = {
-                    str(row.get("lot_id")): row for row in (previous.get("lots") or [])
+                    str(row.get("lot_id")): row for row in
+                    [*(previous.get("lots") or []), *(previous.get("gone_lots") or [])]
                     if row.get("lot_id") is not None
                 }
+                active_rows_for_enrichment = store.active_lots(priced_only=False)
+                active_ids_for_enrichment = {str(row.get("lot_id")) for row in active_rows_for_enrichment}
+                missing_rows_for_enrichment = []
+                for old_row in previous.get("lots") or []:
+                    old_id = str(old_row.get("lot_id") or "")
+                    if not old_id or old_id in active_ids_for_enrichment or not old_row.get("active", True):
+                        continue
+                    missing = dict(old_row)
+                    missing["active"] = True
+                    old_detail = old_row.get("gift_details") if isinstance(old_row.get("gift_details"), dict) else {}
+                    checked = parse_ts(old_detail.get("checked_at"))
+                    missing["_force_detail_check"] = not old_detail.get("gift_id") and (
+                        checked is None or (now_utc() - checked) >= timedelta(days=7))
+                    missing_rows_for_enrichment.append(missing)
+
+                # Older disappeared lots without a discovered gift page are retried weekly,
+                # not on every poll. All disappeared rows are prioritised before active ones.
+                pending_gone_details = []
+                for old_row in previous.get("gone_lots") or []:
+                    old_detail = old_row.get("gift_details") if isinstance(old_row.get("gift_details"), dict) else {}
+                    checked = parse_ts(old_detail.get("checked_at"))
+                    if (not old_detail.get("gift_id")
+                            and (checked is None or (now_utc() - checked) >= timedelta(days=7))):
+                        pending = dict(old_row)
+                        pending["active"] = True
+                        pending["_force_detail_check"] = True
+                        pending_gone_details.append(pending)
+
+                detail_candidates = missing_rows_for_enrichment + pending_gone_details + active_rows_for_enrichment
                 try:
                     details_result = run_gift_detail_crawl(
-                        browser, config, store.active_lots(priced_only=False), old_detail_index,
+                        browser, config, detail_candidates, old_detail_index,
                         LOG, limit=args.detail_limit, max_age_days=60,
                     )
                 except Exception as detail_error:
-                    # Detail parsing is enrichment only: never discard a complete catalog snapshot
-                    # because one optional lot page changed its markup or failed to render.
                     LOG.warning("gift detail pass skipped: %s", type(detail_error).__name__)
                     details_result = {"details": {}, "status": "error", "pages": 0,
                                       "message": "Дополнительный анализ карточек не удался; основной каталог сохранён."}
+
+                # Build a small queue of unique gift pages. A vanished market lot forces a
+                # history check; otherwise recently checked instances stay cached.
+                detail_updates = details_result.get("details") or {}
+                instance_candidates = []
+                for row in active_rows_for_enrichment:
+                    lot_id = str(row.get("lot_id") or "")
+                    old_row = old_detail_index.get(lot_id) or {}
+                    details = detail_updates.get(lot_id) or old_row.get("gift_details") or {}
+                    if details.get("gift_id"):
+                        instance_candidates.append({
+                            **row, "gift_details": details,
+                            "gift_instance": old_row.get("gift_instance") or {},
+                        })
+                for row in missing_rows_for_enrichment:
+                    lot_id = str(row.get("lot_id") or "")
+                    old_row = old_detail_index.get(lot_id) or row
+                    details = detail_updates.get(lot_id) or old_row.get("gift_details") or {}
+                    if details.get("gift_id"):
+                        instance_candidates.append({
+                            **row, "gift_details": details,
+                            "gift_instance": old_row.get("gift_instance") or {},
+                            "_force_history_check": True,
+                        })
+                for row in previous.get("gone_lots") or []:
+                    lot_id = str(row.get("lot_id") or "")
+                    details = detail_updates.get(lot_id) or row.get("gift_details") or {}
+                    if details.get("gift_id"):
+                        instance_candidates.append({
+                            **row, "gift_details": details,
+                            "gift_instance": row.get("gift_instance") or {},
+                            "_force_history_check": row.get("disappearance_status") in
+                                ("pending_history", "history_baseline"),
+                        })
+                if details_result.get("status") in ("blocked", "login", "network_error", "server_error", "wrong_host"):
+                    # A block, login page, or source/network failure ends ALL optional Huevo
+                    # page work for this run; do not immediately retry the same broken session.
+                    instance_result = {
+                        "instances": {}, "status": details_result.get("status"), "pages": 0,
+                        "http_status": details_result.get("http_status"),
+                        "retry_after": details_result.get("retry_after"),
+                        "message": "Очередь истории не запускалась после ошибки чтения карточки лота.",
+                    }
+                else:
+                    try:
+                        instance_result = run_gift_instance_crawl(
+                            browser, config, instance_candidates, LOG,
+                            limit=args.instance_limit, max_age_days=30,
+                        )
+                    except Exception as instance_error:
+                        LOG.warning("gift instance history pass skipped: %s", type(instance_error).__name__)
+                        instance_result = {"instances": {}, "status": "error", "pages": 0,
+                                           "message": "Проверка истории экземпляров не удалась; рыночный снимок сохранён."}
         except Exception as exc:
             LOG.error("collector failed: %s", type(exc).__name__)
             result = None
@@ -334,12 +424,16 @@ def main(argv=None):
             print(f"Snapshot not updated: {status}: {message}", file=sys.stderr)
             return 2
 
-        # A complete catalog pass clears prior cooldown, unless the optional detail crawl itself hit a block.
-        if details_result.get("status") == "blocked":
-            detail_pause = max(cooldown_hours * 3600, int(details_result.get("retry_after") or 0))
+        # A complete market pass is publishable even if an optional enrichment pass is blocked.
+        # Persist the cooldown and stop asking Huevo for more detail/history pages.
+        blocked_enrichment = (details_result.get("status") == "blocked" or
+                              instance_result.get("status") == "blocked")
+        if blocked_enrichment:
+            blocked_result = details_result if details_result.get("status") == "blocked" else instance_result
+            detail_pause = max(cooldown_hours * 3600, int(blocked_result.get("retry_after") or 0))
             save_state({"blocked_until": iso(now_utc() + timedelta(seconds=detail_pause)),
-                        "http_status": details_result.get("http_status"), "checked_at": iso(now_utc()),
-                        "source": "gift_detail"})
+                        "http_status": blocked_result.get("http_status"), "checked_at": iso(now_utc()),
+                        "source": "gift_instance" if blocked_result is instance_result else "gift_detail"})
         else:
             save_state({})
         observed_at = utcnow()
@@ -348,7 +442,13 @@ def main(argv=None):
                           if isinstance(r.get("price"), (int, float)) and r["price"] > 0]
         summary = market_summary(current_prices)
         old_lots = previous.get("lots") or []
-        old_by_id = {str(row.get("lot_id")): row for row in old_lots if row.get("lot_id") is not None}
+        old_by_id = {
+            str(row.get("lot_id")): row for row in (previous.get("gone_lots") or [])
+            if row.get("lot_id") is not None
+        }
+        old_by_id.update({
+            str(row.get("lot_id")): row for row in old_lots if row.get("lot_id") is not None
+        })
         new_details = details_result.get("details") or {}
         lots = [snapshot_lot(row, old_by_id, observed_at, new_details.get(str(row.get("lot_id"))))
                 for row in current_rows]
@@ -378,7 +478,11 @@ def main(argv=None):
             return 2
 
         gone_by_id = {}
-        gone_fields = ("lot_id", "title", "serial", "rarity", "price", "status", "image_url", "lot_url", "first_seen", "last_seen", "active")
+        gone_fields = (
+            "lot_id", "title", "serial", "rarity", "price", "status", "image_url",
+            "lot_url", "first_seen", "last_seen", "active", "gift_details", "gift_instance",
+            "disappearance_status", "disappeared_at", "history_checked_at",
+        )
         for row in previous.get("gone_lots") or []:
             if row.get("lot_id") is not None:
                 gone_by_id[str(row["lot_id"])] = {key: row.get(key) for key in gone_fields}
@@ -388,11 +492,72 @@ def main(argv=None):
                 gone = {key: row.get(key) for key in gone_fields}
                 gone["active"] = False
                 gone["status"] = "Не найден в последнем полном проходе"
+                gone["disappeared_at"] = observed_at
+                gone["disappearance_status"] = "pending_history"
+                gone["history_checked_at"] = None
+                if new_details.get(lot_id):
+                    gone["gift_details"] = new_details[lot_id]
                 gone_by_id[lot_id] = gone
-        # "Not found" is not proof of a sale; forget such lots after the retention window.
+
+        # A just-disappeared item is checked even if other market pages remain cached.
+        for lot_id, row in list(gone_by_id.items()):
+            if lot_id in current_ids:
+                # The exact market listing has returned; keep its lifetime history on the
+                # active row and remove the stale gone-state copy.
+                gone_by_id.pop(lot_id, None)
+                continue
+            if new_details.get(lot_id):
+                row["gift_details"] = new_details[lot_id]
         keep_after = now_utc() - timedelta(hours=retention_hours())
         gone_lots = [row for row in gone_by_id.values()
                      if is_recent(row.get("last_seen"), keep_after)][-5000:]
+
+        # Merge newly fetched /gift/<id> pages into both active and gone market rows.
+        fetched_instances = instance_result.get("instances") or {}
+        catalog_events = list(previous.get("catalog_events") or [])
+        known_catalog_event_ids = {str(item.get("event_id")) for item in catalog_events if item.get("event_id")}
+        newly_detected_events = []
+
+        def apply_instance(row, is_gone=False):
+            details = row.get("gift_details") if isinstance(row.get("gift_details"), dict) else {}
+            gift_id = str(details.get("gift_id") or "")
+            if not gift_id:
+                return
+            old_instance = row.get("gift_instance") if isinstance(row.get("gift_instance"), dict) else {}
+            fresh_instance = fetched_instances.get(gift_id)
+            merged = merge_instance_record(old_instance, fresh_instance) if fresh_instance else old_instance
+            if merged:
+                row["gift_instance"] = merged
+            if fresh_instance and fresh_instance.get("history_found"):
+                row["history_checked_at"] = fresh_instance.get("checked_at")
+            if is_gone and fresh_instance and fresh_instance.get("history_found"):
+                row["disappearance_status"] = classify_disappearance(old_instance, merged)
+            elif is_gone and fresh_instance and not fresh_instance.get("history_found"):
+                # A page without a recognisable history block is not an empty history.
+                row["disappearance_status"] = row.get("disappearance_status") or "pending_history"
+            elif is_gone and not row.get("disappearance_status"):
+                row["disappearance_status"] = "pending_history"
+
+            # The first history read is a baseline, not a newly observed market event.
+            if fresh_instance and fresh_instance.get("history_found") and old_instance.get("history_found"):
+                for event in merged.get("new_events") or []:
+                    record = history_event_record(row, event, observed_at)
+                    if record and record["event_id"] not in known_catalog_event_ids:
+                        known_catalog_event_ids.add(record["event_id"])
+                        newly_detected_events.append(record)
+            if is_gone and row.get("disappearance_status") == "delisted":
+                record = delisted_event_record(row, observed_at)
+                if record and record["event_id"] not in known_catalog_event_ids:
+                    known_catalog_event_ids.add(record["event_id"])
+                    newly_detected_events.append(record)
+
+        for row in lots:
+            apply_instance(row, is_gone=False)
+        for row in gone_lots:
+            apply_instance(row, is_gone=True)
+
+        catalog_events.extend(newly_detected_events)
+        catalog_events = catalog_events[-1000:]
 
         changes = compare([l for l in old_lots if l.get("active", True)], lots) if old_lots else None
         if changes:
@@ -445,10 +610,18 @@ def main(argv=None):
                     "updated": len(new_details),
                     "message": details_result.get("message", ""),
                 },
+                "gift_instances": {
+                    "status": instance_result.get("status", "skipped"),
+                    "pages": instance_result.get("pages", 0),
+                    "updated": len(instance_result.get("instances") or {}),
+                    "message": instance_result.get("message", ""),
+                    "limit": args.instance_limit,
+                },
             },
             "stats": {"n_total": len(lots), **summary},
             "lots": lots,
             "gone_lots": gone_lots,
+            "catalog_events": catalog_events,
             "snapshots": snapshots,
             "price_bins": price_bins(current_prices),
             "facets": facets,
