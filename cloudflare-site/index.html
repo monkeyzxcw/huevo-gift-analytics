@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://huevo.su; style-src 'self'; img-src 'self' https://huevo.su https://huevo.departament.site data:; connect-src 'self' https://huevo.su https://*.huevo.su; base-uri 'none'; form-action 'none'">
 <title>AMNYAM MODE — Huevo Gift Intelligence</title>
-<link rel="stylesheet" href="./styles.css?v=amnyam-market-intel-v10">
+<link rel="stylesheet" href="./styles.css?v=amnyam-huevo-auth-v12">
 </head>
 <body>
 <a class="skip" href="#catalog">К каталогу</a>
@@ -28,6 +28,7 @@
     </div>
 
     <span class="badge" role="status"><i class="dot" id="stateDot"></i><span id="stateText">Загружаю данные…</span></span>
+    <button class="btn secondary account-trigger" id="accountButton" type="button">Войти в профиль</button>
     <a class="btn secondary" href="https://huevo.su/market/gifts" target="_blank" rel="noopener noreferrer">Войти в рынок ↗</a>
   </div>
 </header>
@@ -253,6 +254,30 @@
   <div class="palette-footer"><span>↑ ↓ навигация · ENTER открыть · ESC закрыть</span><span>AMNYAM COMMAND</span></div>
 </dialog>
 
+<dialog id="accountDialog" class="account-dialog" aria-labelledby="accountTitle">
+  <div class="dlg-head"><div><span class="section-index">/ HUEVO IDENTITY</span><h3 id="accountTitle">Твой профиль huEVO</h3></div><button class="btn secondary" id="accountClose" type="button" aria-label="Закрыть">✕</button></div>
+  <p class="account-intro">AMNYAM использует твой аккаунт социальной сети huEVO. Отдельная регистрация, логин и пароль не нужны.</p>
+  <p class="account-status" id="accountStatus" role="status" aria-live="polite"></p>
+  <div id="accountGuest">
+    <div class="account-huevo-guest">
+      <div class="account-huevo-mark" aria-hidden="true">H</div>
+      <h4>Вход через huEVO</h4>
+      <p>Открой AMNYAM MODE из huEVO. Подписанные данные игрока будут проверены на сервере, после чего избранное и настройки привяжутся к твоему huEVO ID.</p>
+      <small>В обычном браузере без запуска из huEVO все рыночные вкладки доступны, но персональная синхронизация не включена.</small>
+    </div>
+  </div>
+  <div id="accountSigned" class="hide">
+    <div class="account-profile-card">
+      <span class="account-avatar-fallback" id="accountAvatarFallback" aria-hidden="true">◎</span>
+      <img class="account-avatar-image hide" id="accountAvatar" alt="" referrerpolicy="no-referrer">
+      <div><b id="accountDisplayName">Пользователь huEVO</b><small id="accountUsername">hu_user_id</small><small class="account-provider">Аккаунт подтверждён huEVO</small></div>
+      <span class="account-sync" id="accountSyncStatus">Синхронизация включена</span>
+    </div>
+    <p class="account-note">Твои избранные лоты, ценовые цели, сохранённые фильтры и настройки сохраняются отдельно от других пользователей и подтягиваются на каждом устройстве, где ты открываешь приложение через этот аккаунт huEVO.</p>
+    <p class="account-note">Звук работает в открытой вкладке. Разрешение браузерных уведомлений зависит от устройства.</p>
+  </div>
+</dialog>
+
 <dialog id="compareDialog" aria-labelledby="compareTitle"><div class="dlg-head"><h3 id="compareTitle">Сравнение лотов</h3><button class="btn secondary" id="compareClose" type="button" aria-label="Закрыть сравнение">✕</button></div><div id="compareBody"></div></dialog>
 
 <dialog id="detail" aria-labelledby="dTitle">
@@ -260,10 +285,10 @@
   <div id="dBody"></div>
 </dialog>
 
-<footer class="footer"><span>Huevo Gift Analytics · статическая версия</span><span>Данные собирает локальный сборщик на ПК владельца; блокировки источника не обходятся.</span></footer>
+<footer class="footer"><span>Huevo Gift Analytics · Cloudflare multi-user</span><span>Данные собирает локальный сборщик на ПК владельца; блокировки источника не обходятся.</span></footer>
 </main>
 <div id="ambientLayer" aria-hidden="true"></div><div id="cursorGlow" aria-hidden="true"></div>
 <div class="premium-splash" id="premiumSplash" aria-hidden="true"><div class="splash-mark">H<span>•</span></div><div class="splash-title">AMNYAM <b>MODE</b></div><div class="splash-subtitle">GIFT MARKET INTELLIGENCE</div><div class="splash-loader"><i></i></div></div>
-<script src="./app.js?v=amnyam-market-intel-v10" defer></script>
+<script src="./app.js?v=amnyam-huevo-auth-v12" defer></script>
 </body>
 </html>
