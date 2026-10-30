@@ -63,18 +63,10 @@ async function open(handler, viewport = { width: 1280, height: 900 }, options = 
   await ctx.route("http://site.test/**", async (route) => {
     const u = new URL(route.request().url());
     if (options.supportRoutes && options.supportRoutes[u.pathname]) return options.supportRoutes[u.pathname](route);
-    if (u.pathname === "/api/push/status") {
-      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
-        ok: true, authenticated: false, enabled: true, subscriptions: 0
-      }) });
-    }
     if (u.pathname === "/api/contact/status") {
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
         configured: true, available: false, can_manage: false, updated_at: null
       }) });
-    }
-    if (u.pathname === "/api/push/config") {
-      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ enabled: true, public_key: "test-public-key" }) });
     }
     if (u.pathname === "/api/support/config") {
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ enabled: false, amounts: [5000, 10000, 25000, 50000, 100000], sdk_url: "https://huevo.su/static/js/huevo-apps-v1.js", origins: ["huevo.su", "huevo.departament.site"] }) });
@@ -768,62 +760,7 @@ test("collector aggregate detail count is not shown as per-lot analysis when the
   await browser.close();
 });
 
-test("embedded Push shows a signed standalone link when Chrome blocks the popup", async () => {
-  const launchQuery = "?hu_user_id=14188&hu_app_id=77&hu_hash=test-signature&hu_ts=" + Math.floor(Date.now() / 1000) + "&hu_mode=live";
-  const account = {
-    ok: true, authenticated: true,
-    user: { id: "qa-user", hu_user_id: "14188", username: "monkeyzxcw", display_name: "AMNYAM QA", avatar_url: "" },
-    profile: { favorites: [], targets: {}, alertedTargets: [], savedFilters: [],
-      preferences: { alertSound: false, appearance: { background: "cosmic", mascot: "omnom", motion: "normal", glass: true }, seasonTheme: "default" } },
-    updated_at: NOW
-  };
-  const { browser, page, problems } = await open(serve(dataV2()), { width: 1280, height: 900 }, {
-    path: "frame-host",
-    supportRoutes: {
-      "/frame-host": (route) => route.fulfill({
-        status: 200, contentType: "text/html",
-        body: '<!doctype html><html><body><iframe id="amnyam-frame" title="AMNYAM" src="/' + launchQuery + '"></iframe></body></html>'
-      }),
-      "/api/auth/launch": (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(account) })
-    },
-    initScript: () => {
-      Object.defineProperty(window, "isSecureContext", { configurable: true, value: true });
-      Object.defineProperty(window, "PushManager", { configurable: true, value: function PushManager() {} });
-      Object.defineProperty(navigator, "serviceWorker", { configurable: true, value: {
-        ready: Promise.resolve({}), getRegistration: async () => null
-      }});
-      class FakeNotification {
-        static permission = "default";
-        static async requestPermission() { return "granted"; }
-      }
-      Object.defineProperty(window, "Notification", { configurable: true, value: FakeNotification });
-      window.open = () => null;
-    }
-  });
-  const frame = await page.waitForFunction(() => {
-    return Array.from(window.frames).some((item) => {
-      try { return item.location.search.includes("hu_user_id=14188"); } catch (_) { return false; }
-    });
-  }).then(() => page.frames().find((item) => item.url().includes("hu_user_id=14188")));
-  assert.ok(frame, "signed Huevo frame should load");
-  await frame.waitForSelector("#content:not(.hide)");
-  await frame.waitForFunction(() => {
-    const button = document.getElementById("enablePushNotifications");
-    return button && !button.disabled && document.getElementById("accountButton")?.textContent.includes("AMNYAM QA");
-  });
-  await frame.click('#mainNav [data-view="favorites"]');
-  await frame.click("#enablePushNotifications");
-  await frame.waitForFunction(() => {
-    const link = document.getElementById("pushStandaloneLink");
-    return link && !link.hidden && link.href.includes("hu_user_id=14188");
-  });
-  assert.match(await frame.textContent("#pushStatus"), /Chrome заблокировал новое окно/);
-  assert.match(await frame.locator("#pushStandaloneLink").getAttribute("href"), /hu_hash=test-signature/);
-  assert.deepEqual(problems, []);
-  await browser.close();
-});
-
-test("desktop notification fires when a watched lot crosses its target during live polling", async () => {
+test("target price crossing plays sound only without browser notifications", async () => {
   const initial = dataV2();
   initial.lots[0].price = 180;
   let latest = initial;
@@ -832,33 +769,34 @@ test("desktop notification fires when a watched lot crosses its target during li
   }), { width: 1280, height: 900 }, {
     initScript: () => {
       localStorage.setItem("amnyam.targets", JSON.stringify({ "1000": 120 }));
-      window.__notifications = [];
-      class FakeNotification {
-        static permission = "granted";
-        constructor(title, options) {
-          this.title = title;
-          this.options = options;
-          window.__notifications.push({ title, options });
+      localStorage.setItem("amnyam.alertSound.v1", "on");
+      window.__soundNotes = 0;
+      class FakeAudioContext {
+        constructor() { this.state = "running"; this.currentTime = 0; this.destination = {}; }
+        createOscillator() {
+          return { type: "", frequency: { setValueAtTime() {} }, connect() {},
+            start() { window.__soundNotes += 1; }, stop() {} };
         }
-        close() {}
+        createGain() {
+          return { gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {} };
+        }
       }
-      Object.defineProperty(window, "Notification", { configurable: true, value: FakeNotification });
+      Object.defineProperty(window, "AudioContext", { configurable: true, value: FakeAudioContext });
     }
   });
   await page.waitForSelector("#content:not(.hide)");
-  assert.equal(await page.evaluate(() => window.__notifications.length), 0, "no alert while the ask is above the target");
+  assert.equal(await page.locator("#enablePushNotifications, #enableNotifications").count(), 0);
+  assert.equal(await page.locator("#watchAlert").count(), 0);
+  assert.equal(await page.evaluate(() => window.__soundNotes), 0, "no sound before the ask reaches the target");
   latest = JSON.parse(JSON.stringify(latest));
   latest.lots[0].price = 100;
-  await page.waitForFunction(() => window.__notifications && window.__notifications.length === 1, { timeout: 10000 });
-  const notification = await page.evaluate(() => window.__notifications[0]);
-  assert.match(notification.title, /AMNYAM/);
-  assert.match(notification.options.body, /достиг целевой цены/);
-  assert.equal(notification.options.tag, "amnyam-target-1000");
+  await page.waitForFunction(() => window.__soundNotes === 5, { timeout: 10000 });
+  assert.equal(await page.locator("#watchAlert, #pushStatus, #enablePushNotifications").count(), 0);
   assert.deepEqual(problems, []);
   await browser.close();
 });
 
-test("help tab documents main workflows and desktop notification limitations", async () => {
+test("help tab documents market workflows and sound-only target alerts", async () => {
   const { browser, page, problems } = await open(serve(dataV2()));
   await page.waitForSelector("#content:not(.hide)");
   await page.click('#mainNav [data-view="help"]');
@@ -866,11 +804,17 @@ test("help tab documents main workflows and desktop notification limitations", a
   const guide = await page.textContent("#helpPanel");
   assert.match(guide, /Маркет/);
   assert.match(guide, /цена-цель/);
-  assert.match(guide, /push на рабочий стол/);
+  assert.match(guide, /Звуковой сигнал AMNYAM/);
+  assert.match(guide, /Фоновых браузерных или системных уведомлений больше нет/);
+  assert.doesNotMatch(guide, /Подключить push|Проверить push|серверный push/i);
   assert.match(guide, /Cloudflare Worker/);
   assert.match(guide, /HuevoDualScan/);
   assert.ok(guide.includes("gifts/{id}"));
   assert.match(guide, /неоднозначна/);
+  const appSource = fs.readFileSync(path.join(SITE, "app.js"), "utf8");
+  assert.equal(appSource.includes("Notification"), false);
+  assert.equal(appSource.includes("PushManager"), false);
+  assert.equal(appSource.includes("/api/push"), false);
   assert.deepEqual(problems, []);
   await browser.close();
 });

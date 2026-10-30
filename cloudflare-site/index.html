@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://huevo.su; style-src 'self'; img-src 'self' https://huevo.su https://huevo.departament.site data:; connect-src 'self' https://huevo.su https://*.huevo.su; base-uri 'none'; form-action 'none'">
 <title>AMNYAM MODE — Huevo Gift Intelligence</title>
-<link rel="stylesheet" href="./styles.css?v=amnyam-server-push-v16">
+<link rel="stylesheet" href="./styles.css?v=amnyam-sound-only-v17">
 </head>
 <body>
 <a class="skip" href="#catalog">К каталогу</a>
@@ -87,7 +87,6 @@
 </section>
 
 <div class="notice hide" id="notice" role="alert"></div>
-<div class="watch-alert hide" id="watchAlert" role="status" aria-live="polite"><span class="watch-alert-mark" aria-hidden="true">↗</span><span id="watchAlertText"></span><a class="btn secondary" id="watchAlertOpen" href="https://huevo.su/market/gifts" target="_blank" rel="noopener noreferrer">Открыть лот ↗</a><button class="btn secondary" id="closeWatchAlert" type="button" aria-label="Закрыть уведомление">✕</button></div>
 
 <section class="panel appearance-panel view-hidden" id="appearancePanel" data-view-section="appearance" aria-labelledby="appearanceTitle">
   <div class="section-heading"><div><span class="section-index">/ PERSONAL STYLE</span><h2 id="appearanceTitle">Внешний вид</h2><p>Настрой атмосферу AMNYAM MODE. Декоративные эффекты не перекрывают каталог и кнопки покупки.</p></div><span class="view-stat">LOCAL SETTINGS</span></div>
@@ -155,7 +154,7 @@
     <div class="deal-hero-stamp">AMNYAM<br>SELECT</div>
     <div class="deal-hero-art" id="belowBestArt"><img id="belowBestImage" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer"><span aria-hidden="true">🎁</span></div>
     <div class="deal-hero-content"><span class="eyebrow">BEST DISCOUNT VS COMPARABLES</span><h3 id="belowBestTitle">Сканируем каталог…</h3><strong id="belowBestPrice">—</strong><p id="belowBestMeta">Сравнение появится после загрузки рынка.</p><a id="belowBestOpen" class="btn" href="https://huevo.su/market/gifts" target="_blank" rel="noopener noreferrer">Открыть лот ↗</a>
-      <div class="best-target-tools"><label class="f"><span>Желаемая цена</span><input class="input target-input" id="belowBestTarget" type="number" min="1" max="1000000000000000" step="1" inputmode="numeric" placeholder="Цена-цель"></label><button class="btn secondary" id="saveBelowBestTarget" type="button">Уведомить на этой цене</button><button class="btn secondary" id="belowBestMinus10" type="button">Цель −10%</button></div>
+      <div class="best-target-tools"><label class="f"><span>Желаемая цена</span><input class="input target-input" id="belowBestTarget" type="number" min="1" max="1000000000000000" step="1" inputmode="numeric" placeholder="Цена-цель"></label><button class="btn secondary" id="saveBelowBestTarget" type="button">Сохранить цену-цель</button><button class="btn secondary" id="belowBestMinus10" type="button">Цель −10%</button></div>
     </div>
   </article>
   <div class="deal-list-toolbar"><span class="muted">Цена лота, медиана похожих предложений, разница, исторический минимум и цена-цель — прямо в карточке.</span><label class="f"><span>Сортировать</span><select class="select" id="dealSort"><option value="discount">Самый большой дисконт</option><option value="price">Самая низкая цена</option><option value="savings">Максимальная разница с медианой</option><option value="sample">Больше аналогов</option><option value="historical">Ближе к историческому минимуму</option></select></label></div>
@@ -170,23 +169,13 @@
 
 <section class="panel" id="favoritesPanel" data-view-section="favorites">
   <div class="section-heading"><div><span class="section-index">/ PERSONAL WATCHLIST</span><h2>Избранное</h2><p>Задай целевую цену у любого лота. В профиле huEVO цели синхронизируются с аккаунтом; без входа они остаются локальными.</p></div>
-    <div class="watch-header-actions"><span class="view-stat" id="favoritesCount">0 лотов</span><button class="btn secondary" id="enableNotifications" type="button">Включить уведомления</button></div>
+    <div class="watch-header-actions"><span class="view-stat" id="favoritesCount">0 лотов</span></div>
   </div>
-  <p class="watch-help" id="notificationHint">Обычные уведомления работают только пока открыта страница. Для оповещений после закрытия вкладки подключи серверный push в аккаунте huEVO ниже.</p>
-  <div class="push-controls" aria-label="Серверные push-уведомления">
-    <div class="push-status" id="pushStatus" role="status" aria-live="polite">Проверяем подключение push…</div>
-    <div class="push-actions">
-      <button class="btn" id="enablePushNotifications" type="button">Подключить push на рабочий стол</button>
-      <a class="btn secondary" id="pushStandaloneLink" href="#" target="_blank" rel="noopener noreferrer" hidden>Открыть AMNYAM в отдельной вкладке</a>
-      <button class="btn secondary" id="testPushNotifications" type="button" disabled>Проверить push</button>
-      <button class="btn secondary" id="disablePushNotifications" type="button" disabled>Отключить push</button>
-    </div>
-    <small>Push привязан к профилю huEVO и этому браузеру. HuevoDualScan должен продолжать передавать свежие цены независимо от открытой вкладки AMNYAM.</small>
-  </div>
-  <div class="alert-sound-controls" aria-label="Звуковые сигналы">
+  <p class="watch-help" id="watchHelp">Задай цену-цель и включи звук. При достижении цели мелодия прозвучит в открытой вкладке AMNYAM.</p>
+  <div class="alert-sound-controls" aria-label="Звуковой сигнал">
     <button class="btn secondary" id="toggleAlertSound" type="button" aria-pressed="false">Звук: выключен</button>
     <button class="btn secondary" id="testAlertSound" type="button">Проверить звук</button>
-    <small id="alertSoundHint">Звуковые сигналы отключены. Уведомления браузера работают отдельно.</small>
+    <small id="alertSoundHint">Звуковые сигналы отключены. Включи звук, чтобы слышать мелодию при достижении цены-цели.</small>
   </div>
   <ol class="deal-list" id="favoritesList"></ol>
 </section>
@@ -194,13 +183,13 @@
 <section class="panel help-panel" id="helpPanel" data-view-section="help" aria-labelledby="helpTitle">
   <div class="section-heading">
     <div><span class="section-index">/ AMNYAM FIELD MANUAL</span><h2 id="helpTitle">Инструкция по AMNYAM MODE</h2>
-      <p>Подробный справочник по разделам, мониторингу, push-уведомлениям и проверке типичных проблем.</p>
+      <p>Подробный справочник по разделам, мониторингу и звуковым сигналам.</p>
     </div>
     <span class="view-stat">USER GUIDE · 01</span>
   </div>
   <div class="help-intro">
     <div class="help-intro-mark" aria-hidden="true">?</div>
-    <div><b>С чего начать</b><p>Открой «Маркет», найди нужный подарок, добавь интересный лот в избранное и задай цену-цель. AMNYAM будет сравнивать новые данные с твоим условием и сообщит, когда цена станет подходящей.</p></div>
+    <div><b>С чего начать</b><p>Открой «Маркет», найди нужный подарок, добавь интересный лот в избранное и задай цену-цель. AMNYAM будет сравнивать новые данные с твоим условием и проиграет мелодию, когда цена станет подходящей.</p></div>
   </div>
   <div class="help-grid">
     <article class="help-card">
@@ -226,18 +215,17 @@
     </article>
     <article class="help-card">
       <span class="help-number">05 / МОНИТОРИНГ</span><h3>Избранное и цена-цель</h3>
-      <ul><li>Нажми ☆ у лота, чтобы добавить его в «Избранное».</li><li>Укажи целую цену, при которой хочешь получить сигнал.</li><li>Когда цена станет равна цели или ниже, AMNYAM покажет сигнал. При подключённом серверном push сообщение придёт и после закрытия вкладки; локальный звук работает только в открытой странице.</li><li>Если цена снова поднимется выше цели, условие сбросится и сможет сработать повторно при следующем снижении.</li></ul>
+      <ul><li>Нажми ☆ у лота, чтобы добавить его в «Избранное».</li><li>Укажи целую цену, при которой хочешь получить сигнал.</li><li>Когда цена станет равна цели или ниже, AMNYAM проиграет мелодию, если звук включён и вкладка приложения открыта.</li><li>Если цена снова поднимется выше цели, условие сбросится и сможет сработать повторно при следующем снижении.</li></ul>
     </article>
     <article class="help-card">
-      <span class="help-number">06 / СИГНАЛЫ</span><h3>Звук и push на рабочий стол</h3>
+      <span class="help-number">06 / ЗВУК</span><h3>Звуковой сигнал AMNYAM</h3>
       <ol>
-        <li>Открой AMNYAM из huEVO и дождись, пока вверху появится подключённый профиль. Push привязан к аккаунту huEVO — одного локального профиля недостаточно.</li>
-        <li>В «Избранном» нажми «Подключить push на рабочий стол» и подтверди разрешение Chrome/Edge. Это создаст подписку браузера и сохранит её на сервере.</li>
-        <li>Убедись, что статус показывает «Серверный push подключён» и число устройств больше нуля.</li>
-        <li>Нажми «Проверить push». Тест должен прийти как системная карточка уведомления от AMNYAM.</li>
-        <li>После успешного теста вкладку приложения можно закрыть. Браузер и системные уведомления должны оставаться разрешёнными.</li>
+        <li>В «Избранном» включи переключатель «Звук».</li>
+        <li>Нажми «Проверить звук», чтобы убедиться, что браузер воспроизводит мелодию.</li>
+        <li>Добавь лот в избранное и задай цену-цель. При первом достижении цели прозвучит фирменная пятинотная мелодия.</li>
+        <li>Если цена снова поднимется выше цели, условие сбросится. При следующем снижении до цели звук сработает повторно.</li>
       </ol>
-      <p class="help-note">Звук AMNYAM воспроизводится только открытой страницей. Push отправляется Cloudflare Worker независимо от вкладки, когда сборщик присылает новые цены. HuevoDualScan должен продолжать работать и оставаться авторизованным в обоих окнах Chrome. Полное завершение браузера, выключение компьютера, сон системы или режим «Не беспокоить» могут задержать либо скрыть доставку.</p>
+      <p class="help-note">Звук работает только в открытой вкладке AMNYAM. Для получения свежих цен должен работать HuevoDualScan и оставаться авторизованным в обоих окнах Chrome.</p>
     </article>
     <article class="help-card">
       <span class="help-number">07 / АНАЛИТИКА</span><h3>Данные</h3>
@@ -250,19 +238,19 @@
       <p>Во вкладке «Внешний вид» можно менять фон, маскота, анимации и стеклянные карточки. Эти эффекты не должны мешать работе с каталогом.</p>
     </article>
     <article class="help-card">
-      <span class="help-number">10 / ДИАГНОСТИКА</span><h3>Почему push не пришёл</h3>
+      <span class="help-number">10 / ДИАГНОСТИКА</span><h3>Почему не звучит мелодия</h3>
       <ul>
-        <li><b>«Сначала войди через huEVO»</b> — открой приложение из huEVO и проверь имя профиля в верхней панели. Анонимные локальные цели серверу недоступны.</li>
-        <li><b>«Разрешение запрещено»</b> — нажми значок слева от адреса сайта → Настройки сайта → Уведомления → Разрешить. После изменения обнови страницу.</li>
-        <li><b>Тест отправлен, но карточки нет</b> — проверь уведомления Windows: Параметры → Система → Уведомления → включить уведомления и Google Chrome/ Microsoft Edge. Отключи «Не беспокоить» и проверь фокус/концентрацию.</li>
-        <li><b>Тест приходит, а цена-цель — нет</b> — проверь, что цель сохранена в Избранном, сборщик работает, а лот снова попадает в актуальные данные. Первая страница обновляется примерно каждые 3 секунды, полный обход — примерно каждые 5 минут.</li>
-        <li><b>Push не активируется внутри окна huEVO</b> — браузер может ограничивать разрешения в стороннем iframe. Открой AMNYAM отдельной вкладкой из подписанного запуска huEVO и повтори подключение.</li>
+        <li><b>Звук выключен</b> — включи переключатель «Звук» в блоке «Избранное».</li>
+        <li><b>Тестовая мелодия не звучит</b> — нажми «Проверить звук» после взаимодействия со страницей и проверь громкость вкладки/системы.</li>
+        <li><b>Цена достигла цели, но звука нет</b> — проверь, что целевая цена сохранена, звук включён и вкладка AMNYAM открыта.</li>
+        <li><b>Цена не обновляется</b> — проверь, что HuevoDualScan запущен и оба окна Chrome остаются авторизованными. Первая страница обновляется примерно каждые 3 секунды, полный обход — примерно каждые 5 минут.</li>
       </ul>
-      <p class="help-note">Закрытие только вкладки AMNYAM не должно останавливать push. Полный выход из браузера, выключенный компьютер, режим энергосбережения или системный режим «Не беспокоить» могут задержать или скрыть уведомление. Если остановлен HuevoDualScan, серверу неоткуда узнать, что цена изменилась.</p>
+      <p class="help-note">Сигналы намеренно воспроизводятся только в открытой вкладке AMNYAM. Фоновых браузерных или системных уведомлений больше нет.</p>
     </article>
     <article class="help-card">
       <span class="help-number">09 / ОБНОВЛЕНИЯ</span><h3>Откуда берутся данные</h3>
       <p>AMNYAM показывает сведения, поступающие от сборщика HuevoDualScan. Первая страница маркета обновляется чаще, полный обход каталога и отдельный разбор карточек выполняются своими очередями.</p>
+      <p>Cloudflare Worker обслуживает API AMNYAM и принимает свежие рыночные данные. Серверная и браузерная доставка уведомлений не используется.</p>
       <p>Сборщик работает в двух видимых окнах Chrome с ручным входом в huEVO. Если окно сборщика закрыто, вход потерян или источник ограничил доступ, свежие данные могут перестать поступать. Обновление сайта само по себе не запускает сбор Huevo.</p>
     </article>
   </div>
@@ -387,7 +375,7 @@
       <span class="account-sync" id="accountSyncStatus">Синхронизация включена</span>
     </div>
     <p class="account-note">Твои избранные лоты, ценовые цели, сохранённые фильтры и настройки сохраняются отдельно от других пользователей и подтягиваются на каждом устройстве, где ты открываешь приложение через этот аккаунт huEVO.</p>
-    <p class="account-note">Звук работает в открытой вкладке. Разрешение браузерных уведомлений зависит от устройства.</p>
+    <p class="account-note">Звуковой сигнал воспроизводится только в открытой вкладке AMNYAM.</p>
   </div>
 </dialog>
 
@@ -402,6 +390,6 @@
 </main>
 <div id="ambientLayer" aria-hidden="true"></div><div id="cursorGlow" aria-hidden="true"></div>
 <div class="premium-splash" id="premiumSplash" aria-hidden="true"><div class="splash-mark">H<span>•</span></div><div class="splash-title">AMNYAM <b>MODE</b></div><div class="splash-subtitle">GIFT MARKET INTELLIGENCE</div><div class="splash-loader"><i></i></div></div>
-<script src="./app.js?v=amnyam-server-push-v16" defer></script>
+<script src="./app.js?v=amnyam-sound-only-v17" defer></script>
 </body>
 </html>
