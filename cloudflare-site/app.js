@@ -920,13 +920,18 @@
   function robustOfferReference(prices) {
     const values = (prices || []).filter(v => isNum(v) && v > 0).slice().sort((a,b) => a-b);
     if (values.length < 5) return null;
+    for (let i=3; i<values.length-2; i++) {
+      const ratio = values[i-1] > 0 ? values[i]/values[i-1] : 0;
+      if (ratio >= 2.5) return { reference:null, sample_size:values.length, raw_size:values.length,
+        excluded:0, p25:quantile(values,.25), p75:quantile(values,.75), dispersion:ratio, ambiguous:true };
+    }
     const q1 = quantile(values, .25), q3 = quantile(values, .75), iqr = q3 - q1;
     const core = iqr > 0 ? values.filter(v => v >= q1 - 1.5 * iqr && v <= q3 + 1.5 * iqr) : values;
     if (core.length < 5) return null;
     const mid = median(core), low = quantile(core, .25), high = quantile(core, .75);
     const dispersion = mid > 0 ? (high - low) / mid : Infinity;
-    return { reference: mid, sample_size: core.length, raw_size: values.length,
-      excluded: values.length-core.length, p25: low, p75: high, dispersion };
+    return { reference:mid, sample_size:core.length, raw_size:values.length,
+      excluded:values.length-core.length, p25:low, p75:high, dispersion, ambiguous:false };
   }
 
   function buildDealSignals() {
@@ -955,7 +960,7 @@
       } else {
         // Asking prices are not transaction prices. Use them only when the distribution
         // has a sufficiently large, non-dispersed core; otherwise suppress the deal signal.
-        if (!offers || offers.dispersion > .65) continue;
+        if (!offers || offers.ambiguous || offers.dispersion > .65) continue;
         reference = offers.reference; basis = "active"; sampleSize = offers.sample_size;
         p25 = offers.p25; p75 = offers.p75; dispersion = offers.dispersion; excluded = offers.excluded;
       }
