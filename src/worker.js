@@ -160,21 +160,28 @@ async function ensureSupportSchema(env) {
 }
 
 async function getStorageHealth(env) {
-  if (!env.DB) return { storage_configured: false, schema_ready: false, support_schema_ready: false, ingest_enabled: Boolean(env.LIVE_INGEST_TOKEN) };
+  if (!env.DB) return {
+    storage_configured: false, schema_ready: false, support_schema_ready: false,
+    accounts_schema_ready: false, ingest_enabled: Boolean(env.LIVE_INGEST_TOKEN)
+  };
   const supportSchemaReady = await ensureSupportSchema(env);
   try {
     const result = await env.DB.prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('full_snapshot','live_page_state','live_price_history')"
+      "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('full_snapshot','live_page_state','live_price_history','user_accounts','user_sessions','user_profiles','auth_rate_limits')"
     ).all();
     const names = new Set((result.results || []).map((row) => row.name));
     return {
       storage_configured: true,
       schema_ready: names.has("full_snapshot") && names.has("live_page_state") && names.has("live_price_history"),
       support_schema_ready: supportSchemaReady,
+      accounts_schema_ready: ["user_accounts", "user_sessions", "user_profiles", "auth_rate_limits"].every((name) => names.has(name)),
       ingest_enabled: Boolean(env.LIVE_INGEST_TOKEN),
     };
   } catch (_) {
-    return { storage_configured: true, schema_ready: false, support_schema_ready: supportSchemaReady, ingest_enabled: Boolean(env.LIVE_INGEST_TOKEN) };
+    return {
+      storage_configured: true, schema_ready: false, support_schema_ready: supportSchemaReady,
+      accounts_schema_ready: false, ingest_enabled: Boolean(env.LIVE_INGEST_TOKEN)
+    };
   }
 }
 
