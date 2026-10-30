@@ -38,9 +38,9 @@ Production architecture: Cloudflare Workers + Static Assets + D1. Старые F
 - PR #40 — pending payment intent сохраняется в localStorage per huEVO user; bounded status polling, безопасная ручная перепроверка и блокировка второго intent в том же браузере.
 - PR #41 — Worker повторно использует серверный pending intent того же пользователя/режима, проверяет huEVO status и применяет детерминированный provider idempotency key для конкурентных запросов.
 - PR #42 — keyboard navigation в главном ARIA tablist (ArrowLeft/Right, Home/End).
-- Последний main commit: `375336e1fe77cf3b3dbadd622a7e1b8def3ffb34`.
-- Последний CI: https://github.com/monkeyzxcw/huevo-gift-analytics/actions/runs/41122557695 — browser suite 36/36 passed; snapshot unit suite 10 tests and data.json validation (474 lots) passed. Recheck final workflow conclusion before relying on a later commit.
-- Последний Cloudflare deploy: https://github.com/monkeyzxcw/huevo-gift-analytics/actions/runs/41122555746 — success; Worker Version ID `9aec6a50-652f-4f5e-92b4-aeb181e6160f`.
+- Последний main commit: `b3156757be451b7be93dea12dddff8b7ebafab45`. PR #44 повторно вносил те же Worker-файлы, что уже были влиты PR #41; Git tree `69e05da6a95e00b1987bafaa6e660af0bbe24eda` совпадает с уже задеплоенным commit `375336e1fe77cf3b3dbadd622a7e1b8def3ffb34`.
+- Последний CI на текущем main: https://github.com/monkeyzxcw/huevo-gift-analytics/actions/runs/41123714886 — success; browser/Worker suite 36/36 passed, snapshot suite 10/10 passed, `data.json` validated with 474 lots.
+- Последний успешный Cloudflare deploy: https://github.com/monkeyzxcw/huevo-gift-analytics/actions/runs/41122555746 — Worker Version ID `9aec6a50-652f-4f5e-92b4-aeb181e6160f`. Текущий main commit b3156757 имеет тот же Git tree, что и задеплоенный 375336e1; runtime-файлы не изменились после deploy.
 
 ## Остаточные неизвестные
 

@@ -31,7 +31,7 @@
 ## CI / deploy evidence
 
 - PR #38–#42 merged в main.
-- Последний main commit: `375336e1fe77cf3b3dbadd622a7e1b8def3ffb34`.
+- Последний main commit: `b3156757be451b7be93dea12dddff8b7ebafab45` (Git tree совпадает с задеплоенным `375336e1`).
 - CI: https://github.com/monkeyzxcw/huevo-gift-analytics/actions/runs/41122557695 — browser suite 36/36 passed; snapshot tests 10/10 and data.json validation (474 lots) passed. Verify final overall workflow conclusion for this exact SHA.
 - Cloudflare deploy: https://github.com/monkeyzxcw/huevo-gift-analytics/actions/runs/41122555746 — success; Worker version `9aec6a50-652f-4f5e-92b4-aeb181e6160f`.
 - HuevoDualScan v6 package: `py_compile -Werror` and 10/10 offline parser/history/auth tests passed. No live Huevo account/browser test was performed.
@@ -49,7 +49,7 @@
 ## Следующие инженерные задачи
 
 - D1 backup/restore test and a documented recovery procedure.
-- Worker route security contract tests: auth, CSRF/CORS, ingest body limits, malformed payloads, payment ownership/status access.
+- Worker route security contract tests: auth, CSRF/CORS, ingest body limits, malformed payloads. Payment status visibility intentionally не блокирует релиз по решению владельца.
 - Keyboard-only audit for all dialogs and command palette (main tablist navigation is fixed).
 - Visual regression / CSS deduplication and mobile checks with reduced motion.
 - Live Huevo DOM validation in both manual Chrome profiles; never substitute cookie exports.

@@ -7,8 +7,8 @@
 5. Always re-check GitHub main, current PRs, latest Actions and Cloudflare deploy before changing code.
 
 ## Current state
-- Main commit: 375336e1fe77cf3b3dbadd622a7e1b8def3ffb34.
-- PR #38–#42 merged.
+- Main commit: b3156757be451b7be93dea12dddff8b7ebafab45 (same Git tree as deployed commit 375336e1).
+- PR #38–#42 merged; PR #44 merged as a duplicate of PR #41 with no new tree changes; obsolete PR #33 closed.
 - Main E2E browser suite passed 36/36; snapshot suite passed 10 tests and validated the 474-lot snapshot.
 - Cloudflare deploy succeeded; Worker version 9aec6a50-652f-4f5e-92b4-aeb181e6160f.
 - HuevoDualScan v6 is a separate local Windows ZIP, py_compile -Werror and 10 offline tests passed.
