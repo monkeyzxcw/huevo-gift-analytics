@@ -46,18 +46,20 @@ function dataV2(extra = {}) {
   };
 }
 
-async function open(handler, viewport = { width: 1280, height: 900 }) {
+async function open(handler, viewport = { width: 1280, height: 900 }, options = {}) {
   const browser = await chromium.launch();
   OPEN_BROWSERS.add(browser);
   const ctx = await browser.newContext({ viewport });
   const page = await ctx.newPage();
   const problems = [];
+  if (options.initScript) await page.addInitScript(options.initScript);
   page.on("console", (m) => { if (m.type() === "error") problems.push("console: " + m.text()); });
   page.on("pageerror", (e) => problems.push("pageerror: " + e.message));
   page.on("dialog", (d) => { problems.push("dialog: " + d.message()); d.dismiss(); });
   await ctx.route("https://huevo.su/**", (r) => r.fulfill({ status: 204, body: "" }));
   await ctx.route("http://site.test/**", async (route) => {
     const u = new URL(route.request().url());
+    if (options.supportRoutes && options.supportRoutes[u.pathname]) return options.supportRoutes[u.pathname](route);
     if (u.pathname === "/api/support/config") {
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ enabled: false, amounts: [5000, 10000, 25000, 50000, 100000], sdk_url: "https://huevo.su/static/js/huevo-apps-v1.js", origins: ["huevo.su", "huevo.departament.site"] }) });
     }
@@ -74,7 +76,7 @@ async function open(handler, viewport = { width: 1280, height: 900 }) {
     if (!file.startsWith(SITE) || !fs.existsSync(file)) return route.fulfill({ status: 404, body: "" });
     return route.fulfill({ status: 200, headers: { "content-type": TYPES[path.extname(file)] || "text/plain", "content-security-policy": CSP }, body: fs.readFileSync(file) });
   });
-  await page.goto("http://site.test/");
+  await page.goto("http://site.test/" + (options.query || ""));
   return { browser, page, problems };
 }
 const serve = (body, status = 200) => (route) => route.fulfill({ status, contentType: "application/json", body: typeof body === "string" ? body : JSON.stringify(body) });
@@ -599,6 +601,79 @@ test("target prices reject fractions and values above the safe limit; blank inpu
   await save.click();
   assert.equal(await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem("amnyam.targets") || "{}")).length), 0);
   assert.deepEqual(problems, []);
+  await browser.close();
+});
+
+test("support payment status failures do not invite duplicate intents and can be checked again", async () => {
+  let intentCalls = 0;
+  let statusCalls = 0;
+  const ok = (body) => (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify(body)
+  });
+  const { browser, page, problems } = await open(serve(dataV2()), { width: 1280, height: 900 }, {
+    query: "?hu_user_id=123",
+    initScript: () => {
+      window.huevo = {
+        init: async () => true,
+        confirmPayment: async () => true
+      };
+    },
+    supportRoutes: {
+      "/api/support/config": ok({
+        enabled: true,
+        amounts: [5000, 10000, 25000, 50000, 100000],
+        sdk_url: "https://huevo.su/static/js/huevo-apps-v1.js",
+        origins: ["huevo.su", "huevo.departament.site"]
+      }),
+      "/api/support/stats": ok({ supporters: 3, total: 15000 }),
+      "/api/support/intent": (route) => {
+        intentCalls += 1;
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ ok: true, intent_id: "pi_test_retry_1", amount: 5000, test: true })
+        });
+      },
+      "/api/support/status/pi_test_retry_1": (route) => {
+        statusCalls += 1;
+        if (statusCalls === 1) {
+          return route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ detail: "temporary status outage" }) });
+        }
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ intent_id: "pi_test_retry_1", amount: 5000, status: "succeeded", test: true })
+        });
+      }
+    }
+  });
+  await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="support"]');
+  await page.waitForFunction(() => document.querySelector("#supportHint").textContent.includes("Платёж будет создан"));
+  await page.click('#supportAmounts [data-amount="5000"]');
+  await page.waitForFunction(() => document.querySelector("#supportRetryStatus") && !document.querySelector("#supportRetryStatus").hidden);
+  assert.match(await page.textContent("#supportMsgText"), /не создавай повторный/i);
+  assert.match(await page.textContent("#supportMsgText"), /pi_test_retry_1/);
+  assert.equal(intentCalls, 1);
+  assert.equal(statusCalls, 1);
+
+  await page.reload();
+  await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="support"]');
+  await page.waitForFunction(() => document.querySelector("#supportRetryStatus") && !document.querySelector("#supportRetryStatus").hidden);
+  assert.match(await page.textContent("#supportMsgText"), /ранее созданный платёж/i);
+
+  await page.click('#supportAmounts [data-amount="5000"]');
+  assert.equal(intentCalls, 1, "a pending intent blocks creation of a duplicate");
+  await page.click("#supportRetryStatus");
+  await page.waitForFunction(() => document.querySelector("#supportMsgText").textContent.includes("Тестовый платёж подтверждён"));
+  assert.equal(statusCalls, 2);
+  assert.equal(intentCalls, 1);
+  assert.equal(await page.locator("#supportRetryStatus").isVisible(), false);
+  assert.equal(problems.length, 1, "only the deliberately mocked 503 response may be logged");
+  assert.match(problems[0], /503 \(Service Unavailable\)/);
   await browser.close();
 });
 
