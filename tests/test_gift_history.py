@@ -36,6 +36,14 @@ class GiftHistoryTests(unittest.TestCase):
         self.assertEqual(classify_disappearance(self.old, sale), "sold")
         self.assertEqual(classify_disappearance(self.old, transfer), "transferred")
 
+    def test_later_non_sale_event_does_not_hide_a_new_sale(self):
+        fresh = merge_instance_record(self.old, {"history_found": True, "history": [
+            *self.old["history"],
+            {"event_id": "sale-2", "type": "market_sale"},
+            {"event_id": "other-3", "type": "unknown"},
+        ]})
+        self.assertEqual(classify_disappearance(self.old, fresh), "sold")
+
     def test_delisted_event_id_is_stable_for_one_disappearance(self):
         lot = {"lot_id": "101", "title": "Адидас-Тян Зеленая", "price": 500,
                "disappeared_at": "2026-10-31T12:00:00+00:00",
