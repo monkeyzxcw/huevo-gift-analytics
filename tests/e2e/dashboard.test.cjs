@@ -125,6 +125,55 @@ test("search, filters, sort, pagination and reset work", async () => {
   await browser.close();
 });
 
+test("gift grouping shows min, median, max and drills into matching lots", async () => {
+  const { browser, page, problems } = await open(serve(dataV2()));
+  await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="market"]');
+  await page.click('[data-catalog-mode="gifts"]');
+  assert.ok(await page.locator("#groupsRows tr").count()>0);
+  const starGroup=page.locator("#groupsRows tr").filter({hasText:"Звезда"}).first();
+  assert.ok(await starGroup.count());
+  assert.equal(await starGroup.locator("td").count(),7);
+  await starGroup.locator("[data-group-open]").click();
+  assert.equal(await page.locator("#groupsMode.hide").count(),1);
+  assert.match(await page.locator("#search").inputValue(),/Звезда/);
+  assert.match(await page.textContent("#rowCount"),/Найдено лотов:/);
+  assert.deepEqual(problems,[]);
+  await browser.close();
+});
+
+test("saved filters, target prices, mini charts and comparison work", async () => {
+  const { browser, page, problems } = await open(serve(dataV2()));
+  await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="market"]');
+  await page.fill("#search","звезда");
+  await page.fill("#presetName","Звёзды");
+  await page.click("#savePreset");
+  assert.match(await page.textContent("#presetStatus"),/сохранён/);
+  await page.click("#reset");
+  await page.selectOption("#savedFilterSelect","0");
+  await page.click("#applyPreset");
+  assert.match(await page.textContent("#rowCount"),/17 из 120/);
+
+  await page.fill("#search","1003");
+  assert.equal(await page.locator("#rows .sparkline").count(),1);
+  await page.locator("#rows button[aria-label^='Подробнее о лоте']").click();
+  await page.fill("#dBody .target-input","120");
+  await page.click("#dBody button:has-text('Сохранить цену-цель')");
+  assert.match(await page.textContent("#dBody"),/Цена-цель сохранена/);
+  await page.keyboard.press("Escape");
+  await page.fill("#search","1002");
+  await page.locator("#rows input[data-compare-id]").check();
+  await page.fill("#search","1003");
+  await page.locator("#rows input[data-compare-id]").check();
+  assert.equal(await page.locator("#compareSelected").isEnabled(),true);
+  await page.click("#compareSelected");
+  assert.ok(await page.locator("#compareDialog[open]").count());
+  assert.match(await page.textContent("#compareBody"),/Целевая цена/);
+  assert.deepEqual(problems,[]);
+  await browser.close();
+});
+
 test("lot without a price sorts last and shows a dash, not zero", async () => {
   const { browser, page } = await open(serve(dataV2()));
   await page.waitForSelector("#content:not(.hide)");

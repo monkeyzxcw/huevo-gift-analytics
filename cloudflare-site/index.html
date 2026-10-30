@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://huevo.su; style-src 'self'; img-src 'self' https://huevo.su https://huevo.departament.site data:; connect-src 'self' https://huevo.su https://*.huevo.su; base-uri 'none'; form-action 'none'">
 <title>AMNYAM MODE — Huevo Gift Intelligence</title>
-<link rel="stylesheet" href="./styles.css?v=amnyam-v3">
+<link rel="stylesheet" href="./styles.css?v=amnyam-v4">
 </head>
 <body>
 <a class="skip" href="#catalog">К каталогу</a>
@@ -38,6 +38,7 @@
 </section>
 
 <div class="notice hide" id="notice" role="alert"></div>
+<div class="watch-alert hide" id="watchAlert" role="status" aria-live="polite"><span class="watch-alert-mark" aria-hidden="true">↗</span><span id="watchAlertText"></span><button class="btn secondary" id="closeWatchAlert" type="button" aria-label="Закрыть уведомление">✕</button></div>
 
 <div id="loading" class="panel state"><div class="spinner" aria-hidden="true"></div><p>Загружаю data.json…</p></div>
 <div id="error" class="panel state hide" role="alert"><p id="errorText"></p><button class="btn" id="retry" type="button">Повторить</button></div>
@@ -99,7 +100,10 @@
 </section>
 
 <section class="panel" id="favoritesPanel" data-view-section="favorites">
-  <div class="section-heading"><div><span class="section-index">/ PERSONAL WATCHLIST</span><h2>Избранное</h2><p>Отметь звёздочкой лоты, к которым хочешь вернуться. Избранное сохраняется в этом браузере.</p></div><span class="view-stat" id="favoritesCount">0 лотов</span></div>
+  <div class="section-heading"><div><span class="section-index">/ PERSONAL WATCHLIST</span><h2>Избранное</h2><p>Задай целевую цену у любого лота. Цели и сохранённые наборы фильтров хранятся только в этом браузере.</p></div>
+    <div class="watch-header-actions"><span class="view-stat" id="favoritesCount">0 лотов</span><button class="btn secondary" id="enableNotifications" type="button">Включить уведомления</button></div>
+  </div>
+  <p class="watch-help" id="notificationHint">Достижение целевой цены показывается в приложении. Браузерные уведомления можно разрешить отдельно.</p>
   <ol class="deal-list" id="favoritesList"></ol>
 </section>
 
@@ -113,7 +117,7 @@
 </section>
 
 <section class="panel catalog-panel" id="catalog" data-view-section="market" aria-labelledby="catTitle">
-  <div class="panel-head"><div><span class="section-index">/ FULL MARKET SCAN</span><h3 id="catTitle">Каталог маркета</h3><div class="muted" id="rowCount" aria-live="polite">—</div></div><span class="mono-tag">SEARCH / FILTER / SORT</span></div>
+  <div class="panel-head"><div><span class="section-index">/ FULL MARKET SCAN</span><h3 id="catTitle">Каталог маркета</h3><div class="muted" id="rowCount" aria-live="polite">—</div></div><div class="catalog-header-actions"><button class="btn secondary" id="compareSelected" type="button" disabled>Сравнить (0/4)</button><span class="mono-tag">SEARCH / FILTER / SORT</span></div></div>
   <form class="toolbar" id="filters" role="search" aria-label="Фильтры каталога">
     <label class="f grow"><span>Поиск</span><input class="input" id="search" type="search" placeholder='Название, ID, rarity:Редкий, price<100000' autocomplete="off"></label>
     <label class="f"><span>Редкость</span><select class="select" id="rarity"><option value="">Все</option></select></label>
@@ -140,6 +144,17 @@
   </form>
   <div class="search-tips"><span>БЫСТРЫЕ ФИЛЬТРЫ</span><button type="button" data-search-token="price<100000">до 100k</button><button type="button" data-search-token="rarity:Редкий">редкие</button><button type="button" data-search-token="status:На продаже">на продаже</button><button type="button" data-search-token="price>500000">выше 500k</button></div>
   <p class="sort-help">Сортируй через список выше или нажми на заголовок столбца. «Похожие лоты» — активные предложения с тем же подарком и редкостью.</p>
+  <div class="market-tools-row">
+    <div class="catalog-modes" role="group" aria-label="Режим каталога"><button class="mode-btn active" type="button" data-catalog-mode="lots" aria-pressed="true">Отдельные лоты</button><button class="mode-btn" type="button" data-catalog-mode="gifts" aria-pressed="false">По типам подарков</button></div>
+    <span class="muted mode-note">Группировка объединяет название подарка и редкость</span>
+  </div>
+  <div class="saved-filters">
+    <label class="f preset-name"><span>Название набора</span><input class="input" id="presetName" type="text" maxlength="40" placeholder="Например, редкие до 100k"></label>
+    <button class="btn secondary" id="savePreset" type="button">Сохранить фильтр</button>
+    <label class="f preset-select"><span>Мои фильтры</span><select class="select" id="savedFilterSelect" aria-label="Сохранённые фильтры"><option value="">Нет сохранённых наборов</option></select></label>
+    <button class="btn secondary" id="applyPreset" type="button" disabled>Применить</button><button class="btn secondary" id="deletePreset" type="button" disabled>Удалить</button><span class="preset-status" id="presetStatus" role="status"></span>
+  </div>
+  <div id="lotsMode">
   <div class="table-wrap">
     <table>
       <caption class="sr">Каталог подарков. Нажмите на заголовок столбца, чтобы отсортировать.</caption>
@@ -156,8 +171,20 @@
     </table>
   </div>
   <nav class="pager" aria-label="Страницы каталога"><button class="btn secondary" id="prev" type="button">← Назад</button><span id="pageInfo">—</span><button class="btn secondary" id="next" type="button">Вперёд →</button></nav>
+  </div>
+  <div id="groupsMode" class="hide">
+    <div class="group-mode-note">Цены рассчитаны по активным предложениям под текущими фильтрами. Медиана меньше зависит от единичных дорогих или дешёвых лотов.</div>
+    <div class="table-wrap"><table class="groups-table">
+      <caption class="sr">Группы подарков с количеством активных предложений и статистикой цены</caption>
+      <thead><tr>
+        <th scope="col" aria-sort="none"><button class="group-sort" data-group-key="title" type="button">Подарок</button></th><th scope="col" aria-sort="descending"><button class="group-sort" data-group-key="count" type="button">Лотов</button></th><th scope="col" aria-sort="none"><button class="group-sort" data-group-key="min" type="button">Минимум</button></th><th scope="col" aria-sort="none"><button class="group-sort" data-group-key="median" type="button">Медиана</button></th><th scope="col" aria-sort="none"><button class="group-sort" data-group-key="max" type="button">Максимум</button></th><th scope="col" aria-sort="none"><button class="group-sort" data-group-key="rarity" type="button">Редкость</button></th><th scope="col"><span class="sr">Действия</span></th>
+      </tr></thead><tbody id="groupsRows"></tbody>
+    </table></div>
+  </div>
 </section>
 </div>
+
+<dialog id="compareDialog" aria-labelledby="compareTitle"><div class="dlg-head"><h3 id="compareTitle">Сравнение лотов</h3><button class="btn secondary" id="compareClose" type="button" aria-label="Закрыть сравнение">✕</button></div><div id="compareBody"></div></dialog>
 
 <dialog id="detail" aria-labelledby="dTitle">
   <div class="dlg-head"><h3 id="dTitle">Лот</h3><button class="btn secondary" id="dClose" type="button" aria-label="Закрыть">✕</button></div>
@@ -166,6 +193,6 @@
 
 <footer class="footer"><span>Huevo Gift Analytics · статическая версия</span><span>Данные собирает локальный сборщик на ПК владельца; блокировки источника не обходятся.</span></footer>
 </main>
-<script src="./app.js?v=amnyam-v3" defer></script>
+<script src="./app.js?v=amnyam-v4" defer></script>
 </body>
 </html>
