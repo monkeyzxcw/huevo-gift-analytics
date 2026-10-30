@@ -98,7 +98,7 @@ def delisted_event_record(lot, observed_at):
         "lot_id": lot_id,
         "gift_id": gift_id,
         "serial": serial_label,
-        "price": lot.get("price"),
+        "last_listing_price": lot.get("price"),
         "from_user": "",
         "to_user": "",
         "time_raw": "",
