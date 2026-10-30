@@ -368,8 +368,8 @@ def main(argv=None):
                         instance_candidates.append({
                             **row, "gift_details": details,
                             "gift_instance": row.get("gift_instance") or {},
-                            # Previous gone rows use their normal 2/30-day cache; only a
-                            # newly disappeared listing above forces an immediate refresh.
+                            "_force_history_check": row.get("disappearance_status") in
+                                ("pending_history", "history_baseline"),
                         })
                 if details_result.get("status") in ("blocked", "login", "network_error", "server_error", "wrong_host"):
                     # A block, login page, or source/network failure ends ALL optional Huevo
