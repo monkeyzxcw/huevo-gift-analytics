@@ -786,8 +786,8 @@ test("help tab documents main workflows and desktop notification limitations", a
   assert.match(guide, /push на рабочий стол/);
   assert.match(guide, /Cloudflare Worker/);
   assert.match(guide, /HuevoDualScan/);
-  assert.match(guide, /gifts\\/\\{id\\}/);
-  assert.match(guide, /Рекомендации/);
+  assert.ok(guide.includes("gifts/{id}"));
+  assert.match(guide, /неоднозначна/);
   assert.deepEqual(problems, []);
   await browser.close();
 });
