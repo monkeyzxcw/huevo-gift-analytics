@@ -677,3 +677,27 @@ test("support payment status failures do not invite duplicate intents and can be
   await browser.close();
 });
 
+test("main navigation supports ArrowLeft, ArrowRight, Home and End with roving focus", async () => {
+  const { browser, page, problems } = await open(serve(dataV2()));
+  try {
+    await page.waitForSelector("#content:not(.hide)");
+    const tab = (view) => page.locator('#mainNav [role="tab"][data-view="' + view + '"]');
+    await tab("overview").focus();
+    await page.keyboard.press("ArrowRight");
+    assert.equal(await tab("market").getAttribute("aria-selected"), "true");
+    assert.equal(await tab("market").evaluate(node => document.activeElement === node), true);
+    await page.keyboard.press("ArrowRight");
+    assert.equal(await tab("deals").getAttribute("aria-selected"), "true");
+    await page.keyboard.press("ArrowLeft");
+    assert.equal(await tab("market").getAttribute("aria-selected"), "true");
+    await page.keyboard.press("End");
+    assert.equal(await tab("appearance").getAttribute("aria-selected"), "true");
+    await page.keyboard.press("Home");
+    assert.equal(await tab("overview").getAttribute("aria-selected"), "true");
+    assert.equal(await tab("overview").evaluate(node => document.activeElement === node), true);
+    assert.deepEqual(problems, []);
+  } finally {
+    await browser.close();
+  }
+});
+

@@ -2050,6 +2050,21 @@
       window.__amnyamGoPending = 0;
     }
   });
+  const mainNav = $("mainNav");
+  mainNav.addEventListener("keydown", event => {
+    if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(event.key)) return;
+    const tabs = Array.from(mainNav.querySelectorAll('[role="tab"]:not(:disabled)'));
+    const current = tabs.indexOf(event.target.closest('[role="tab"]'));
+    if (current < 0 || !tabs.length) return;
+    let next = current;
+    if (event.key === "ArrowRight") next = (current + 1) % tabs.length;
+    else if (event.key === "ArrowLeft") next = (current - 1 + tabs.length) % tabs.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = tabs.length - 1;
+    event.preventDefault();
+    switchView(tabs[next].dataset.view, false);
+    tabs[next].focus();
+  });
   document.querySelectorAll("#mainNav [data-view]").forEach(button=>button.addEventListener("click",()=>switchView(button.dataset.view,true)));
   document.querySelectorAll("[data-go-view]").forEach(button=>button.addEventListener("click",()=>switchView(button.dataset.goView,true)));
   $("globalSearch").addEventListener("keydown",event=>{if(event.key!=="Enter")return;event.preventDefault();$("search").value=$("globalSearch").value.trim();state.page=0;switchView("market",true);applyFilters();});
