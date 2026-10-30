@@ -366,6 +366,15 @@ export async function authenticateHuevoLaunch(request, env, jsonResponse) {
   }
 }
 
+export async function authenticatedUserId(request, env) {
+  try {
+    const row = await authenticatedUser(request, env);
+    return row ? String(row.user_id) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 export async function currentAccount(request, env, jsonResponse) {
   if (!(await authSchemaReady(env))) return json(jsonResponse, request, env, {
     ok: true, authenticated: false, profiles_ready: false, user: null, profile: sanitiseProfile(DEFAULT_PROFILE), updated_at: null
