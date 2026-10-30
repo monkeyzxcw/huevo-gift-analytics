@@ -386,7 +386,7 @@ def run_gift_instance_crawl(browser, cfg, candidates, log=None, limit=8,
     for row in candidates or []:
         details = row.get("gift_details") if isinstance(row.get("gift_details"), dict) else {}
         gift_id = str(details.get("gift_id") or row.get("gift_id") or "").strip()
-        if not re.fullmatch(r"\\d{1,20}", gift_id):
+        if not re.fullmatch(r"\d{1,20}", gift_id):
             continue
         gift_url = str(details.get("gift_url") or row.get("gift_url") or
                        f"{cfg.base_url.rstrip('/')}/gift/{gift_id}")
