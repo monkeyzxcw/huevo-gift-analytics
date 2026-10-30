@@ -664,3 +664,18 @@ body[data-motion="off"] .deal-hero-art::after{animation:none!important}
 .account-sync{margin-left:auto;color:#8eea62;font-size:10px;text-align:right}
 #accountSigned .btn{margin-top:16px}
 @media(max-width:520px){.account-profile-card{align-items:flex-start;flex-wrap:wrap}.account-sync{width:100%;margin-left:54px;text-align:left}.account-trigger{order:3}}
+
+/* huEVO identity profile */
+.account-huevo-guest{display:grid;justify-items:center;gap:10px;text-align:center;padding:24px 18px;background:#171c2a;border:1px solid var(--line);border-radius:14px}
+.account-huevo-mark{display:grid;place-items:center;width:58px;height:58px;border-radius:18px;background:linear-gradient(135deg,#8eea62,#4d9e9a);color:#102019;font-size:30px;font-weight:950;box-shadow:0 10px 32px #7ddf4930}
+.account-huevo-guest h4{margin:4px 0 0;font-size:15px}
+.account-huevo-guest p{max-width:340px;margin:0;color:var(--muted);font-size:12px;line-height:1.65}
+.account-huevo-guest small{max-width:340px;color:var(--muted);font-size:10px;line-height:1.55}
+.account-status{font-size:12px;line-height:1.5;margin:8px 0 14px;color:var(--muted)}
+.account-profile-card{display:flex;align-items:center;gap:12px;padding:14px;background:#171c2a;border:1px solid var(--line);border-radius:13px}
+.account-avatar-fallback,.account-avatar-image{display:grid;place-items:center;width:46px;height:46px;flex:none;border-radius:14px;background:linear-gradient(135deg,#8eea62,#4d9e9a);color:#102019;font-size:22px;font-weight:900;object-fit:cover}
+.account-profile-card>div{display:grid;gap:4px;min-width:0}
+.account-profile-card small{color:var(--muted);font-size:11px;overflow-wrap:anywhere}
+.account-profile-card .account-provider{color:#8eea62;font-size:10px}
+.account-sync{margin-left:auto;color:#8eea62;font-size:10px;text-align:right}
+@media(max-width:520px){.account-profile-card{align-items:flex-start;flex-wrap:wrap}.account-sync{width:100%;margin-left:58px;text-align:left}}
