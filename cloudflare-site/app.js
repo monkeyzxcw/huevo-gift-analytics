@@ -1226,6 +1226,20 @@
   const paletteOpen = $("openCommandPalette");
   if (paletteOpen) paletteOpen.addEventListener("click", openCommandPalette);
   $("commandPaletteInput").addEventListener("input", event => filterCommandPalette(event.target.value));
+  $("commandPaletteInput").addEventListener("keydown", event => {
+    const visible = Array.from(document.querySelectorAll("[data-command-item]:not([hidden])"));
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (!visible.length) return;
+      const active = visible.indexOf(document.activeElement);
+      const next = event.key === "ArrowDown" ? (active + 1) % visible.length : (active <= 0 ? visible.length - 1 : active - 1);
+      visible[next].focus();
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      const focused = document.activeElement && document.activeElement.matches("[data-command-item]") ? document.activeElement : visible[0];
+      if (focused) runCommand(focused);
+    }
+  });
   $("commandPaletteItems").addEventListener("click", event => {
     const button = event.target.closest("[data-command-item]");
     if (button && !button.hidden) runCommand(button);
