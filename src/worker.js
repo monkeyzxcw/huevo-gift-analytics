@@ -1,3 +1,5 @@
+import { registerAccount, loginAccount, currentAccount, saveAccountProfile, logoutAccount, purgeAuthRecords } from "./auth.js";
+
 const HUEVO_HOSTS = new Set(["huevo.su", "huevo.departament.site"]);
 const MAX_LIVE_BODY_BYTES = 256_000;
 const MAX_SNAPSHOT_BODY_BYTES = 1_500_000;
@@ -688,6 +690,11 @@ async function fetchHandler(request, env, ctx) {
     return new Response(null, { status: 204, headers: responseHeaders(request, env) });
   }
   if (request.method === "GET" && path === "/api/bridge") return bridgePage(request, env);
+  if (request.method === "POST" && path === "/api/auth/register") return registerAccount(request, env, jsonResponse);
+  if (request.method === "POST" && path === "/api/auth/login") return loginAccount(request, env, jsonResponse);
+  if (request.method === "POST" && path === "/api/auth/logout") return logoutAccount(request, env, jsonResponse);
+  if (request.method === "GET" && path === "/api/me") return currentAccount(request, env, jsonResponse);
+  if (request.method === "PUT" && path === "/api/me/profile") return saveAccountProfile(request, env, jsonResponse);
   if (request.method === "GET" && path === "/api/health") {
     return jsonResponse(request, env, { ok: true, ...(await getStorageHealth(env)) });
   }
@@ -719,9 +726,9 @@ export default {
   async scheduled(controller, env, ctx) {
     if (!env.DB) return;
     const cutoff = new Date(Date.now() - retentionHours(env) * 3600_000).toISOString();
-    ctx.waitUntil(
-      env.DB.prepare("DELETE FROM live_price_history WHERE observed_at < ?").bind(cutoff).run()
-        .catch(() => undefined)
-    );
+    ctx.waitUntil(Promise.all([
+      env.DB.prepare("DELETE FROM live_price_history WHERE observed_at < ?").bind(cutoff).run().catch(() => undefined),
+      purgeAuthRecords(env).catch(() => undefined)
+    ]));
   },
 };
