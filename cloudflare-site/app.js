@@ -1349,7 +1349,7 @@
       if(imageUrl&&bestImage.src!==imageUrl)bestImage.src=imageUrl;
       if(!imageUrl)bestImage.removeAttribute("src");
       $("belowBestTarget").value=state.targets[String(best.lot_id)]?String(state.targets[String(best.lot_id)]):"";
-      $("overviewPickHint").textContent="Лучший текущий дисконт: −"+fmt(best.discount_pct)+"% от "+(best.basis==="sales"?"медианы подтверждённых продаж":"устойчивого диапазона объявлений")+". "+(best.confidence==="low"?"Ориентир предварительный.":"");
+      $("overviewPickHint").textContent="Лучший лот по размеру дисконта, а не по минимальной цене: −"+fmt(best.discount_pct)+"% от "+(best.basis==="sales"?"медианы подтверждённых продаж":"устойчивого диапазона объявлений")+". "+(best.confidence==="low"?"Ориентир предварительный.":"");
       const pick=clear($("overviewPickLot"));
       if(best.image_url&&/^https:\/\//i.test(best.image_url)){const img=h("img",{class:"pick-img",src:best.image_url,alt:"",loading:"lazy",referrerpolicy:"no-referrer"});img.addEventListener("error",()=>img.replaceWith(h("span",{class:"pick-img",text:"🎁"})));pick.append(img);}
       pick.append(h("div",{},[h("strong",{text:best.title||("Лот #"+best.lot_id)}),h("span",{class:"pick-price",text:price(best.price)}),h("small",{text:"−"+fmt(best.discount_pct)+"% к "+(best.basis==="sales"?"продажам":"объявлениям")+" · разница "+price(best.reference_price-best.price)})]));
@@ -1370,8 +1370,8 @@
     const box=clear($("dayPicks")),signals=buildDealSignals(),chosen=[],seen=new Set();
     const add=(lot,tag,description)=>{if(!lot||seen.has(String(lot.lot_id))||chosen.length>=3)return;seen.add(String(lot.lot_id));chosen.push({lot,tag,description});};
     if(signals.length){
-      add(signals[0],"ЛУЧШИЙ ДИСКОНТ","Самое сильное отличие от медианы аналогов");
-      add(signals.slice().sort((a,b)=>a.price-b.price||b.discount_pct-a.discount_pct)[0],"НИЗКАЯ ЦЕНА","Самая низкая цена среди лотов ниже рынка");
+      add(signals[0],"МАКСИМАЛЬНЫЙ ДИСКОНТ","Наибольшая скидка к медиане аналогов — не обязательно самая низкая цена");
+      add(signals.slice().sort((a,b)=>a.price-b.price||b.discount_pct-a.discount_pct)[0],"САМАЯ НИЗКАЯ ЦЕНА","Минимальная абсолютная цена среди лотов ниже рынка");
       add(signals.slice().sort((a,b)=>b.sample_size-a.sample_size||b.discount_pct-a.discount_pct)[0],"БОЛЬШЕ АНАЛОГОВ","Самая широкая выборка похожих предложений");
     }
     const fallback=state.lots.filter(l=>l&&l.active!==false&&isNum(l.price)&&l.price>0).slice().sort((a,b)=>a.price-b.price);
@@ -1923,7 +1923,7 @@
     setText("pulseWatchlist", fmt(state.favorites.length));
     setText("pulseWatchlistNote", fmt(Object.keys(state.targets).length) + " целевых цен · " + fmt(state.favorites.length) + " в избранном");
     setText("pulseBestTitle", best ? (best.title || ("Лот #" + best.lot_id)) : "Пока нет подтверждённой сделки");
-    setText("pulseBestNote", best ? ("Лот #" + best.lot_id + " · " + price(best.price) + " вместо медианы " + price(best.reference_price) + " · " + fmt(best.sample_size) + " аналогов") : "Нужно минимум 3 сопоставимых лота и цена минимум на 15% ниже медианы.");
+    setText("pulseBestNote", best ? ("Лот #" + best.lot_id + " · максимальный дисконт, не минимальная цена · " + price(best.price) + " вместо медианы " + price(best.reference_price) + " · " + fmt(best.sample_size) + " аналогов") : "Нужно минимум 3 сопоставимых лота и цена минимум на 15% ниже медианы.");
     setText("pulseBestDiscount", best ? "−" + fmt(best.discount_pct) + "%" : "—");
   }
 
