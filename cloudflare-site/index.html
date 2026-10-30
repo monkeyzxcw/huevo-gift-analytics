@@ -50,6 +50,21 @@
   <dl class="freshness" id="freshness"><div><dt>Последний успешный сбор</dt><dd id="lastOk">—</dd></div><div><dt>Последняя попытка</dt><dd id="lastTry">—</dd></div></dl>
 </section>
 
+
+<section class="command-center" data-view-section="overview" aria-labelledby="commandCenterTitle">
+  <div class="cc-heading"><div><div class="eyebrow">MARKET CONTROL / 01</div><h2 id="commandCenterTitle">Панель рынка</h2><p>Коротко о рынке, сигналах и твоих целях — без ручного поиска по разделам.</p></div><button class="cc-command-trigger" id="openCommandPalette" type="button"><span>⌘</span> Команды <kbd>Ctrl K</kbd></button></div>
+  <div class="cc-metrics" aria-live="polite">
+    <article class="cc-metric"><span>АКТИВНЫЕ ЛОТЫ</span><strong id="pulseLots">—</strong><small>в текущем снимке</small><i class="cc-metric-icon">▦</i></article>
+    <article class="cc-metric"><span>МЕДИАНА РЫНКА</span><strong id="pulseMedian">—</strong><small>цена типичного лота</small><i class="cc-metric-icon">⌁</i></article>
+    <article class="cc-metric cc-metric-highlight"><span>СДЕЛКИ НИЖЕ РЫНКА</span><strong id="pulseDeals">—</strong><small>сравнение с аналогами</small><i class="cc-metric-icon">↘</i></article>
+    <article class="cc-metric"><span>МОЙ МОНИТОРИНГ</span><strong id="pulseWatchlist">—</strong><small id="pulseWatchlistNote">избранное и целевые цены</small><i class="cc-metric-icon">◎</i></article>
+  </div>
+  <div class="cc-lower">
+    <article class="cc-opportunity"><div class="cc-label"><span class="cc-live-dot"></span> ЛУЧШИЙ СИГНАЛ СЕЙЧАС</div><div class="cc-opportunity-main"><div><h3 id="pulseBestTitle">Ищем выгодные предложения…</h3><p id="pulseBestNote">Сигнал появится, когда будут найдены сопоставимые лоты.</p></div><strong id="pulseBestDiscount">—</strong></div><div class="cc-opportunity-actions"><button class="btn" type="button" data-go-view="deals">Открыть сделки <span>↗</span></button><button class="btn secondary" type="button" data-go-view="analytics">Аналитика рынка</button></div></article>
+    <article class="cc-quick"><div class="cc-quick-title"><span>БЫСТРЫЕ ДЕЙСТВИЯ</span><small>SHORTCUTS</small></div><button type="button" data-command="search"><span class="cc-quick-icon">⌕</span><span><b>Найти подарок</b><small>По названию, ID или цене</small></span><kbd>/</kbd></button><button type="button" data-go-view="favorites"><span class="cc-quick-icon">☆</span><span><b>Мой мониторинг</b><small>Избранное и целевые цены</small></span><span class="cc-arrow">↗</span></button><button type="button" data-go-view="cheap"><span class="cc-quick-icon">↘</span><span><b>Самые дешёвые</b><small>Сортировка по цене</small></span><span class="cc-arrow">↗</span></button></article>
+  </div>
+</section>
+
 <div class="notice hide" id="notice" role="alert"></div>
 <div class="watch-alert hide" id="watchAlert" role="status" aria-live="polite"><span class="watch-alert-mark" aria-hidden="true">↗</span><span id="watchAlertText"></span><a class="btn secondary" id="watchAlertOpen" href="https://huevo.su/market/gifts" target="_blank" rel="noopener noreferrer">Открыть лот ↗</a><button class="btn secondary" id="closeWatchAlert" type="button" aria-label="Закрыть уведомление">✕</button></div>
 
@@ -216,6 +231,23 @@
 </section>
 </div>
 
+
+<dialog id="commandPalette" class="command-palette" aria-labelledby="commandPaletteTitle">
+  <div class="palette-search"><span>⌕</span><input id="commandPaletteInput" type="search" placeholder="Что нужно сделать?" autocomplete="off" aria-label="Поиск команды"><kbd>ESC</kbd></div>
+  <div class="palette-label" id="commandPaletteTitle">БЫСТРЫЕ КОМАНДЫ</div>
+  <div class="palette-items" id="commandPaletteItems">
+    <button type="button" data-command-item data-command="search"><span class="palette-icon">⌕</span><span><b>Поиск по рынку</b><small>Найти подарок, ID или задать фильтр</small></span><kbd>/</kbd></button>
+    <button type="button" data-command-item data-command-view="overview"><span class="palette-icon">▦</span><span><b>Главная панель</b><small>Сводка рынка и быстрые действия</small></span><kbd>G H</kbd></button>
+    <button type="button" data-command-item data-command-view="market"><span class="palette-icon">▤</span><span><b>Маркет</b><small>Все лоты и фильтры</small></span><kbd>G M</kbd></button>
+    <button type="button" data-command-item data-command-view="deals"><span class="palette-icon">↘</span><span><b>Ниже рынка</b><small>Подтверждённые скидки относительно аналогов</small></span><kbd>G D</kbd></button>
+    <button type="button" data-command-item data-command-view="cheap"><span class="palette-icon">＄</span><span><b>Дешёвые лоты</b><small>Самые доступные предложения</small></span></button>
+    <button type="button" data-command-item data-command-view="analytics"><span class="palette-icon">⌁</span><span><b>Аналитика</b><small>Графики и изменения рынка</small></span></button>
+    <button type="button" data-command-item data-command-view="favorites"><span class="palette-icon">☆</span><span><b>Избранное и цели</b><small>Отслеживаемые подарки и целевые цены</small></span></button>
+    <button type="button" data-command-item data-command-view="appearance"><span class="palette-icon">◐</span><span><b>Настройки интерфейса</b><small>Фон, маскот и анимации</small></span></button>
+  </div>
+  <div class="palette-footer"><span>↑ ↓ навигация · ENTER открыть · ESC закрыть</span><span>AMNYAM COMMAND</span></div>
+</dialog>
+
 <dialog id="compareDialog" aria-labelledby="compareTitle"><div class="dlg-head"><h3 id="compareTitle">Сравнение лотов</h3><button class="btn secondary" id="compareClose" type="button" aria-label="Закрыть сравнение">✕</button></div><div id="compareBody"></div></dialog>
 
 <dialog id="detail" aria-labelledby="dTitle">
@@ -227,6 +259,6 @@
 </main>
 <div id="ambientLayer" aria-hidden="true"></div><div id="cursorGlow" aria-hidden="true"></div>
 <div class="premium-splash" id="premiumSplash" aria-hidden="true"><div class="splash-mark">H<span>•</span></div><div class="splash-title">AMNYAM <b>MODE</b></div><div class="splash-subtitle">GIFT MARKET INTELLIGENCE</div><div class="splash-loader"><i></i></div></div>
-<script src="./app.js?v=amnyam-art-v8" defer></script>
+<script src="./app.js?v=amnyam-command-center-v9" defer></script>
 </body>
 </html>
