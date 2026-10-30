@@ -83,7 +83,7 @@
 
 ## Публикация на Cloudflare
 
-Рабочий сайт: **https://huevo-gift-analytics.monkeyzxcw.workers.dev**.
+Рабочий сайт: **https://huevo-gift-analytics.monkeyzxc1437.workers.dev**.
 
 Cloudflare Worker обслуживает интерфейс из `cloudflare-site/` и API из `src/worker.js`. Вкладки рынка общие для всех пользователей; отдельные аккаунты и персональные настройки хранятся в Cloudflare D1 (`DB`). Python/Selenium и авторизованный вход в Huevo в браузере пользователей Cloudflare не запускает. Имя Worker — `huevo-gift-analytics`.
 
