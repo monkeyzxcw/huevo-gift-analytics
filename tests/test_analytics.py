@@ -114,7 +114,9 @@ class MarketReferenceTests(unittest.TestCase):
     def test_split_price_clusters_are_flagged_as_unreliable(self):
         from analytics import robust_offer_reference
         result = robust_offer_reference([100, 100, 100, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000])
-        self.assertGreater(result["dispersion"], 0.65)
+        self.assertGreater(result["dispersion"], 2.5)
+        self.assertIsNone(result["reference"], "a split market must not be assigned a misleading median")
+        self.assertTrue(result["ambiguous"])
         self.assertEqual(result["raw_size"], 13)
 
     def test_sale_history_uses_only_explicit_timezone_aware_dates(self):
