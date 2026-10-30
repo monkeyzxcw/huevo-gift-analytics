@@ -183,7 +183,7 @@ test("below-market cards show price evidence, quick target controls, and three d
   assert.ok(await page.locator("#dealsList .deal-card-rich").count()>0,"value signals rendered as rich cards");
   const card=page.locator("#dealsList .deal-card-rich").first();
   assert.match(await card.textContent(),/ЦЕНА ЛОТА/);
-  assert.match(await card.textContent(),/МЕДИАНА АНАЛОГОВ/);
+  assert.match(await card.textContent(),/МЕДИАНА ОБЪЯВЛЕНИЙ/);
   assert.match(await card.textContent(),/РАЗНИЦА/);
   await card.locator(".deal-target-input").fill("50");
   await card.locator(".target-save").click();
@@ -213,7 +213,7 @@ test("detail dialog: price history, comparison, safe link, Escape closes", async
   assert.equal(await page.locator("#dBody table.hist tr").count(), 3, "three history points");
   assert.ok(await page.locator("#dBody svg polyline").count());
   assert.match(await page.textContent("#dBody"), /не цена сделки/);
-  assert.match(await page.textContent("#dBody"), /Недостаточно сопоставимых/);
+  assert.match(await page.textContent("#dBody"), /Недостаточно данных/);
   await page.keyboard.press("Escape");
   assert.equal(await page.locator("#detail[open]").count(), 0);
   await page.fill("#search", "1002");                     // lot_url on a foreign host must be replaced
