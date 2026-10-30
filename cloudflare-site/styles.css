@@ -368,3 +368,7 @@ body[data-season="summer"]{--amnyam-acid:#ffd36a;--green:#ffd36a;--bar:#ffd36a;-
 @media(max-width:700px){.season-control{flex:1 0 auto}.day-pick-card .deal-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:460px){.command-strip{align-items:flex-start}.season-control{width:100%}.season-control select{flex:1}}
 @media(prefers-reduced-motion:reduce){.logo,.logo i,.mascot-svg,.falling-gift,.splash-mark,.splash-loader i{animation:none!important}.premium-splash{transition:none}#ambientLayer,#cursorGlow{display:none}}
+
+body[data-motion="off"] .logo,body[data-motion="off"] .logo i,body[data-motion="off"] .mascot-svg,body[data-motion="off"] .falling-gift,body[data-motion="off"] .splash-mark,body[data-motion="off"] .splash-loader i{animation:none!important}
+body[data-motion="off"] .falling-gift{display:none}
+body[data-motion="off"] #cursorGlow{transition:none}
