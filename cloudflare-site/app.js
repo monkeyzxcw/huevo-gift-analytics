@@ -1550,6 +1550,10 @@
       });
       if (!intent.intent_id) throw new Error("Сервер не вернул ID платёжного запроса.");
       persistPendingSupportIntent(String(intent.intent_id));
+      if (intent.reused) {
+        supportMessage("На сервере уже есть незавершённый платёж. Повторный платёж не создан; проверь статус существующего. ID: " + intent.intent_id, "pending");
+        return;
+      }
       supportMessage("Платёж создан. Подтверди его в официальном окне huEVO" + (intent.test ? " (тестовый режим)." : "."));
       let confirmationTimedOut = false;
       try {
