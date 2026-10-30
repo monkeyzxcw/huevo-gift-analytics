@@ -325,12 +325,12 @@ export async function authenticateHuevoLaunch(request, env, jsonResponse) {
     ).bind(username, displayName, avatarUrl, configured.appId, mode, updatedAt, updatedAt, userRow.user_id).run();
 
     const existing = await authenticatedUser(request, env);
-    if (existing && String(existing.hu_user_id) !== huUserId && cookieValue(request)) {
+    if (existing && (String(existing.hu_user_id) !== huUserId || String(existing.app_id) !== configured.appId) && cookieValue(request)) {
       await env.DB.prepare("DELETE FROM user_sessions WHERE session_hash = ?").bind(await sha256Hex(cookieValue(request))).run();
     }
     let token = cookieValue(request);
     let setCookie = {};
-    if (!existing || String(existing.hu_user_id) !== huUserId) {
+    if (!existing || String(existing.hu_user_id) !== huUserId || String(existing.app_id) !== configured.appId) {
       token = await makeSession(env, userRow.user_id);
       setCookie = { "Set-Cookie": sessionCookie(token) };
     } else {
@@ -397,16 +397,6 @@ export async function saveAccountProfile(request, env, jsonResponse) {
   }
 }
 
-export async function logoutAccount(request, env, jsonResponse) {
-  if (!sameOriginMutation(request)) return json(jsonResponse, request, env, { ok: false, error: "Недопустимый источник запроса." }, 403);
-  const token = cookieValue(request);
-  if (token && env.DB) {
-    try {
-      await env.DB.prepare("DELETE FROM user_sessions WHERE session_hash = ?").bind(await sha256Hex(token)).run();
-    } catch (_) {}
-  }
-  return json(jsonResponse, request, env, { ok: true }, 200, { "Set-Cookie": expiredSessionCookie() });
-}
 
 export async function purgeAuthRecords(env) {
   if (!env.DB) return;
