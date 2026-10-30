@@ -53,7 +53,7 @@ class GiftDetailCrawlTests(unittest.TestCase):
         result = run_gift_detail_crawl(browser, cfg(), lots, {}, logging.getLogger("detail-test"), limit=3)
         self.assertEqual(result["status"], "blocked")
         self.assertEqual(result["http_status"], 429)
-        self.assertEqual(result["retry_after"], "3600")
+        self.assertEqual(result["retry_after"], 3600)
         self.assertEqual(result["pages"], 1)
         self.assertEqual(len(browser.gets), 1)
 
