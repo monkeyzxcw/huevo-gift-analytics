@@ -1051,9 +1051,10 @@
           ]))));
       }
       const catalogId = String(giftCatalog.catalog_id || giftCatalog.gift_catalog_id || "");
-      const rawCatalogUrl = String(giftCatalog.gift_catalog_url || giftCatalog.source_url || "");
-      const catalogHref = /^https:\/\/(?:huevo\.su|huevo\.departament\.site)\/gifts\/\d+\/?$/i.test(rawCatalogUrl)
-        ? rawCatalogUrl : /^\d{1,20}$/.test(catalogId) ? "https://huevo.su/gifts/" + catalogId : "";
+      // Build the catalogue URL from its numeric catalogue ID only; never
+      // reuse an arbitrary source URL or a /gift/<instance> path.
+      const catalogHref = /^\d{1,20}$/.test(catalogId)
+        ? "https://huevo.su/gifts/" + catalogId : "";
       if (catalogHref) {
         body.append(h("p", {}, [h("a", { class: "btn secondary", href: catalogHref, target: "_blank", rel: "noopener noreferrer", text: "Открыть страницу подарка и тираж ↗" })]));
       }
@@ -1371,8 +1372,10 @@
   function renderDayPicks(){
     const box=clear($("dayPicks")),signals=buildDealSignals(),reliable=signals.filter(lot=>!lot.suspicious),chosen=[],seen=new Set();
     const add=(lot,tag,description)=>{if(!lot||seen.has(String(lot.lot_id))||chosen.length>=3)return;seen.add(String(lot.lot_id));chosen.push({lot,tag,description});};
+    const signalById=new Map(signals.map(lot=>[String(lot.lot_id),lot]));
     const fallback=state.lots.filter(l=>l&&l.active!==false&&isNum(l.price)&&l.price>0)
-      .slice().sort((a,b)=>a.price-b.price||String(a.title).localeCompare(String(b.title),"ru"));
+      .slice().sort((a,b)=>a.price-b.price||String(a.title).localeCompare(String(b.title),"ru"))
+      .map(lot=>signalById.get(String(lot.lot_id))||lot);
     if(reliable.length){
       add(reliable[0],"ЛУЧШИЙ НАДЁЖНЫЙ ДИСКОНТ","Сильная скидка к аналогам без признака экстремального выброса");
       add(fallback[0],"САМАЯ НИЗКАЯ ЦЕНА","Самое дешёвое активное объявление — не обязательно выгоднее рынка");
