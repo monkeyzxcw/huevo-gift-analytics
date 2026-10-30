@@ -101,7 +101,14 @@
   }
   function writeFavorites() { if (accountState.user) { if (!accountState.hydrating) queueProfileSave(); return; } try { localStorage.setItem("amnyam.favorites", JSON.stringify(state.favorites)); } catch (_) {} }
   function readTargets() {
-    try { const x=JSON.parse(localStorage.getItem("amnyam.targets")||"{}"); return x&&typeof x==="object"&&!Array.isArray(x)?Object.fromEntries(Object.entries(x).filter(([id,v])=>/^\d{1,20}$/.test(id)&&isNum(v)&&v>0).slice(0,5000)):{}; } catch (_) { return {}; }
+    try {
+      const x = JSON.parse(localStorage.getItem("amnyam.targets") || "{}");
+      return x && typeof x === "object" && !Array.isArray(x)
+        ? Object.fromEntries(Object.entries(x).filter(([id, value]) =>
+            /^\d{1,20}$/.test(id) && Number.isSafeInteger(value) && value > 0 && value <= TARGET_PRICE_MAX
+          ).slice(0, 5000))
+        : {};
+    } catch (_) { return {}; }
   }
   function writeTargets(){if(accountState.user){if(!accountState.hydrating)queueProfileSave();return;}try{localStorage.setItem("amnyam.targets",JSON.stringify(state.targets));}catch(_){}}
   function readAlertedTargets(){try{const x=JSON.parse(localStorage.getItem("amnyam.alertedTargets")||"[]");return Array.isArray(x)?x.map(String).filter(id=>/^\d{1,20}$/.test(id)).slice(0,5000):[];}catch(_){return [];}}
@@ -1650,8 +1657,7 @@
     if (!accountState.user || !accountState.dirty) return;
     if (accountState.savePromise) {
       await accountState.savePromise;
-      if (accountState.dirty && accountState.user) return saveAccountProfile();
-      return;
+      return; // The in-flight request's finally block schedules the next save with backoff.
     }
     const revision = accountState.revision;
     const payload = profilePayload();
