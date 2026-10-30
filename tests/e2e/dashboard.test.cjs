@@ -24,7 +24,7 @@ function makeLots(n) {
   return Array.from({ length: n }, (_, i) => ({
     lot_id: String(1000 + i), title: i === 0 ? XSS : i % 7 === 0 ? "Звезда" : "Подарок " + i, serial: "#" + i + " из 100",
     rarity: i % 2 ? "Редкий" : "Обычный", price: i === 5 ? null : 100 + i * 10, status: "На продаже",
-    image_url: i === 1 ? "javascript:alert(1)" : "", lot_url: i === 2 ? "https://evil.example/x" : "https://huevo.su/market/lot/" + (1000 + i),
+    image_url: i === 1 ? "javascript:alert(1)" : i < 25 ? "https://huevo.su/static/gift.webp" : "", lot_url: i === 2 ? "https://evil.example/x" : "https://huevo.su/market/lot/" + (1000 + i),
     first_seen: "2026-10-01T10:00:00+00:00", last_seen: NOW, active: true,
     history: i === 3 ? [{ observed_at: "2026-10-01T10:00:00+00:00", price: 200 }, { observed_at: "2026-10-10T10:00:00+00:00", price: 150 }, { observed_at: NOW, price: 130 }] : [{ observed_at: "2026-10-01T10:00:00+00:00", price: 100 + i * 10 }],
   }));
@@ -398,6 +398,82 @@ test("catalog changes panel handles partial payloads and falls back to gone lots
   assert.match(await page.textContent("#changeList"), /Снятый лот/);
   await page.click("#tabPrice");
   assert.match(await page.textContent("#changeList"), /100.*125|100 → 125/);
+  assert.deepEqual(problems, []);
+  await browser.close();
+});
+
+
+test("sale benchmarks beat inflated asking prices and split offer clusters are suppressed", async () => {
+  const lots = Array.from({ length: 13 }, (_, i) => ({
+    lot_id: String(7000 + i), title: "Топор", serial: "#" + (i + 1), rarity: "Редкий",
+    price: i < 3 ? 80000 : 1000000, status: "На продаже",
+    image_url: i < 3 ? "https://huevo.su/static/axe.webp" : "",
+    lot_url: "https://huevo.su/market/lot/" + (7000 + i), first_seen: NOW, last_seen: NOW,
+    active: true, history: [{ observed_at: NOW, price: i < 3 ? 80000 : 1000000 }]
+  }));
+  const { browser, page, problems } = await open(serve(dataV2({ lots, sales: null })));
+  await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="deals"]');
+  assert.equal(await page.locator("#dealsList .deal-card-rich").count(), 0,
+    "three low offers versus ten 1m offers form two price clusters, not a trustworthy market median");
+  assert.match(await page.textContent("#dealsNote"), /устойчивой группы/);
+  await browser.close();
+
+  const profile = {
+    title: "топор", count: 20, median: 100000, p25: 95000, p75: 110000,
+    min: 80000, max: 130000, dated_sales: 4,
+    history: [
+      { date: "2026-10-27", median: 98000, count: 2 },
+      { date: "2026-10-28", median: 102000, count: 2 }
+    ]
+  };
+  const sales = { generated_at: NOW, summary: { count: 20, unknown: 0, median: 100000, min: 80000, max: 130000, enough_data: true }, by_title: [profile] };
+  const second = await open(serve(dataV2({ lots, sales })));
+  await second.page.waitForSelector("#content:not(.hide)");
+  await second.page.click('#mainNav [data-view="deals"]');
+  assert.equal(await second.page.locator("#dealsList .deal-card-rich").count(), 3,
+    "only the three genuinely cheap asks are compared to confirmed sales");
+  assert.match(await second.page.locator("#dealsList .deal-card-rich").first().textContent(), /МЕДИАНА ПРОДАЖ/);
+  assert.match(await second.page.locator("#dealsList .deal-card-rich").first().textContent(), /СОВЕРШЁННЫЕ ПРОДАЖИ/);
+  await second.page.click('#mainNav [data-view="analytics"]');
+  assert.ok(await second.page.locator("#salesPanel:not(.hide)").count());
+  assert.ok(await second.page.locator("#giftSalesSelect option").count() === 1);
+  assert.ok(await second.page.locator("#giftSalesProfile svg polyline").count() === 1,
+    "dated confirmed transactions produce a gift-level median price graph");
+  assert.deepEqual(second.problems, []);
+  await second.browser.close();
+});
+
+test("daily-pick gift art stays beside the title at desktop and mobile widths", async () => {
+  for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
+    const { browser, page, problems } = await open(serve(dataV2()), viewport);
+    await page.waitForSelector("#content:not(.hide)");
+    await page.click('#mainNav [data-view="overview"]');
+    assert.equal(await page.locator("#dayPicks .day-pick-card").count(), 3);
+    const cards = page.locator("#dayPicks .day-pick-card");
+    for (let i = 0; i < await cards.count(); i++) {
+      const card = cards.nth(i);
+      const image = await card.locator(".thumb").boundingBox();
+      const title = await card.locator(".t").boundingBox();
+      assert.ok(image && title, "each card has image and title boxes");
+      assert.ok(image.x + image.width <= title.x + 1, "gift art must not overlap or cover the title");
+      assert.ok(await card.evaluate(el => el.scrollWidth <= el.clientWidth + 1), "card has no internal horizontal overflow");
+    }
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
+    assert.deepEqual(problems, []);
+    await browser.close();
+  }
+});
+
+test("target price sound is opt-in and persists locally", async () => {
+  const { browser, page, problems } = await open(serve(dataV2()));
+  await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="favorites"]');
+  assert.equal(await page.getAttribute("#toggleAlertSound", "aria-pressed"), "false");
+  await page.click("#toggleAlertSound");
+  assert.equal(await page.getAttribute("#toggleAlertSound", "aria-pressed"), "true");
+  assert.equal(await page.evaluate(() => localStorage.getItem("amnyam.alertSound.v1")), "on");
+  await page.click("#testAlertSound");
   assert.deepEqual(problems, []);
   await browser.close();
 });
