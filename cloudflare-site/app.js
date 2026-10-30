@@ -8,7 +8,7 @@
 
   const ACCOUNT_PROFILE_URL = "./api/me";
   let accountState = {
-    user: null, profilesReady: false, updatedAt: null, dirty: false,
+    user: null, profilesReady: false, updatedAt: null, dirty: false, hydrating: false,
     revision: 0, saving: false, saveTimer: null, pollTimer: null
   };
 
@@ -67,15 +67,15 @@
       return Array.isArray(stored) ? stored.map(String).filter((id) => /^\d{1,20}$/.test(id)).slice(0, 5000) : [];
     } catch (_) { return []; }
   }
-  function writeFavorites() { if (accountState.user) { queueProfileSave(); return; } try { localStorage.setItem("amnyam.favorites", JSON.stringify(state.favorites)); } catch (_) {} }
+  function writeFavorites() { if (accountState.user) { if (!accountState.hydrating) queueProfileSave(); return; } try { localStorage.setItem("amnyam.favorites", JSON.stringify(state.favorites)); } catch (_) {} }
   function readTargets() {
     try { const x=JSON.parse(localStorage.getItem("amnyam.targets")||"{}"); return x&&typeof x==="object"&&!Array.isArray(x)?Object.fromEntries(Object.entries(x).filter(([id,v])=>/^\d{1,20}$/.test(id)&&isNum(v)&&v>0).slice(0,5000)):{}; } catch (_) { return {}; }
   }
-  function writeTargets(){if(accountState.user){queueProfileSave();return;}try{localStorage.setItem("amnyam.targets",JSON.stringify(state.targets));}catch(_){}}
+  function writeTargets(){if(accountState.user){if(!accountState.hydrating)queueProfileSave();return;}try{localStorage.setItem("amnyam.targets",JSON.stringify(state.targets));}catch(_){}}
   function readAlertedTargets(){try{const x=JSON.parse(localStorage.getItem("amnyam.alertedTargets")||"[]");return Array.isArray(x)?x.map(String).filter(id=>/^\d{1,20}$/.test(id)).slice(0,5000):[];}catch(_){return [];}}
-  function writeAlertedTargets(){if(accountState.user){queueProfileSave();return;}try{localStorage.setItem("amnyam.alertedTargets",JSON.stringify(state.alertedTargets));}catch(_){}}
+  function writeAlertedTargets(){if(accountState.user){if(!accountState.hydrating)queueProfileSave();return;}try{localStorage.setItem("amnyam.alertedTargets",JSON.stringify(state.alertedTargets));}catch(_){}}
   function readSavedFilters(){try{const x=JSON.parse(localStorage.getItem("amnyam.savedFilters")||"[]");return Array.isArray(x)?x.filter(i=>i&&typeof i.name==="string"&&i.name.trim()&&i.filters&&typeof i.filters==="object").slice(0,25):[];}catch(_){return [];}}
-  function writeSavedFilters(){if(accountState.user){queueProfileSave();return;}try{localStorage.setItem("amnyam.savedFilters",JSON.stringify(state.savedFilters));}catch(_){}}
+  function writeSavedFilters(){if(accountState.user){if(!accountState.hydrating)queueProfileSave();return;}try{localStorage.setItem("amnyam.savedFilters",JSON.stringify(state.savedFilters));}catch(_){}}
   const state = {
     data:null,lots:[],view:[],page:0,sort:{key:"price",dir:1},groupSort:{key:"count",dir:-1},catalogMode:"lots",
     changeKind:"new",liveFingerprint:null,compareIds:[],activeView:"overview",favorites:readFavorites(),
@@ -269,7 +269,7 @@
     updateAlertSoundControls();
     $("toggleAlertSound").addEventListener("click", () => {
       alertSoundEnabled = !alertSoundEnabled;
-      if (accountState.user) queueProfileSave(); else { try { localStorage.setItem(ALERT_SOUND_KEY, alertSoundEnabled ? "on" : "off"); } catch (_) {} }
+      if (accountState.user) { if (!accountState.hydrating) queueProfileSave(); } else { try { localStorage.setItem(ALERT_SOUND_KEY, alertSoundEnabled ? "on" : "off"); } catch (_) {} }
       updateAlertSoundControls();
       if (alertSoundEnabled) playAlertSound(true);
     });
@@ -1401,6 +1401,7 @@
   }
 
   function applyAccountProfile(profile) {
+    accountState.hydrating = true;
     const p = profile && typeof profile === "object" ? profile : {};
     state.favorites = Array.isArray(p.favorites) ? [...new Set(p.favorites.map(String).filter(id => /^\d{1,20}$/.test(id)))].slice(0, 5000) : [];
     state.targets = p.targets && typeof p.targets === "object" && !Array.isArray(p.targets)
@@ -1419,6 +1420,7 @@
     applyAppearance();
     applySeasonTheme(["default","newyear","halloween","spring","summer"].includes(prefs.seasonTheme) ? prefs.seasonTheme : "default", false);
     updateAlertSoundControls();
+    accountState.hydrating = false;
     if (state.data) render();
   }
 
@@ -1703,7 +1705,7 @@
     if (mascot) mascot.value = appearance.mascot;
     if (motion) motion.value = appearance.motion;
     if (glass) glass.checked = appearance.glass;
-    if (accountState.user) queueProfileSave(); else { try { localStorage.setItem(APPEARANCE_KEY, JSON.stringify(appearance)); } catch (_) {} }
+    if (accountState.user) { if (!accountState.hydrating) queueProfileSave(); } else { try { localStorage.setItem(APPEARANCE_KEY, JSON.stringify(appearance)); } catch (_) {} }
   }
   function initAppearance() {
     applyAppearance();
