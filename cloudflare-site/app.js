@@ -1385,7 +1385,7 @@
   }
 
 
-  // ---------- account + cross-device profile sync ----------
+  // ---------- huEVO identity + cross-device profile sync ----------
   function profilePayload() {
     return {
       favorites: state.favorites.slice(0, 5000),
@@ -1446,18 +1446,28 @@
       node.style.color = kind === "ok" ? "#8eea62" : kind === "muted" ? "var(--muted)" : "#ffbdc6";
     }
     const sync = $("accountSyncStatus");
-    if (sync && accountState.user) sync.textContent = message || "Синхронизация включена";
+    if (sync && accountState.user) sync.textContent = message || "Профиль huEVO синхронизирован";
   }
 
   function updateAccountUI() {
     const signedIn = Boolean(accountState.user);
     $("accountGuest").classList.toggle("hide", signedIn);
     $("accountSigned").classList.toggle("hide", !signedIn);
-    $("accountButton").textContent = signedIn ? "◎ " + accountState.user.display_name : "Войти в профиль";
+    $("accountButton").textContent = signedIn ? "◎ " + accountState.user.display_name : "Профиль huEVO";
     if (signedIn) {
-      $("accountDisplayName").textContent = accountState.user.display_name;
-      $("accountUsername").textContent = "@" + accountState.user.username;
-      setAccountStatus("Синхронизация включена", "ok");
+      $("accountDisplayName").textContent = accountState.user.display_name || "Пользователь huEVO";
+      $("accountUsername").textContent = accountState.user.username ? "@" + accountState.user.username : "hu_user_id: " + accountState.user.hu_user_id;
+      const avatar = $("accountAvatar");
+      if (avatar) {
+        if (accountState.user.avatar_url) {
+          avatar.src = accountState.user.avatar_url;
+          avatar.classList.remove("hide");
+        } else {
+          avatar.removeAttribute("src");
+          avatar.classList.add("hide");
+        }
+      }
+      setAccountStatus("Профиль huEVO подключён", "ok");
     }
   }
 
@@ -1522,13 +1532,6 @@
     }
   }
 
-  async function flushAccountProfile() {
-    if (accountState.saveTimer) window.clearTimeout(accountState.saveTimer);
-    accountState.saveTimer = null;
-    if (accountState.savePromise) await accountState.savePromise;
-    if (accountState.dirty && accountState.user) await saveAccountProfile();
-    return !accountState.dirty;
-  }
   function acceptAccountSession(data) {
     accountState.authRevision += 1;
     accountState.user = data.user;
@@ -1539,43 +1542,37 @@
     applyAccountProfile(data.profile);
     updateAccountUI();
     if ($("accountDialog").open) $("accountDialog").close();
-    setAccountStatus("Профиль загружен", "ok");
+    setAccountStatus("Профиль huEVO загружен", "ok");
   }
 
-  async function submitAccountForm(form, mode) {
-    const submit = form.querySelector('button[type="submit"]');
-    const original = submit.textContent;
-    submit.disabled = true;
-    submit.textContent = mode === "login" ? "Входим…" : "Создаём…";
-    setAccountStatus("", "muted");
-    try {
-      const body = mode === "login"
-        ? { username: $("loginUsername").value.trim(), password: $("loginPassword").value }
-        : {
-            username: $("registerUsername").value.trim(),
-            display_name: $("registerDisplayName").value.trim(),
-            password: $("registerPassword").value,
-            profile: profilePayload()
-          };
-      const data = await accountRequest("./api/auth/" + mode, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
-      });
-      acceptAccountSession(data);
-      form.reset();
-      startAccountProfilePolling();
-    } catch (error) {
-      setAccountStatus(error.message || "Не удалось выполнить запрос.", "error");
-    } finally {
-      submit.disabled = false;
-      submit.textContent = original;
-    }
+  function hasHuevoLaunch() {
+    const params = new URLSearchParams(location.search);
+    return params.has("hu_user_id") && params.has("hu_app_id") && params.has("hu_hash") && params.has("hu_ts");
+  }
+
+  async function authenticateFromHuevo() {
+    if (!hasHuevoLaunch()) return false;
+    setAccountStatus("Проверяем подписанный профиль huEVO…", "muted");
+    const data = await accountRequest("./api/auth/launch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ launch_query: location.search, profile: profilePayload() })
+    });
+    if (!data.authenticated || !data.user) throw new Error("huEVO не подтвердил пользователя.");
+    acceptAccountSession(data);
+    startAccountProfilePolling();
+    return true;
   }
 
   async function checkAccountSession() {
     const authRevision = accountState.authRevision;
     try {
+      // Prefer the freshly signed launch identity on every huEVO app open.
+      // This also handles switching Huevo accounts in the social network.
+      if (hasHuevoLaunch()) {
+        await authenticateFromHuevo();
+        return;
+      }
       const data = await accountRequest(ACCOUNT_PROFILE_URL);
       if (authRevision !== accountState.authRevision) return;
       accountState.profilesReady = data.profiles_ready !== false;
@@ -1587,18 +1584,18 @@
         }
         updateAccountUI();
         startAccountProfilePolling();
-      } else if (accountState.user) {
+      } else {
         accountState.user = null;
         accountState.updatedAt = null;
         accountState.dirty = false;
         restoreGuestProfile();
         updateAccountUI();
-      } else {
-        updateAccountUI();
+        setAccountStatus(accountState.profilesReady
+          ? "Открой AMNYAM MODE внутри huEVO — профиль подключится автоматически."
+          : "Серверное хранилище профилей ещё не подготовлено.", "muted");
       }
-      if (!accountState.profilesReady) setAccountStatus("Серверное хранилище профилей ещё не подготовлено.", "error");
     } catch (error) {
-      setAccountStatus("Профиль временно недоступен. Общий рынок продолжает работать.", "error");
+      setAccountStatus(error.message || "Не удалось подтвердить профиль huEVO.", "error");
       updateAccountUI();
     }
   }
@@ -1618,6 +1615,7 @@
           accountState.updatedAt = null;
           restoreGuestProfile();
           updateAccountUI();
+          setAccountStatus("Сеанс huEVO истёк. Перезагрузи приложение внутри huEVO.", "error");
           window.clearInterval(accountState.pollTimer);
           accountState.pollTimer = null;
           return;
@@ -1640,59 +1638,15 @@
     }, 30000);
   }
 
-  async function logoutFromAccount() {
-    const button = $("logoutButton");
-    button.disabled = true;
-    try {
-      const saved = await flushAccountProfile();
-      if (!saved) {
-        setAccountStatus("Не удалось сохранить изменения. Остаюсь в аккаунте — проверь соединение и повтори выход.", "error");
-        button.disabled = false;
-        return;
-      }
-      await accountRequest("./api/auth/logout", { method: "POST" });
-    } catch (error) {
-      setAccountStatus("Не удалось завершить сеанс: " + error.message, "error");
-      button.disabled = false;
-      return;
-    }
-    accountState.authRevision += 1;
-    accountState.user = null;
-    accountState.updatedAt = null;
-    accountState.dirty = false;
-    accountState.saving = false;
-    accountState.savePromise = null;
-    if (accountState.saveTimer) window.clearTimeout(accountState.saveTimer);
-    if (accountState.pollTimer) window.clearInterval(accountState.pollTimer);
-    accountState.saveTimer = null;
-    accountState.pollTimer = null;
-    restoreGuestProfile();
-    updateAccountUI();
-    button.disabled = false;
-    $("accountDialog").close();
-  }
-
   function initAccountUI() {
     updateAccountUI();
     $("accountButton").addEventListener("click", () => {
       $("accountStatus").textContent = "";
       $("accountDialog").showModal();
+      if (!accountState.user && hasHuevoLaunch()) authenticateFromHuevo().catch(error => setAccountStatus(error.message, "error"));
     });
     $("accountClose").addEventListener("click", () => $("accountDialog").close());
     $("accountDialog").addEventListener("click", event => { if (event.target === $("accountDialog")) $("accountDialog").close(); });
-    $("showRegister").addEventListener("click", () => {
-      $("loginForm").classList.add("hide");
-      $("registerForm").classList.remove("hide");
-      $("accountStatus").textContent = "";
-    });
-    $("showLogin").addEventListener("click", () => {
-      $("registerForm").classList.add("hide");
-      $("loginForm").classList.remove("hide");
-      $("accountStatus").textContent = "";
-    });
-    $("loginForm").addEventListener("submit", event => { event.preventDefault(); submitAccountForm($("loginForm"), "login"); });
-    $("registerForm").addEventListener("submit", event => { event.preventDefault(); submitAccountForm($("registerForm"), "register"); });
-    $("logoutButton").addEventListener("click", logoutFromAccount);
     checkAccountSession();
   }
 
