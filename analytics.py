@@ -1,7 +1,8 @@
-"""Pure analytics over lots. Stdlib only.
+"""Privacy-safe market analytics for current offers and confirmed sale history.
 
-All figures describe *current offers* and the app's own observations, never completed sales.
+Listing prices and completed-sale prices are kept as separate evidence sources.
 """
+
 from statistics import median
 
 MIN_GROUP = 3           # need at least this many comparable offers
