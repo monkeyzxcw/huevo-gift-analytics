@@ -875,7 +875,9 @@ async function evaluatePushTargets(env, incomingLots) {
         title: "AMNYAM · достигнута цена-цель",
         body: lot.title + ": " + lot.price.toLocaleString("ru-RU") +
           " монэток (цель " + target.toLocaleString("ru-RU") + ").",
-        url: lot.lot_url,
+        // Keep notification clicks on the app origin; it can open the watched lot
+        // without relying on a cross-origin window navigation from a Service Worker.
+        url: "/?amnyam_lot=" + encodeURIComponent(lotId),
         tag: "amnyam-target-" + lotId,
         kind: "target",
         lot_id: lotId,
@@ -883,8 +885,16 @@ async function evaluatePushTargets(env, incomingLots) {
         target_price: target,
         sent_at: now
       };
-      for (const subscription of user.subscriptions) {
-        tasks.push(sendWebPush(env, keys, subscription, payload));
+      const outcomes = await Promise.all(
+        user.subscriptions.map((subscription) => sendWebPush(env, keys, subscription, payload))
+      );
+      // A temporary push-provider/network failure must remain retryable at the next
+      // market ingest. Keep the one-shot claim only after at least one delivery was
+      // accepted by a push service.
+      if (!outcomes.some((outcome) => outcome.ok)) {
+        await env.DB.prepare(
+          "DELETE FROM push_alert_state WHERE user_id = ? AND lot_id = ? AND target_price = ?"
+        ).bind(userId, lotId, target).run().catch(() => undefined);
       }
     }
   }
