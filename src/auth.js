@@ -106,6 +106,18 @@ function validUsername(value) {
   return /^[a-z0-9_.-]{3,24}$/.test(value);
 }
 
+function constantTimeTextEqual(left, right) {
+  const a = String(left || "");
+  const b = String(right || "");
+  let difference = a.length ^ b.length;
+  const length = Math.max(a.length, b.length);
+  for (let index = 0; index < length; index += 1) {
+    difference |= (a.charCodeAt(index) || 0) ^ (b.charCodeAt(index) || 0);
+  }
+  return difference === 0;
+}
+
+
 function cleanString(value, maxLength) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
 }
@@ -344,7 +356,7 @@ export async function loginAccount(request, env, jsonResponse) {
   const expected = row ? row.password_hash : "";
   const iterations = row ? Number(row.password_iterations) : PASSWORD_ITERATIONS;
   const actual = await hashPassword(password, salt, iterations || PASSWORD_ITERATIONS);
-  if (!row || actual !== expected) {
+  if (!row || !constantTimeTextEqual(actual, expected)) {
     return json(jsonResponse, request, env, { ok: false, error: "Неверный логин или пароль." }, 401);
   }
 
