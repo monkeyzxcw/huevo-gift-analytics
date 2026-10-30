@@ -44,6 +44,16 @@ class GiftInstanceCrawlTests(unittest.TestCase):
             logging.getLogger("instance-test"), limit=2)
         self.assertEqual((result["pages"], len(browser.gets)), (1, 1))
 
+    def test_missing_instance_page_is_not_cached_as_empty_history(self):
+        browser = FakeBrowser({1: (404, "<html><body>Not found</body></html>", None)})
+        result = run_gift_instance_crawl(
+            browser, cfg(), [self.candidate()],
+            logging.getLogger("instance-test"), limit=1)
+        self.assertEqual(result["status"], "not_found")
+        self.assertEqual(result["pages"], 1)
+        self.assertEqual(len(browser.gets), 1)
+        self.assertEqual(result["instances"], {})
+
     def test_block_stops_the_queue(self):
         browser = FakeBrowser({1: (429, "<html><body>Too many requests</body></html>", "120")})
         result = run_gift_instance_crawl(browser, cfg(),
