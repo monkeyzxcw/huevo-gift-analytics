@@ -6,6 +6,12 @@
   const STALE_HOURS = 24;
   const HUEVO_HOSTS = /^https:\/\/(huevo\.su|huevo\.departament\.site)\//i;
 
+  const ACCOUNT_PROFILE_URL = "./api/me";
+  let accountState = {
+    user: null, profilesReady: false, updatedAt: null, dirty: false,
+    revision: 0, saving: false, saveTimer: null, pollTimer: null
+  };
+
   // ---------- safe DOM helpers (no innerHTML anywhere: all text goes through textContent) ----------
   function h(tag, attrs, children) {
     const el = document.createElement(tag);
@@ -61,15 +67,15 @@
       return Array.isArray(stored) ? stored.map(String).filter((id) => /^\d{1,20}$/.test(id)).slice(0, 5000) : [];
     } catch (_) { return []; }
   }
-  function writeFavorites() { try { localStorage.setItem("amnyam.favorites", JSON.stringify(state.favorites)); } catch (_) {} }
+  function writeFavorites() { if (accountState.user) { queueProfileSave(); return; } try { localStorage.setItem("amnyam.favorites", JSON.stringify(state.favorites)); } catch (_) {} }
   function readTargets() {
     try { const x=JSON.parse(localStorage.getItem("amnyam.targets")||"{}"); return x&&typeof x==="object"&&!Array.isArray(x)?Object.fromEntries(Object.entries(x).filter(([id,v])=>/^\d{1,20}$/.test(id)&&isNum(v)&&v>0).slice(0,5000)):{}; } catch (_) { return {}; }
   }
-  function writeTargets(){try{localStorage.setItem("amnyam.targets",JSON.stringify(state.targets));}catch(_){}}
+  function writeTargets(){if(accountState.user){queueProfileSave();return;}try{localStorage.setItem("amnyam.targets",JSON.stringify(state.targets));}catch(_){}}
   function readAlertedTargets(){try{const x=JSON.parse(localStorage.getItem("amnyam.alertedTargets")||"[]");return Array.isArray(x)?x.map(String).filter(id=>/^\d{1,20}$/.test(id)).slice(0,5000):[];}catch(_){return [];}}
-  function writeAlertedTargets(){try{localStorage.setItem("amnyam.alertedTargets",JSON.stringify(state.alertedTargets));}catch(_){}}
+  function writeAlertedTargets(){if(accountState.user){queueProfileSave();return;}try{localStorage.setItem("amnyam.alertedTargets",JSON.stringify(state.alertedTargets));}catch(_){}}
   function readSavedFilters(){try{const x=JSON.parse(localStorage.getItem("amnyam.savedFilters")||"[]");return Array.isArray(x)?x.filter(i=>i&&typeof i.name==="string"&&i.name.trim()&&i.filters&&typeof i.filters==="object").slice(0,25):[];}catch(_){return [];}}
-  function writeSavedFilters(){try{localStorage.setItem("amnyam.savedFilters",JSON.stringify(state.savedFilters));}catch(_){}}
+  function writeSavedFilters(){if(accountState.user){queueProfileSave();return;}try{localStorage.setItem("amnyam.savedFilters",JSON.stringify(state.savedFilters));}catch(_){}}
   const state = {
     data:null,lots:[],view:[],page:0,sort:{key:"price",dir:1},groupSort:{key:"count",dir:-1},catalogMode:"lots",
     changeKind:"new",liveFingerprint:null,compareIds:[],activeView:"overview",favorites:readFavorites(),
@@ -263,7 +269,7 @@
     updateAlertSoundControls();
     $("toggleAlertSound").addEventListener("click", () => {
       alertSoundEnabled = !alertSoundEnabled;
-      try { localStorage.setItem(ALERT_SOUND_KEY, alertSoundEnabled ? "on" : "off"); } catch (_) {}
+      if (accountState.user) queueProfileSave(); else { try { localStorage.setItem(ALERT_SOUND_KEY, alertSoundEnabled ? "on" : "off"); } catch (_) {} }
       updateAlertSoundControls();
       if (alertSoundEnabled) playAlertSound(true);
     });
@@ -294,7 +300,7 @@
     const theme = allowed.includes(value) ? value : "default";
     document.body.dataset.season = theme;
     $("seasonTheme").value = theme;
-    if (persist) { try { localStorage.setItem(seasonKey, theme); } catch (_) {} }
+    if (persist) { if (accountState.user) queueProfileSave(); else { try { localStorage.setItem(seasonKey, theme); } catch (_) {} } }
   }
   function initAmbience() {
     let savedTheme = "default";
@@ -1378,6 +1384,278 @@
     }
   }
 
+
+  // ---------- account + cross-device profile sync ----------
+  function profilePayload() {
+    return {
+      favorites: state.favorites.slice(0, 5000),
+      targets: { ...state.targets },
+      alertedTargets: state.alertedTargets.slice(0, 5000),
+      savedFilters: state.savedFilters.slice(0, 25),
+      preferences: {
+        alertSound: Boolean(alertSoundEnabled),
+        appearance: { ...appearance },
+        seasonTheme: document.body.dataset.season || "default"
+      }
+    };
+  }
+
+  function applyAccountProfile(profile) {
+    const p = profile && typeof profile === "object" ? profile : {};
+    state.favorites = Array.isArray(p.favorites) ? [...new Set(p.favorites.map(String).filter(id => /^\d{1,20}$/.test(id)))].slice(0, 5000) : [];
+    state.targets = p.targets && typeof p.targets === "object" && !Array.isArray(p.targets)
+      ? Object.fromEntries(Object.entries(p.targets).filter(([id, value]) => /^\d{1,20}$/.test(id) && isNum(value) && value > 0).slice(0, 5000)) : {};
+    state.alertedTargets = Array.isArray(p.alertedTargets) ? [...new Set(p.alertedTargets.map(String).filter(id => /^\d{1,20}$/.test(id)))].slice(0, 5000) : [];
+    state.savedFilters = Array.isArray(p.savedFilters) ? p.savedFilters.filter(item => item && typeof item.name === "string" && item.name.trim() && item.filters && typeof item.filters === "object").slice(0, 25) : [];
+    const prefs = p.preferences && typeof p.preferences === "object" ? p.preferences : {};
+    alertSoundEnabled = prefs.alertSound === true;
+    const a = prefs.appearance && typeof prefs.appearance === "object" ? prefs.appearance : {};
+    appearance = {
+      background: ["cosmic","liquid","nebula","minimal"].includes(a.background) ? a.background : "cosmic",
+      mascot: a.mascot === "none" ? "none" : "omnom",
+      motion: ["normal","subtle","off"].includes(a.motion) ? a.motion : "normal",
+      glass: a.glass !== false
+    };
+    applyAppearance();
+    applySeasonTheme(["default","newyear","halloween","spring","summer"].includes(prefs.seasonTheme) ? prefs.seasonTheme : "default", false);
+    updateAlertSoundControls();
+    if (state.data) render();
+  }
+
+  function restoreGuestProfile() {
+    state.favorites = readFavorites();
+    state.targets = readTargets();
+    state.alertedTargets = readAlertedTargets();
+    state.savedFilters = readSavedFilters();
+    try { alertSoundEnabled = localStorage.getItem(ALERT_SOUND_KEY) === "on"; } catch (_) { alertSoundEnabled = false; }
+    appearance = readAppearance();
+    applyAppearance();
+    let theme = "default";
+    try { theme = localStorage.getItem(seasonKey) || "default"; } catch (_) {}
+    applySeasonTheme(theme, false);
+    updateAlertSoundControls();
+    if (state.data) render();
+  }
+
+  function setAccountStatus(message, kind) {
+    const node = $("accountStatus");
+    if (node) {
+      node.textContent = message || "";
+      node.style.color = kind === "ok" ? "#8eea62" : kind === "muted" ? "var(--muted)" : "#ffbdc6";
+    }
+    const sync = $("accountSyncStatus");
+    if (sync && accountState.user) sync.textContent = message || "Синхронизация включена";
+  }
+
+  function updateAccountUI() {
+    const signedIn = Boolean(accountState.user);
+    $("accountGuest").classList.toggle("hide", signedIn);
+    $("accountSigned").classList.toggle("hide", !signedIn);
+    $("accountButton").textContent = signedIn ? "◎ " + accountState.user.display_name : "Войти в профиль";
+    if (signedIn) {
+      $("accountDisplayName").textContent = accountState.user.display_name;
+      $("accountUsername").textContent = "@" + accountState.user.username;
+      setAccountStatus("Синхронизация включена", "ok");
+    }
+  }
+
+  async function accountRequest(path, options) {
+    const response = await fetch(path, {
+      cache: "no-store",
+      credentials: "same-origin",
+      ...(options || {}),
+      headers: { "Accept": "application/json", ...((options && options.headers) || {}) }
+    });
+    let data = {};
+    try { data = await response.json(); } catch (_) {}
+    if (!response.ok) throw new Error(data.error || ("HTTP " + response.status));
+    return data;
+  }
+
+  function queueProfileSave() {
+    if (!accountState.user) return;
+    accountState.revision += 1;
+    accountState.dirty = true;
+    if (accountState.saveTimer) window.clearTimeout(accountState.saveTimer);
+    accountState.saveTimer = window.setTimeout(saveAccountProfile, 700);
+    setAccountStatus("Есть несохранённые изменения…", "muted");
+  }
+
+  async function saveAccountProfile() {
+    if (!accountState.user || !accountState.dirty || accountState.saving) return;
+    const revision = accountState.revision;
+    const payload = profilePayload();
+    accountState.dirty = false;
+    accountState.saving = true;
+    try {
+      const result = await accountRequest("./api/me/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profile: payload })
+      });
+      accountState.updatedAt = result.updated_at || accountState.updatedAt;
+      if (revision === accountState.revision) setAccountStatus("Все изменения сохранены", "ok");
+      else accountState.dirty = true;
+    } catch (error) {
+      accountState.dirty = true;
+      setAccountStatus("Не удалось синхронизировать: " + error.message, "error");
+    } finally {
+      accountState.saving = false;
+      if (accountState.dirty && accountState.user) {
+        if (accountState.saveTimer) window.clearTimeout(accountState.saveTimer);
+        accountState.saveTimer = window.setTimeout(saveAccountProfile, 2500);
+      }
+    }
+  }
+
+  function acceptAccountSession(data) {
+    accountState.user = data.user;
+    accountState.profilesReady = true;
+    accountState.updatedAt = data.updated_at || null;
+    accountState.dirty = false;
+    if (accountState.saveTimer) window.clearTimeout(accountState.saveTimer);
+    applyAccountProfile(data.profile);
+    updateAccountUI();
+    if ($("accountDialog").open) $("accountDialog").close();
+    setAccountStatus("Профиль загружен", "ok");
+  }
+
+  async function submitAccountForm(form, mode) {
+    const submit = form.querySelector('button[type="submit"]');
+    const original = submit.textContent;
+    submit.disabled = true;
+    submit.textContent = mode === "login" ? "Входим…" : "Создаём…";
+    setAccountStatus("", "muted");
+    try {
+      const body = mode === "login"
+        ? { username: $("loginUsername").value.trim(), password: $("loginPassword").value }
+        : {
+            username: $("registerUsername").value.trim(),
+            display_name: $("registerDisplayName").value.trim(),
+            password: $("registerPassword").value,
+            profile: profilePayload()
+          };
+      const data = await accountRequest("./api/auth/" + mode, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      acceptAccountSession(data);
+      form.reset();
+      startAccountProfilePolling();
+    } catch (error) {
+      setAccountStatus(error.message || "Не удалось выполнить запрос.", "error");
+    } finally {
+      submit.disabled = false;
+      submit.textContent = original;
+    }
+  }
+
+  async function checkAccountSession() {
+    try {
+      const data = await accountRequest(ACCOUNT_PROFILE_URL);
+      accountState.profilesReady = data.profiles_ready !== false;
+      if (data.authenticated && data.user) {
+        if (!accountState.user || accountState.user.id !== data.user.id || accountState.updatedAt !== data.updated_at) {
+          accountState.user = data.user;
+          accountState.updatedAt = data.updated_at || null;
+          if (!accountState.dirty) applyAccountProfile(data.profile);
+        }
+        updateAccountUI();
+        startAccountProfilePolling();
+      } else if (accountState.user) {
+        accountState.user = null;
+        accountState.updatedAt = null;
+        accountState.dirty = false;
+        restoreGuestProfile();
+        updateAccountUI();
+      } else {
+        updateAccountUI();
+      }
+      if (!accountState.profilesReady) setAccountStatus("Серверное хранилище профилей ещё не подготовлено.", "error");
+    } catch (error) {
+      setAccountStatus("Профиль временно недоступен. Общий рынок продолжает работать.", "error");
+      updateAccountUI();
+    }
+  }
+
+  function startAccountProfilePolling() {
+    if (accountState.pollTimer) return;
+    accountState.pollTimer = window.setInterval(async () => {
+      if (!accountState.user || accountState.dirty) return;
+      try {
+        const data = await accountRequest(ACCOUNT_PROFILE_URL);
+        if (!data.authenticated || !data.user) {
+          accountState.user = null;
+          accountState.updatedAt = null;
+          restoreGuestProfile();
+          updateAccountUI();
+          window.clearInterval(accountState.pollTimer);
+          accountState.pollTimer = null;
+          return;
+        }
+        if (data.user.id !== accountState.user.id) {
+          accountState.user = data.user;
+          accountState.updatedAt = data.updated_at || null;
+          applyAccountProfile(data.profile);
+          updateAccountUI();
+        } else if (data.updated_at && data.updated_at !== accountState.updatedAt) {
+          accountState.updatedAt = data.updated_at;
+          applyAccountProfile(data.profile);
+          setAccountStatus("Профиль синхронизирован с другого устройства", "ok");
+        }
+      } catch (_) {}
+    }, 30000);
+  }
+
+  async function logoutFromAccount() {
+    const button = $("logoutButton");
+    button.disabled = true;
+    try {
+      await saveAccountProfile();
+      await accountRequest("./api/auth/logout", { method: "POST" });
+    } catch (_) {
+      // A lost connection must not leave the current browser showing the next guest's profile.
+    } finally {
+      accountState.user = null;
+      accountState.updatedAt = null;
+      accountState.dirty = false;
+      accountState.saving = false;
+      if (accountState.saveTimer) window.clearTimeout(accountState.saveTimer);
+      if (accountState.pollTimer) window.clearInterval(accountState.pollTimer);
+      accountState.saveTimer = null;
+      accountState.pollTimer = null;
+      restoreGuestProfile();
+      updateAccountUI();
+      button.disabled = false;
+      $("accountDialog").close();
+    }
+  }
+
+  function initAccountUI() {
+    updateAccountUI();
+    $("accountButton").addEventListener("click", () => {
+      $("accountStatus").textContent = "";
+      $("accountDialog").showModal();
+    });
+    $("accountClose").addEventListener("click", () => $("accountDialog").close());
+    $("accountDialog").addEventListener("click", event => { if (event.target === $("accountDialog")) $("accountDialog").close(); });
+    $("showRegister").addEventListener("click", () => {
+      $("loginForm").classList.add("hide");
+      $("registerForm").classList.remove("hide");
+      $("accountStatus").textContent = "";
+    });
+    $("showLogin").addEventListener("click", () => {
+      $("registerForm").classList.add("hide");
+      $("loginForm").classList.remove("hide");
+      $("accountStatus").textContent = "";
+    });
+    $("loginForm").addEventListener("submit", event => { event.preventDefault(); submitAccountForm($("loginForm"), "login"); });
+    $("registerForm").addEventListener("submit", event => { event.preventDefault(); submitAccountForm($("registerForm"), "register"); });
+    $("logoutButton").addEventListener("click", logoutFromAccount);
+    checkAccountSession();
+  }
+
   // ---------- main render ----------
   function render() {
     renderState();
@@ -1425,7 +1703,7 @@
     if (mascot) mascot.value = appearance.mascot;
     if (motion) motion.value = appearance.motion;
     if (glass) glass.checked = appearance.glass;
-    try { localStorage.setItem(APPEARANCE_KEY, JSON.stringify(appearance)); } catch (_) {}
+    if (accountState.user) queueProfileSave(); else { try { localStorage.setItem(APPEARANCE_KEY, JSON.stringify(appearance)); } catch (_) {} }
   }
   function initAppearance() {
     applyAppearance();
@@ -1437,6 +1715,7 @@
   }
 
   // ---------- events ----------
+  initAccountUI();
   initAppearance();
   initAmbience();
   initAlertSoundControls();
