@@ -23,7 +23,7 @@ from lot_parser import parse_cards
 from scripts.collect_snapshot import make_browser, load_state, save_state, iso, now_utc
 
 LOG = logging.getLogger("huevo-live-poller")
-DEFAULT_WORKER = "https://huevo-gift-analytics.monkeyzxc1437.workers.dev"
+DEFAULT_WORKER = "https://huevo-gift-analytics.monkeyzxcw.workers.dev"
 DEFAULT_BASE_URL = "https://huevo.su"
 
 
