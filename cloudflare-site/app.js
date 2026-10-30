@@ -880,6 +880,55 @@
       body.append(h("div", { class: "empty", text: l.gift_details ? "Карточка проверена, но её характеристики пока не удалось распознать. Мы не подставляем догадки." : "Карточка подарка ещё не проанализирована сборщиком." }));
     }
 
+    const instance = l.gift_instance && typeof l.gift_instance === "object" ? l.gift_instance : null;
+    body.append(h("h4", { text: "Экземпляр и тираж" }));
+    if (instance) {
+      const soldOutLabel = instance.edition_sold_out === true ? "Тираж разошёлся"
+        : instance.edition_sold_out === false ? "Распродажа тиража не отмечена" : "Неизвестно";
+      const instanceKv = [
+        ["Номер экземпляра", instance.serial ? "№ " + fmt(instance.serial) : "—"],
+        ["Полный тираж", isNum(instance.supply) ? fmt(instance.supply) : "—"],
+        ["Редкость", instance.rarity || "—"],
+        ["Цена дропа", isNum(instance.drop_price) ? price(instance.drop_price) : (instance.drop_price_text || "—")],
+        ["Состояние тиража", soldOutLabel],
+        ["Автор дизайна", instance.author || "—"],
+        ["Коллекция", instance.collection || "—"],
+        ["Текущий владелец", instance.current_owner || "—"]
+      ];
+      body.append(h("dl", { class: "kv gift-attributes" }, instanceKv.map((pair) =>
+        h("div", {}, [h("dt", { text: pair[0] }), h("dd", { text: pair[1] })]))));
+      if (instance.gift_url) {
+        body.append(h("a", { class: "btn secondary", href: instance.gift_url, target: "_blank", rel: "noopener noreferrer", text: "Открыть страницу экземпляра ↗" }));
+      }
+      body.append(h("h4", { text: "История экземпляра: кто кому" }));
+      const events = Array.isArray(instance.history) ? instance.history.slice().reverse().slice(0, 20) : [];
+      if (!instance.history_found) {
+        body.append(h("div", { class: "empty", text: "История экземпляра ещё не получена или её блок не удалось распознать." }));
+      } else if (!events.length) {
+        body.append(h("div", { class: "empty", text: "Блок истории доступен, но событий в нём нет." }));
+      } else {
+        const eventList = h("ul", { class: "list" });
+        events.forEach((event) => {
+          const flow = [event.from_user, event.to_user].filter(Boolean).join(" → ") || "Участники не указаны";
+          eventList.append(h("li", { class: "li" }, [
+            h("span", { class: "thumb", text: "↗", "aria-hidden": "true" }),
+            h("div", {}, [
+              h("div", { class: "t", text: event.label || "Изменение истории" }),
+              h("div", { class: "m", text: flow })
+            ]),
+            h("div", { class: "p", text: event.time_raw || "—" })
+          ]));
+        });
+        body.append(eventList);
+        if (instance.history.length > events.length) {
+          body.append(h("p", { class: "muted foot", text: "Показаны последние " + fmt(events.length) + " из " + fmt(instance.history.length) + " событий." }));
+        }
+      }
+      body.append(h("p", { class: "muted foot", text: "Цена дропа — первоначальная цена выпуска, а не текущая цена объявления. История показывает передачи и продажи, но не содержит сумму каждой сделки; отдельный обмен монетами в ней не виден." }));
+    } else {
+      body.append(h("div", { class: "empty", text: "Данные экземпляра ещё не собраны. Сборщик получает их отдельной очередью и не открывает страницу при каждом обновлении рынка." }));
+    }
+
     const watch=h("div",{class:"detail-watch"});
     const fav=h("button",{class:"btn secondary",type:"button",text:state.favorites.includes(String(l.lot_id))?"★ В избранном":"☆ В избранное"});
     fav.addEventListener("click",()=>{toggleFavorite(l.lot_id);fav.textContent=state.favorites.includes(String(l.lot_id))?"★ В избранном":"☆ В избранное";});
