@@ -15,7 +15,7 @@ Production architecture: Cloudflare Workers + Static Assets + D1. Старые F
 
 ## Сбор Huevo
 
-Рынок собирает отдельный Windows-пакет HuevoDualScan v6, не входящий в GitHub runtime. Архив в этой QA-сессии: `/mnt/data/HuevoDualScan-Windows-v6.zip` (SHA-256 `8b25da1ace7ea13e84fe13c6e9752a46217d861cb7c817b54103f93ca8b13939`).
+Рынок собирает отдельный Windows-пакет HuevoDualScan v6, не входящий в GitHub runtime. Архив этой QA-сессии был передан владельцу как `HuevoDualScan-Windows-v6.zip` (SHA-256 `8b25da1ace7ea13e84fe13c6e9752a46217d861cb7c817b54103f93ca8b13939`). ZIP не включён в GitHub repository; временный путь среды выполнения не считать постоянным.
 
 Он запускает два видимых независимых Chrome-профиля:
 1. Chrome #1 опрашивает первую страницу примерно раз в 3 секунды и публикует live-изменения.
