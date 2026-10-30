@@ -110,6 +110,10 @@ test("search, filters, sort, pagination and reset work", async () => {
   assert.ok(prices.length > 0 && prices.every((p) => p >= 500 && p <= 600), "price range filter");
   await page.click("#reset");
   assert.match(await page.textContent("#rowCount"), /120 из 120/);
+  await page.selectOption("#sortBy", "lot_count:-1");
+  assert.match(await page.textContent("#rows tr:first-child td:first-child"), /Звезда/);
+  assert.equal((await page.textContent("#rows tr:first-child td:nth-child(3) .count-pill")).trim(), "9");
+  await page.selectOption("#sortBy", "price:1");
   await page.click(".sort[data-key=price]");           // already ascending -> descending
   assert.equal(await page.getAttribute("th:nth-child(2)", "aria-sort"), "descending");
   assert.match(await page.textContent("#rows tr:first-child td.price"), /1\s?290/);
