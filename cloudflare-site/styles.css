@@ -255,8 +255,7 @@ tbody tr:hover td{background:#1a2115}
 .price-cell{white-space:normal}.price-value{white-space:nowrap}
 .sparkline{display:block;width:72px;height:21px;margin-top:4px;overflow:visible}.sparkline polyline{fill:none;stroke:#91c85a;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.sparkline.down polyline{stroke:#f0a15e}.sparkline.flat polyline{stroke:#a0a8c0}
 .lot-actions{display:flex;align-items:center;gap:5px;flex-wrap:wrap}.compare-check{accent-color:var(--amnyam-acid);width:16px;height:16px;cursor:pointer}
-.watch-alert{display:flex;align-items:center;gap:10px;margin:12px 0;padding:12px 14px;border:1px solid #5b7639;border-radius:8px;background:#18220f;color:#e2f2d4;font-size:12px}.watch-alert.hide{display:none}.watch-alert #watchAlertText{flex:1}
-.watch-alert-mark{display:grid;place-items:center;width:28px;height:28px;background:#283a18;color:var(--amnyam-acid);border-radius:6px;font-weight:900}.watch-help{font-size:11px;color:#9eaa91;line-height:1.55}
+.watch-help{font-size:11px;color:#9eaa91;line-height:1.55}
 .target-editor{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px}.target-input{max-width:145px;min-width:100px!important;padding:7px 8px!important;font-size:11px!important}.target-save{padding:7px 9px;font-size:10px}.target-status{flex-basis:100%;font-size:10px;color:#9da98e}
 .detail-watch{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 0;border-bottom:1px solid var(--line);margin-bottom:10px}
 .comparison-wrap{max-width:100%;margin:12px 0}.comparison-table{min-width:540px}.comparison-table th,.comparison-table td{padding:10px;border-bottom:1px solid var(--line);text-align:left;font-size:11px;vertical-align:middle}.comparison-table thead th{color:#d6e4c7}.comparison-table tbody th{color:#a7b39a;font-weight:800;white-space:nowrap}
@@ -288,9 +287,8 @@ tbody tr:hover td{background:#1a2115}
 .day-pick-card .deal-metrics{grid-template-columns:1fr}.day-pick-card .deal-metric{padding:6px}.day-pick-card .deal-actions{display:flex;flex-direction:column;align-items:flex-end;min-width:70px}
 .best-target-tools{display:grid;grid-template-columns:minmax(150px,1fr) auto auto;align-items:end;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid #3b472e}
 .best-target-tools .f{min-width:0}.best-target-tools .target-input{max-width:none;width:100%}.best-target-tools .btn{white-space:normal;min-height:37px}
-.watch-alert #watchAlertOpen{white-space:nowrap}
 @media(max-width:1050px){.day-pick-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.day-pick-card:last-child:nth-child(odd){grid-column:1/-1}.best-target-tools{grid-template-columns:1fr 1fr}.best-target-tools .f{grid-column:1/-1}}
-@media(max-width:650px){.day-pick-grid{grid-template-columns:1fr}.day-pick-card:last-child:nth-child(odd){grid-column:auto}.deal-card-rich{grid-template-columns:38px minmax(0,1fr)!important}.deal-card-rich>.p{grid-column:2}.deal-card-rich .deal-actions{display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;margin-top:8px}.deal-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.deal-list-toolbar .f{width:100%;min-width:100%}.best-target-tools{grid-template-columns:1fr}.best-target-tools .f{grid-column:auto}.watch-alert{align-items:flex-start;flex-wrap:wrap}.watch-alert #watchAlertText{min-width:65%}.watch-alert #watchAlertOpen{margin-left:38px}}
+@media(max-width:650px){.day-pick-grid{grid-template-columns:1fr}.day-pick-card:last-child:nth-child(odd){grid-column:auto}.deal-card-rich{grid-template-columns:38px minmax(0,1fr)!important}.deal-card-rich>.p{grid-column:2}.deal-card-rich .deal-actions{display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;margin-top:8px}.deal-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.deal-list-toolbar .f{width:100%;min-width:100%}.best-target-tools{grid-template-columns:1fr}.best-target-tools .f{grid-column:auto}}
 
 /* AMNYAM AURORA REDESIGN — ambient layers stay behind all interactive content */
 body{position:relative;isolation:isolate;background:#080b16}
@@ -535,7 +533,6 @@ a:hover img.thumb,a:hover .pick-img,.li:hover img.thumb{filter:drop-shadow(0 0 1
 .btn.secondary{background:rgba(255,255,255,.035);border-color:rgba(255,255,255,.13)}
 input,select,.select{border-color:rgba(255,255,255,.13)!important;background-color:rgba(5,8,12,.72)!important}
 input:focus,select:focus,.select:focus{border-color:rgba(196,255,88,.48)!important;box-shadow:0 0 0 3px rgba(196,255,88,.07)}
-.watch-alert{border-color:rgba(196,255,88,.3);box-shadow:0 10px 35px rgba(0,0,0,.22)}
 .section-index,.eyebrow{color:var(--amnyam-acid)}
 .view-stat,.mono-tag{border-color:rgba(196,255,88,.18)}
 @keyframes amnyamArtifact{0%{transform:translate3d(0,0,0) rotate(-18deg) scale(.98)}100%{transform:translate3d(-8px,7px,0) rotate(-7deg) scale(1.04)}}
@@ -722,18 +719,6 @@ button:disabled{cursor:not-allowed;filter:saturate(.55)}
 
 .deal-warning{margin:8px 0 0;padding:8px 10px;border:1px solid rgba(255,185,102,.28);border-radius:7px;background:rgba(120,68,21,.13);color:#edc79a;font-size:10px;line-height:1.55}
 .deal-discount{white-space:nowrap}
-
-/* Background Web Push controls */
-.push-controls{display:grid;gap:9px;margin:12px 0 15px;padding:13px 14px;border:1px solid rgba(196,255,88,.2);border-radius:9px;background:linear-gradient(120deg,rgba(23,32,17,.72),rgba(14,18,16,.76))}
-.push-status{font-size:11px;line-height:1.6;color:#aab6a0}
-.push-status[data-state=ok]{color:#bde88f}
-.push-status[data-state=error]{color:#ffb1aa}
-.push-status[data-state=loading]{color:#b5c1ac}
-.push-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.push-actions .btn{font-size:10px;padding:8px 11px}
-.push-actions .btn:disabled{opacity:.45;cursor:not-allowed}
-.push-controls>small{color:#85917e;font-size:10px;line-height:1.55}
-@media(max-width:600px){.push-actions{display:grid;grid-template-columns:1fr}.push-actions .btn{width:100%}}
 
 /* AMNYAM help centre */
 .help-panel{display:grid;gap:18px}
