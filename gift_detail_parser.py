@@ -128,7 +128,7 @@ def parse_gift_detail(html, lot_id=None, base_url="https://huevo.su", observed_a
             except ValueError:
                 continue
             host = (parts.hostname or "").lower().rstrip(".")
-            match = re.fullmatch(r"/gift/(\\d{1,20})/?", parts.path)
+            match = re.fullmatch(r"/gift/(\d{1,20})/?", parts.path)
             if (parts.scheme == "https" and not parts.username and not parts.password
                     and (host in ("huevo.su", "huevo.departament.site") or host.endswith(".huevo.su"))
                     and match):
@@ -150,7 +150,7 @@ def parse_gift_detail(html, lot_id=None, base_url="https://huevo.su", observed_a
             except ValueError:
                 continue
             host = (parts.hostname or "").lower().rstrip(".")
-            match = re.fullmatch(r"/gift/(\\d{1,20})/?", parts.path)
+            match = re.fullmatch(r"/gift/(\d{1,20})/?", parts.path)
             if (parts.scheme == "https" and not parts.username and not parts.password
                     and (host in ("huevo.su", "huevo.departament.site") or host.endswith(".huevo.su"))
                     and match):
