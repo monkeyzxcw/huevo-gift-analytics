@@ -55,6 +55,8 @@ class GiftHistoryTests(unittest.TestCase):
         self.assertEqual(first["event_id"], again["event_id"])
         self.assertEqual(first["label"], "Вероятно снят продавцом")
         self.assertEqual(first["serial"], "№ 4/111")
+        self.assertEqual(first["last_listing_price"], 500)
+        self.assertNotIn("price", first, "an asking price is not a confirmed transaction amount")
 
 
 if __name__ == "__main__":
