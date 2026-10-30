@@ -70,11 +70,11 @@ function sameOriginMutation(request) {
 }
 
 function credentials(env) {
-  // hu_app_id is the numeric huEVO application ID from signed launch params.
-  // client_id is a separate Apps API credential and must never be compared to hu_app_id.
+  // hu_app_id is an optional numeric huEVO application ID. client_id is a
+  // separate Apps API credential and must never be compared to hu_app_id.
   const configuredAppId = String(env.HU_APP_ID || "").trim();
   return {
-    appId: /^\\d{1,20}$/.test(configuredAppId) ? configuredAppId : "",
+    appId: /^\d{1,20}$/.test(configuredAppId) ? configuredAppId : "",
     clientSecret: String(env.HU_SECRET || env.HUEVO_CLIENT_SECRET || "").trim()
   };
 }
@@ -275,8 +275,10 @@ export async function authenticateHuevoLaunch(request, env, jsonResponse) {
   if (!sameOriginMutation(request)) return json(jsonResponse, request, env, { ok: false, error: "Недопустимый источник запроса." }, 403);
   if (!(await authSchemaReady(env))) return json(jsonResponse, request, env, { ok: false, error: "Хранилище профилей ещё не настроено." }, 503);
   const configured = credentials(env);
-  if (!configured.appId || !configured.clientSecret) {
-    return json(jsonResponse, request, env, { ok: false, error: "Авторизация huEVO Apps не настроена на сервере." }, 503);
+  // The secret is required to verify the signed huEVO launch. HU_APP_ID is
+  // optional: when set to the actual numeric app ID, it adds a strict ID check.
+  if (!configured.clientSecret) {
+    return json(jsonResponse, request, env, { ok: false, error: "Не настроен HU_SECRET (client_secret) для проверки подписи huEVO." }, 503);
   }
   if (!(await checkRateLimit(env, "launch:" + getClientKey(request), 120, 15 * 60 * 1000))) {
     return json(jsonResponse, request, env, { ok: false, error: "Слишком много запусков. Попробуй позже." }, 429);
