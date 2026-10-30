@@ -7,15 +7,15 @@
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://huevo.su; style-src 'self'; img-src 'self' https://huevo.su https://huevo.departament.site data:; connect-src 'self' https://huevo.su https://*.huevo.su; base-uri 'none'; form-action 'none'">
 <title>AMNYAM MODE — Huevo Gift Intelligence</title>
-<link rel="stylesheet" href="./styles.css?v=amnyam-v5">
+<link rel="stylesheet" href="./styles.css?v=amnyam-v6">
 </head>
 <body>
 <a class="skip" href="#catalog">К каталогу</a>
 <main class="wrap">
 <header class="top">
-  <div class="brand"><div class="logo" aria-hidden="true">H</div><div><h1>AMNYAM <span>MODE</span></h1><p>WORKER EDITION · GIFT MARKET INTELLIGENCE</p></div></div>
+  <div class="brand"><div class="logo" aria-hidden="true"><span>H</span><i></i></div><div><h1>AMNYAM <span>MODE</span></h1><p>WORKER EDITION · GIFT MARKET INTELLIGENCE</p></div></div>
   <div class="top-right">
-    <div class="mascot-dock" aria-label="AMNYAM mascot">
+    <div class="mascot-dock" id="amnyamMascot" data-mood="neutral" aria-label="AMNYAM mascot">
       <svg class="mascot-svg" viewBox="0 0 64 64" role="img" aria-label="Зелёный танцующий маскот">
         <path d="M12 30C12 17 21 10 32 10s20 7 20 20v12c0 8-8 13-20 13S12 50 12 42V30Z" fill="#8eea62" stroke="#b7ff8b" stroke-width="2"/>
         <path d="M18 20 15 8c7 0 12 3 14 8M46 20l3-12c-7 0-12 3-14 8" fill="#8eea62" stroke="#b7ff8b" stroke-width="2" stroke-linejoin="round"/>
@@ -24,7 +24,7 @@
         <path d="M24 40c4 5 12 5 16 0" fill="none" stroke="#21452a" stroke-width="2.5" stroke-linecap="round"/>
         <path d="M13 39 5 35M51 39l8-4" stroke="#8eea62" stroke-width="5" stroke-linecap="round"/>
       </svg>
-      <span class="mascot-copy"><b>AMNYAM</b><small>На страже выгодных лотов</small></span>
+      <span class="mascot-copy"><b>AMNYAM</b><small id="mascotSpeech" aria-live="polite">На страже выгодных лотов</small></span>
     </div>
 
     <span class="badge" role="status"><i class="dot" id="stateDot"></i><span id="stateText">Загружаю данные…</span></span>
@@ -42,7 +42,7 @@
   <button role="tab" aria-selected="false" data-view="support" type="button"><span>07</span> Поддержка</button>
   <button role="tab" aria-selected="false" data-view="appearance" type="button"><span>08</span> Внешний вид</button>
 </nav>
-<div class="command-strip"><span class="command-mark">AMNYAM / WORKER EDITION</span><span>MARKET INTELLIGENCE <i></i> SILENT SYNC 3S</span><label class="command-search"><b>⌕</b><input id="globalSearch" type="search" placeholder="Быстрый поиск по рынку…" autocomplete="off" aria-label="Быстрый поиск"><kbd>ENTER</kbd></label></div>
+<div class="command-strip"><span class="command-mark">AMNYAM / WORKER EDITION</span><span>MARKET INTELLIGENCE <i></i> SILENT SYNC 3S</span><label class="season-control"><span>ТЕМА</span><select id="seasonTheme" aria-label="Праздничная тема"><option value="default">AMNYAM</option><option value="newyear">Новый год</option><option value="halloween">Хэллоуин</option><option value="spring">Весна</option><option value="summer">Лето</option></select></label><label class="command-search"><b>⌕</b><input id="globalSearch" type="search" placeholder="Быстрый поиск по рынку…" autocomplete="off" aria-label="Быстрый поиск"><kbd>ENTER</kbd></label></div>
 
 <section class="hero" id="hero" data-view-section="overview" aria-labelledby="heroTitle">
   <div><div class="eyebrow">AMNYAM / ПОЛЕВОЙ СКАНЕР</div><h2 id="heroTitle">Поймай лот.<br><em>Не переплати.</em></h2>
@@ -224,6 +224,8 @@
 
 <footer class="footer"><span>Huevo Gift Analytics · статическая версия</span><span>Данные собирает локальный сборщик на ПК владельца; блокировки источника не обходятся.</span></footer>
 </main>
-<script src="./app.js?v=amnyam-v5" defer></script>
+<div id="ambientLayer" aria-hidden="true"></div><div id="cursorGlow" aria-hidden="true"></div>
+<div class="premium-splash" id="premiumSplash" aria-hidden="true"><div class="splash-mark">H<span>•</span></div><div class="splash-title">AMNYAM <b>MODE</b></div><div class="splash-subtitle">GIFT MARKET INTELLIGENCE</div><div class="splash-loader"><i></i></div></div>
+<script src="./app.js?v=amnyam-v6" defer></script>
 </body>
 </html>
