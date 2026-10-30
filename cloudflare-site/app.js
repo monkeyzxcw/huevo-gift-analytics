@@ -710,9 +710,9 @@
     const target=h("input",{class:"input target-input deal-target-input",type:"number",min:"1",step:"1",inputmode:"numeric",placeholder:"Желаемая цена","aria-label":"Цена-цель для "+(lot.title||id)});
     target.value=state.targets[id]?String(state.targets[id]):"";
     const save=h("button",{class:"btn target-save",type:"button",text:state.targets[id]?"Обновить уведомление":"Уведомить при цене"});
-    save.addEventListener("click",()=>{if(saveTarget(lot.lot_id,target.value)){renderDeals();renderDayPicks();}});
+    save.addEventListener("click",()=>{saveTarget(lot.lot_id,target.value);});
     const quick=h("button",{class:"btn secondary target-quick",type:"button",text:"Цель −10%"});
-    quick.addEventListener("click",()=>{target.value=String(Math.max(1,Math.floor(lot.price*.9)));if(saveTarget(lot.lot_id,target.value)){renderDeals();renderDayPicks();}});
+    quick.addEventListener("click",()=>{target.value=String(Math.max(1,Math.floor(lot.price*.9)));saveTarget(lot.lot_id,target.value);});
     const status=h("small",{class:"target-status",text:state.targets[id]?(lot.active!==false&&isNum(lot.price)&&lot.price<=state.targets[id]?"✓ Цель достигнута":"Цель "+price(state.targets[id])):"Цель не задана"});
     row.children[1].append(h("div",{class:"deal-target-row"},[target,save,quick,status]));
     return row;
@@ -725,8 +725,8 @@
     else if(sortBy==="savings")deals.sort((a,b)=>(b.reference_price-b.price)-(a.reference_price-a.price)||b.discount_pct-a.discount_pct);
     else if(sortBy==="sample")deals.sort((a,b)=>b.sample_size-a.sample_size||b.discount_pct-a.discount_pct);
     else if(sortBy==="historical")deals.sort((a,b)=>{
-      const low=lot=>{const v=(lot._history||[]).filter(p=>isNum(p.price)).map(p=>p.price);return v.length?Math.min(...v):Infinity;};
-      return (a.price/low(a))-(b.price/low(b))||b.discount_pct-a.discount_pct;
+      const gap=lot=>{const v=(lot._history||[]).filter(p=>isNum(p.price)).map(p=>p.price);if(v.length<2)return Infinity;const low=Math.min(...v);return low>0?lot.price/low-1:Infinity;};
+      return gap(a)-gap(b)||b.discount_pct-a.discount_pct;
     });
     else deals.sort((a,b)=>b.discount_pct-a.discount_pct||a.price-b.price);
     const list=clear($("dealsList"));
@@ -1013,7 +1013,7 @@
     }
     show("content");
     checkTargetAlerts();
-    checkTargetAlerts();renderDeals();renderDayPicks();renderCheapest();renderFavorites();
+    renderDeals();renderDayPicks();renderCheapest();renderFavorites();
     renderCards(); renderCharts(); renderChanges(); renderTop(); renderSales(); fillFacets();
     renderSavedFilters();setSortMenuOptions();applyFilters();
     switchView(state.activeView);
@@ -1027,8 +1027,8 @@
     const token=button.dataset.searchToken||"",input=$("search");input.value=(input.value.trim()+" "+token).trim();$("globalSearch").value=input.value;state.page=0;switchView("market",true);applyFilters();
   }));
   $("dealSort").addEventListener("change",renderDeals);
-  $("saveBelowBestTarget").addEventListener("click",()=>{const id=state._belowBestId;if(id&&saveTarget(id,$("belowBestTarget").value)){renderDeals();renderDayPicks();}});
-  $("belowBestMinus10").addEventListener("click",()=>{const id=state._belowBestId,lot=state.lots.find(item=>String(item.lot_id)===String(id));if(lot&&isNum(lot.price)&&lot.price>0){$("belowBestTarget").value=String(Math.max(1,Math.floor(lot.price*.9)));if(saveTarget(id,$("belowBestTarget").value)){renderDeals();renderDayPicks();}}});
+  $("saveBelowBestTarget").addEventListener("click",()=>{const id=state._belowBestId;if(id)saveTarget(id,$("belowBestTarget").value);});
+  $("belowBestMinus10").addEventListener("click",()=>{const id=state._belowBestId,lot=state.lots.find(item=>String(item.lot_id)===String(id));if(lot&&isNum(lot.price)&&lot.price>0){$("belowBestTarget").value=String(Math.max(1,Math.floor(lot.price*.9)));saveTarget(id,$("belowBestTarget").value);}});
   $("supportAmounts").addEventListener("click",event=>{const b=event.target.closest("[data-amount]");if(b&&!b.disabled)makeSupportPayment(b.dataset.amount);});
   document.querySelectorAll("[data-catalog-mode]").forEach(b=>b.addEventListener("click",()=>switchCatalogMode(b.dataset.catalogMode)));
   ["search","pmin","pmax"].forEach(id=>$(id).addEventListener("input",()=>{state.page=0;$("globalSearch").value=$("search").value;applyFilters();}));
