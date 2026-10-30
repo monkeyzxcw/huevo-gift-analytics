@@ -30,7 +30,7 @@ function responseHeaders(request, env, extra = {}) {
   const headers = new Headers(extra);
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("Referrer-Policy", "no-referrer");
-  headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), notifications=(self)");
   const pagePath = new URL(request.url).pathname;
   const supportsHuEvoSdk = pagePath === "/" || pagePath === "/index.html";
   const csp = supportsHuEvoSdk
