@@ -228,28 +228,3 @@ def robust_offer_reference(prices, min_group=MIN_GROUP):
             "p25": core_q1, "p75": core_q3, "excluded": len(values) - len(core),
             "dispersion": round(dispersion, 4) if dispersion is not None else None,
             "ambiguous": False}
-
-
-    Uses a Tukey 1.5*IQR fence when enough observations exist. The result is deliberately
-    labelled as offers, never as a confirmed market or transaction value.
-    """
-    values = sorted(float(value) for value in prices if _valid_price(value))
-    if len(values) < min_group:
-        return {"reference": None, "sample_size": len(values), "raw_size": len(values),
-                "p25": None, "p75": None, "excluded": 0, "dispersion": None}
-    q1, q3 = percentile(values, .25), percentile(values, .75)
-    iqr = q3 - q1
-    if iqr > 0 and len(values) >= 4:
-        low, high = q1 - 1.5 * iqr, q3 + 1.5 * iqr
-        core = [value for value in values if low <= value <= high]
-    else:
-        core = values
-    # Require three clean comparables after outlier suppression.
-    if len(core) < min_group:
-        return {"reference": None, "sample_size": len(core), "raw_size": len(values),
-                "p25": q1, "p75": q3, "excluded": len(values) - len(core), "dispersion": None}
-    core_q1, core_q3 = percentile(core, .25), percentile(core, .75)
-    dispersion = (core_q3 - core_q1) / median(core) if median(core) else None
-    return {"reference": median(core), "sample_size": len(core), "raw_size": len(values),
-            "p25": core_q1, "p75": core_q3, "excluded": len(values) - len(core),
-            "dispersion": round(dispersion, 4) if dispersion is not None else None}
