@@ -43,7 +43,7 @@ function responseHeaders(request, env, extra = {}) {
   const origin = corsOrigin(request, env);
   if (origin) {
     headers.set("Access-Control-Allow-Origin", origin);
-    headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
     headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
     headers.append("Vary", "Origin");
   }
