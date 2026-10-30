@@ -518,6 +518,15 @@ async function supportStats(request, env) {
   }
 }
 
+const DEFAULT_HUEVO_APPS_TIMEOUT_MS = 8000;
+
+function huevoAppsTimeoutMs(env) {
+  const configured = Number(env.HU_APPS_TIMEOUT_MS);
+  return Number.isSafeInteger(configured) && configured >= 250 && configured <= 15000
+    ? configured
+    : DEFAULT_HUEVO_APPS_TIMEOUT_MS;
+}
+
 async function callHuevoApps(env, method, path, body) {
   const credentials = supportCredentials(env);
   if (!credentials.clientId || !credentials.clientSecret) {
@@ -528,17 +537,25 @@ async function callHuevoApps(env, method, path, body) {
     "Accept": "application/json",
   };
   if (body !== undefined) headers["Content-Type"] = "application/json";
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), huevoAppsTimeoutMs(env));
   try {
     const response = await fetch(HUEVO_APPS_API + path, {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal: controller.signal,
     });
     let data = {};
     try { data = await response.json(); } catch (_) {}
     return { status: response.status, body: data };
   } catch (_) {
-    return { status: 502, body: { error: { code: "huevo_api_unavailable" } } };
+    return {
+      status: 502,
+      body: { error: { code: controller.signal.aborted ? "huevo_api_timeout" : "huevo_api_unavailable" } }
+    };
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
