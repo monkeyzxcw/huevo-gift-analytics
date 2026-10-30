@@ -27,7 +27,7 @@ if [ "$code" -ne 0 ]; then
 fi
 
 # Prefer live D1 storage when configured; keep the repository snapshot as a fallback.
-WORKER_URL="${HUEVO_WORKER_URL:-https://huevo-gift-analytics.monkeyzxc1437.workers.dev}"
+WORKER_URL="${HUEVO_WORKER_URL:-https://huevo-gift-analytics.monkeyzxcw.workers.dev}"
 SNAPSHOT_URL="${HUEVO_SNAPSHOT_INGEST_URL:-$WORKER_URL/api/snapshot}"
 if [ -n "${HUEVO_LIVE_INGEST_TOKEN:-}" ] && [ -f cloudflare-site/data.json ]; then
   HEALTH="$(curl -fsS --max-time 10 "$WORKER_URL/api/health" || true)"
