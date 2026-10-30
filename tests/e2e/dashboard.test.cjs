@@ -805,7 +805,8 @@ test("help tab documents market workflows and sound-only target alerts", async (
   assert.match(guide, /Маркет/);
   assert.match(guide, /цена-цель/);
   assert.match(guide, /Звуковой сигнал AMNYAM/);
-  assert.doesNotMatch(guide, /push|системн.*уведомлен|браузерн.*уведомлен/i);
+  assert.match(guide, /Фоновых браузерных или системных уведомлений больше нет/);
+  assert.doesNotMatch(guide, /Подключить push|Проверить push|серверный push/i);
   assert.match(guide, /Cloudflare Worker/);
   assert.match(guide, /HuevoDualScan/);
   assert.ok(guide.includes("gifts/{id}"));
