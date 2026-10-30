@@ -103,6 +103,7 @@ test("registration imports guest favourites and saves account preferences to the
   assert.deepEqual(state.registerPayload.profile.favorites, ["1000"]);
   assert.equal(state.registerPayload.profile.targets["1000"], 75);
   assert.equal(state.registerPayload.profile.preferences.alertSound, true);
+  await page.click('#mainNav [data-view="appearance"]');
   await page.selectOption("#appearanceBackground", "nebula");
   await page.waitForFunction(() => document.getElementById("accountSyncStatus").textContent.includes("сохранены"), null, { timeout: 5000 }).catch(() => {});
   await page.waitForTimeout(800);
