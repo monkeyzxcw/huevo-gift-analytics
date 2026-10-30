@@ -324,3 +324,26 @@ test("value hunt compares similar gifts; smart search supports price, rarity and
   assert.deepEqual(problems, []);
   await browser.close();
 });
+
+test("appearance settings switch themes, mascot and motion and persist locally", async () => {
+  const { browser, page, problems } = await open(serve(dataV2()));
+  await page.waitForSelector("#content:not(.hide)");
+  assert.equal(await page.locator(".mascot-dock").count(), 1, "decorative mascot is present");
+  await page.click('#mainNav [data-view="appearance"]');
+  assert.equal(await page.locator('#appearancePanel:not(.view-hidden)').count(), 1);
+  await page.selectOption("#appearanceBackground", "liquid");
+  await page.selectOption("#appearanceMascot", "none");
+  await page.selectOption("#appearanceMotion", "off");
+  await page.locator("#appearanceGlass").uncheck();
+  assert.equal(await page.locator("body").getAttribute("data-bg"), "liquid");
+  assert.equal(await page.locator("body").getAttribute("data-mascot"), "none");
+  assert.equal(await page.locator("body").getAttribute("data-motion"), "off");
+  assert.ok(await page.locator("body.glass-off").count());
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("amnyam.appearance.v1")));
+  assert.deepEqual(saved, { background: "liquid", mascot: "none", motion: "off", glass: false });
+  await page.click("#resetAppearance");
+  assert.equal(await page.locator("body").getAttribute("data-bg"), "cosmic");
+  assert.equal(await page.locator("body").getAttribute("data-mascot"), "omnom");
+  assert.deepEqual(problems, []);
+  await browser.close();
+});
