@@ -205,3 +205,11 @@ tbody tr:hover td{background:#1a2115}
   .support-levels{grid-template-columns:repeat(2,minmax(0,1fr))}
   .overview-pick{grid-template-columns:48px minmax(0,1fr);gap:12px;padding:12px}.pick-stamp{height:58px;font-size:14px}
 }
+
+/* Market sort controls and comparable-listing counts */
+.sort-control{min-width:205px;flex:1}
+.sort-control .select{width:100%;min-height:38px}
+.sort-help{margin:8px 0 13px;color:#8f9a83;font-size:11px;line-height:1.5}
+.count-pill{display:inline-flex;align-items:center;justify-content:center;min-width:34px;padding:4px 8px;border:1px solid #4a6031;border-radius:5px;background:#1b2411;color:var(--amnyam-acid);font:900 12px ui-monospace,monospace}
+.count-sub{font-size:10px;margin-top:4px}
+@media(max-width:600px){.sort-control{min-width:100%;flex:1 1 100%}.sort-help{font-size:10px}}
