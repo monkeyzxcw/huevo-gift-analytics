@@ -70,6 +70,7 @@ async function openApp(search = "") {
     if (url.pathname === "/api/support/config") return respond({ enabled: false, amounts: [] });
     if (url.pathname === "/api/support/stats") return respond({ supporters: 0, total: 0 });
     if (url.pathname === "/api/live/status") return respond({ enabled: false, fresh: false, items: [] });
+    if (url.pathname.startsWith("/api/")) return respond({ ok: true, enabled: false, authenticated: Boolean(state.user), subscriptions: 0, amounts: [], supporters: 0, total: 0 });
     if (url.pathname === "/data.json") return respond(SNAPSHOT);
     const file = url.pathname === "/" ? "index.html" : url.pathname.replace(/^\//, "");
     const full = path.resolve(SITE, file);
