@@ -434,7 +434,7 @@
     let priceRows = Array.isArray(ch.price_changes) ? ch.price_changes : [];
     if (!priceRows.length) {
       priceRows = state.lots.flatMap((lot) => {
-        const history = Array.isArray(lot._history) ? lot._history : [];
+        const history = Array.isArray(lot._history) ? lot._history : (Array.isArray(lot.history) ? lot.history : []);
         if (history.length < 2) return [];
         const from = Number(history[history.length - 2].price), to = Number(history[history.length - 1].price);
         if (!Number.isFinite(from) || !Number.isFinite(to) || from <= 0 || to <= 0 || from === to) return [];
