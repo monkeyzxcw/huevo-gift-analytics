@@ -121,6 +121,7 @@
     targets:readTargets(),alertedTargets:readAlertedTargets(),savedFilters:readSavedFilters()
   };
   let livePollRunning = false;
+  let lastHiddenPollAt = 0;
   let snapshotLoadRunning = false;
   let supportPaymentRunning = false;
   let pollFailureCount = 0;
@@ -249,7 +250,13 @@
     // The dashboard polls the Worker's merged /data.json, not only the first-page
     // endpoint. This lets both the 3-second live stream and the 5-minute full snapshot
     // reach every panel without reloading the document.
-    if (livePollRunning || !state.data || document.visibilityState !== "visible" || Date.now() < pollBackoffUntil) return;
+    if (livePollRunning || !state.data || Date.now() < pollBackoffUntil) return;
+    if (document.visibilityState !== "visible") {
+      // Do not poll a background tab every 3 seconds, but keep target alerts alive
+      // while the browser is running and the app is minimized or on another tab.
+      if (Date.now() - lastHiddenPollAt < 15000) return;
+      lastHiddenPollAt = Date.now();
+    }
     livePollRunning = true;
     try {
       const json = await fetchJson("./data.json?_=" + Date.now(), {
@@ -334,21 +341,31 @@
     try {
       if (!alertAudioContext) alertAudioContext = new AudioContextClass();
       const context = alertAudioContext;
-      if (context.state === "suspended") context.resume().catch(() => {});
-      [880, 1174].forEach((frequency, index) => {
-        const start = context.currentTime + index * 0.16;
-        const oscillator = context.createOscillator();
-        const gain = context.createGain();
-        oscillator.type = "sine";
-        oscillator.frequency.setValueAtTime(frequency, start);
-        gain.gain.setValueAtTime(0.0001, start);
-        gain.gain.exponentialRampToValueAtTime(0.055, start + 0.025);
-        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.22);
-        oscillator.connect(gain);
-        gain.connect(context.destination);
-        oscillator.start(start);
-        oscillator.stop(start + 0.24);
+      const playMotif = () => {
+        // AMNYAM signature: a bright five-note rising/falling arpeggio, rather
+        // than the old generic two-beep alert. Triggered only by a user setting
+        // or a target-price event.
+        const notes = [523.25, 659.25, 783.99, 1046.5, 783.99];
+        notes.forEach((frequency, index) => {
+          const start = context.currentTime + index * 0.145;
+          const oscillator = context.createOscillator();
+          const gain = context.createGain();
+          oscillator.type = index === 4 ? "sine" : "triangle";
+          oscillator.frequency.setValueAtTime(frequency, start);
+          gain.gain.setValueAtTime(0.0001, start);
+          gain.gain.exponentialRampToValueAtTime(index === 3 ? 0.065 : 0.048, start + 0.018);
+          gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.16);
+          oscillator.connect(gain);
+          gain.connect(context.destination);
+          oscillator.start(start);
+          oscillator.stop(start + 0.17);
+        });
+      };
+      if (context.state === "suspended") context.resume().then(playMotif).catch(() => {
+        const hint = $("alertSoundHint");
+        if (hint) hint.textContent = "Браузер приостановил звук. Нажми «Проверить звук» ещё раз.";
       });
+      else playMotif();
     } catch (_) {
       const hint = $("alertSoundHint");
       if (hint) hint.textContent = "Не удалось запустить звук. Проверь разрешения и настройки браузера.";
@@ -942,17 +959,60 @@
     }
     const kv = [["ID", "#" + l.lot_id], ["Серия", l.serial || "—"], ["Редкость", l.rarity || "—"], ["Статус", l.status || "—"], ["Впервые замечен", when(l.first_seen)], ["Последний раз виден", when(l.last_seen)], ["Сравнение с аналогами", cmp]];
     body.append(h("dl", { class: "kv" }, kv.map((p) => h("div", {}, [h("dt", { text: p[0] }), h("dd", { text: p[1] })]))));
-    const attributes = l.gift_details && l.gift_details.attributes && typeof l.gift_details.attributes === "object"
-      ? Object.entries(l.gift_details.attributes).filter(([key,value]) => /^[a-z_]{2,30}$/.test(key) && typeof value === "string" && value.trim())
-      : [];
+    const details = l.gift_details && typeof l.gift_details === "object" ? l.gift_details : null;
+    const rawAttributes = details && (details.attributes || details.characteristics || details.properties || details.gift_attributes);
+    const metadataKeys = new Set(["gift_id","gift_url","checked_at","status","message","error","source_url","attributes","characteristics","properties","gift_attributes"]);
+    const attributeText = (value) => {
+      if (typeof value === "string") return value.trim();
+      if (typeof value === "number" && Number.isFinite(value)) return fmt(value);
+      if (typeof value === "boolean") return value ? "Да" : "Нет";
+      if (Array.isArray(value)) return value.map(attributeText).filter(Boolean).join(", ");
+      if (value && typeof value === "object") {
+        const main = ["value","display_value","display_name","name","title","label","text"].map(key => value[key]).find(item => item != null && item !== "");
+        if (main == null) return "";
+        const rarity = value.rarity_text || value.rarity;
+        return attributeText(main) + (rarity != null && rarity !== "" ? " · редкость " + attributeText(rarity) : "");
+      }
+      return "";
+    };
+    let attributePairs = [];
+    if (Array.isArray(rawAttributes)) {
+      attributePairs = rawAttributes.map(item => {
+        if (!item || typeof item !== "object") return [null, item];
+        const key = item.key || item.type || item.attribute || item.label || item.name;
+        const value = item.value ?? item.display_value ?? item.display_name ?? item.title ?? item.text;
+        return [key, value];
+      });
+    } else if (rawAttributes && typeof rawAttributes === "object") {
+      attributePairs = Object.entries(rawAttributes);
+    } else if (details) {
+      attributePairs = Object.entries(details).filter(([key]) => !metadataKeys.has(key.toLowerCase()));
+    }
+    const attributes = attributePairs.map(([key,value]) => [
+      typeof key === "string" ? key.trim() : "",
+      attributeText(value)
+    ]).filter(([key,value]) => key && /^[a-zа-яё0-9_\s-]{2,40}$/i.test(key) && value);
     body.append(h("h4", { text: "Характеристики подарка" }));
     if (attributes.length) {
-      const labels = { model:"Модель", backdrop:"Фон", symbol:"Символ", pattern:"Узор", rarity:"Редкость", serial:"Номер", supply:"Тираж", collection:"Коллекция" };
-      body.append(h("dl", { class: "kv gift-attributes" }, attributes.map(([key,value]) =>
-        h("div", {}, [h("dt", { text: labels[key] || key }), h("dd", { text: value })]))));
-      body.append(h("p", { class: "muted foot", text: "Характеристики извлечены из карточки подарка Huevo. Не распознанные поля и данные владельца не сохраняются." }));
+      const labels = {
+        model:"Модель", model_name:"Модель", backdrop:"Фон", background:"Фон", backdrop_name:"Фон",
+        symbol:"Символ", symbol_name:"Символ", pattern:"Узор", pattern_name:"Узор",
+        rarity:"Редкость", serial:"Номер", supply:"Тираж", collection:"Коллекция"
+      };
+      body.append(h("dl", { class: "kv gift-attributes" }, attributes.map(([key,value]) => {
+        const normalKey = key.toLowerCase().replace(/[ -]+/g, "_");
+        return h("div", {}, [h("dt", { text: labels[normalKey] || key }), h("dd", { text: value })]);
+      })));
+      body.append(h("p", { class: "muted foot", text: "Характеристики извлечены из карточки подарка Huevo. Значения и редкость показываются только если они присутствуют в данных источника." }));
     } else {
-      body.append(h("div", { class: "empty", text: l.gift_details ? "Карточка проверена, но её характеристики пока не удалось распознать. Мы не подставляем догадки." : "Карточка подарка ещё не проанализирована сборщиком." }));
+      const aggregate = state.data && state.data.collector && state.data.collector.gift_details;
+      const updated = aggregate && Number.isFinite(Number(aggregate.updated)) ? Number(aggregate.updated) : 0;
+      const emptyMessage = details
+        ? "Карточка этого подарка обработана, но распознанных характеристик в её записи нет. Сборщик не подставляет догадки."
+        : updated > 0
+          ? "Сборщик сообщает о проверке " + fmt(updated) + " карточек подарков, но характеристики этого экземпляра не прикреплены к лоту. Нужна повторная отправка или привязка результата по ID подарка."
+          : "Для этого подарка пока нет сохранённой расшифровки характеристик. Ожидается результат анализа карточки сборщиком.";
+      body.append(h("div", { class: "empty", text: emptyMessage }));
     }
 
     const instance = l.gift_instance && typeof l.gift_instance === "object" ? l.gift_instance : null;
@@ -1054,7 +1114,7 @@
   }
 
   function switchView(view, focusSearch) {
-    const allowed = new Set(["overview", "market", "deals", "cheap", "analytics", "favorites", "support", "appearance"]);
+    const allowed = new Set(["overview", "market", "deals", "cheap", "analytics", "favorites", "support", "appearance", "help"]);
     state.activeView = allowed.has(view) ? view : "overview";
     document.querySelectorAll("[data-view-section]").forEach((section) => {
       section.classList.toggle("view-hidden", section.getAttribute("data-view-section") !== state.activeView);
@@ -1303,7 +1363,15 @@
     $("favoritesCount").textContent=fmt(state.favorites.length)+" лотов";$("navFavoritesCount").textContent=fmt(state.favorites.length);
     const targets=Object.keys(state.targets).filter(id=>ids.has(id)).length;
     const reached=found.filter(l=>isNum(state.targets[String(l.lot_id)])&&isNum(l.price)&&l.active!==false&&l.price<=state.targets[String(l.lot_id)]).length;
-    $("notificationHint").textContent=targets?targets+" целевых цен сохранено"+(reached?" · цель достигнута у "+reached+" лотов":"")+". Проверяем при обновлении данных.":"Добавь лот в избранное и задай цену, при которой хочешь получить сигнал.";
+    const notificationPermission = "Notification" in window ? Notification.permission : "unsupported";
+    const notificationNote = notificationPermission === "granted"
+      ? "Системные уведомления разрешены. Оставь браузер запущенным — в фоне проверка продолжается примерно раз в 15 секунд."
+      : notificationPermission === "denied"
+        ? "Браузер запретил уведомления. Разреши их в настройках сайта рядом с адресной строкой."
+        : "Разреши системные уведомления кнопкой выше. Приложение должно оставаться открытым в браузере.";
+    $("notificationHint").textContent = (targets
+      ? targets+" целевых цен сохранено"+(reached?" · цель достигнута у "+reached+" лотов":"")+". "
+      : "Добавь лот в избранное и задай цену, при которой хочешь получить сигнал. ") + notificationNote;
     updateNotificationButton();
     if(!found.length){list.append(h("li",{class:"empty",text:state.favorites.length?"Сохранённые лоты не попали в текущий снимок. Они останутся в избранном и появятся при следующем обнаружении.":"Пока пусто. Нажми ☆ в каталоге, чтобы сохранить лот в этом браузере."}));return;}
     found.slice().sort((a,b)=>(a.price??Infinity)-(b.price??Infinity)).forEach(lot=>{
@@ -1326,15 +1394,38 @@
   function updateNotificationButton(){
     const b=$("enableNotifications");
     if(!("Notification" in window)){b.disabled=true;b.textContent="Уведомления недоступны";return;}
-    b.disabled=Notification.permission==="granted";
-    b.textContent=Notification.permission==="granted"?"Уведомления включены":Notification.permission==="denied"?"Разреши в настройках браузера":"Включить уведомления";
+    if (!window.isSecureContext) { b.disabled=true; b.textContent="Нужен HTTPS"; return; }
+    b.disabled=false;
+    b.textContent=Notification.permission==="granted"?"Проверить уведомление":Notification.permission==="denied"?"Разрешение запрещено":"Разрешить уведомления";
+  }
+
+  function showDesktopNotification(title, body, lot){
+    if(!("Notification" in window) || Notification.permission!=="granted") return false;
+    try {
+      const notification = new Notification(title, {
+        body,
+        tag: lot ? "amnyam-target-" + lot.lot_id : "amnyam-test",
+        renotify: false,
+        requireInteraction: false
+      });
+      notification.onclick = () => {
+        window.focus();
+        if (lot) window.open(safeUrl(lot.lot_url, lot.lot_id), "_blank", "noopener,noreferrer");
+        if (typeof notification.close === "function") notification.close();
+      };
+      return true;
+    } catch (_) {
+      const hint = $("notificationHint");
+      if (hint) hint.textContent = "Браузер не смог показать системное уведомление. Проверь разрешения сайта и уведомления Windows/macOS.";
+      return false;
+    }
   }
 
   function showWatchAlert(lot){
     const text=(lot.title||("Лот #"+lot.lot_id))+" достиг целевой цены: "+price(lot.price)+" (цель "+price(state.targets[String(lot.lot_id)])+").";
     $("watchAlertText").textContent=text;$("watchAlertOpen").href=safeUrl(lot.lot_url,lot.lot_id);$("watchAlert").classList.remove("hide");
     playAlertSound(false);
-    if("Notification" in window&&Notification.permission==="granted"){try{new Notification("AMNYAM MODE · цена-цель",{body:text,tag:"amnyam-target-"+lot.lot_id});}catch(_){}}
+    showDesktopNotification("AMNYAM · достигнута цена-цель", text, lot);
   }
 
   function checkTargetAlerts(){
@@ -2051,7 +2142,7 @@
     }
     if (!typing && window.__amnyamGoPending && Date.now() - window.__amnyamGoPending < 750) {
       const key = event.key.toLowerCase();
-      const views = { h: "overview", m: "market", d: "deals", c: "cheap", a: "analytics", f: "favorites" };
+      const views = { h: "overview", m: "market", d: "deals", c: "cheap", a: "analytics", f: "favorites", i: "help" };
       if (views[key]) { event.preventDefault(); switchView(views[key], true); }
       window.__amnyamGoPending = 0;
     }
@@ -2112,8 +2203,29 @@
     const index=Number($("savedFilterSelect").value),item=state.savedFilters[index];$("applyPreset").disabled=!item;$("deletePreset").disabled=!item;if(item)$("presetName").value=item.name;
   });
   $("enableNotifications").addEventListener("click",async()=>{
-    if(!("Notification" in window))return;try{await Notification.requestPermission();}catch(_){}
-    updateNotificationButton();$("notificationHint").textContent=Notification.permission==="granted"?"Браузерные уведомления разрешены; цели проверяются при обновлении данных.":Notification.permission==="denied"?"Разрешение запрещено. Включи уведомления для сайта в настройках браузера.":"Разрешение не получено; сообщения остаются внутри приложения.";
+    if(!("Notification" in window)){
+      $("notificationHint").textContent="Этот браузер не поддерживает системные уведомления.";
+      updateNotificationButton();
+      return;
+    }
+    if(!window.isSecureContext){
+      $("notificationHint").textContent="Системные уведомления доступны только на защищённом HTTPS-соединении.";
+      updateNotificationButton();
+      return;
+    }
+    let permission = Notification.permission;
+    if(permission === "default"){
+      try { permission = await Notification.requestPermission(); } catch (_) { permission = Notification.permission; }
+    }
+    updateNotificationButton();
+    if(permission === "granted"){
+      $("notificationHint").textContent="Разрешение включено. Это тестовое уведомление AMNYAM; при достижении целевой цены придёт такое же системное сообщение.";
+      showDesktopNotification("AMNYAM · уведомления включены","Отлично! Системные уведомления готовы сообщать о достижении твоих цен-целей.");
+    } else if(permission === "denied"){
+      $("notificationHint").textContent="Разрешение запрещено. Нажми значок настроек сайта слева от адреса страницы и включи уведомления вручную.";
+    } else {
+      $("notificationHint").textContent="Разрешение не получено. Пока будут работать только сигналы внутри приложения.";
+    }
   });
   $("closeWatchAlert").addEventListener("click",()=>$("watchAlert").classList.add("hide"));
   $("compareSelected").addEventListener("click",openComparison);$("compareClose").addEventListener("click",()=>$("compareDialog").close());
