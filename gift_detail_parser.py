@@ -113,6 +113,23 @@ def parse_gift_detail(html, lot_id=None, base_url="https://huevo.su", observed_a
         if match:
             add(match.group(1), match.group(2))
 
+    gift_url = ""
+    gift_id = ""
+    for gift_link in soup.select("a[href*='/gift/']"):
+        candidate = urljoin(base_url, str(gift_link.get("href") or "").strip())
+        try:
+            parts = urlsplit(candidate)
+        except ValueError:
+            continue
+        host = (parts.hostname or "").lower().rstrip(".")
+        match = re.fullmatch(r"/gift/(\\d{1,20})/?", parts.path)
+        if (parts.scheme == "https" and not parts.username and not parts.password
+                and (host in ("huevo.su", "huevo.departament.site") or host.endswith(".huevo.su"))
+                and match):
+            gift_id = match.group(1)
+            gift_url = f"{base_url.rstrip('/')}/gift/{gift_id}"
+            break
+
     image = ""
     og_image = soup.select_one('meta[property="og:image"]')
     if og_image:
@@ -129,6 +146,8 @@ def parse_gift_detail(html, lot_id=None, base_url="https://huevo.su", observed_a
         "title": title,
         "attributes": attributes,
         "image_url": image,
+        "gift_id": gift_id,
+        "gift_url": gift_url,
         "checked_at": observed_at or datetime.now(timezone.utc).isoformat(),
         "source": "huevo_lot_page",
     }
