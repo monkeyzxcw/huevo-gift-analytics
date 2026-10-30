@@ -60,6 +60,19 @@ async function open(handler, viewport = { width: 1280, height: 900 }, options = 
   await ctx.route("http://site.test/**", async (route) => {
     const u = new URL(route.request().url());
     if (options.supportRoutes && options.supportRoutes[u.pathname]) return options.supportRoutes[u.pathname](route);
+    if (u.pathname === "/api/push/status") {
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        ok: true, authenticated: false, enabled: true, subscriptions: 0
+      }) });
+    }
+    if (u.pathname === "/api/contact/status") {
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        configured: true, available: false, can_manage: false, updated_at: null
+      }) });
+    }
+    if (u.pathname === "/api/push/config") {
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ enabled: true, public_key: "test-public-key" }) });
+    }
     if (u.pathname === "/api/support/config") {
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ enabled: false, amounts: [5000, 10000, 25000, 50000, 100000], sdk_url: "https://huevo.su/static/js/huevo-apps-v1.js", origins: ["huevo.su", "huevo.departament.site"] }) });
     }
