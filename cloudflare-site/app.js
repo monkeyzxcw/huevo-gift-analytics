@@ -688,11 +688,38 @@
     const img = l.image_url && /^https:\/\//i.test(l.image_url) ? h("img", { class: "thumb", src: l.image_url, alt: "", referrerpolicy: "no-referrer" }) : h("span", { class: "thumb", text: "🎁", "aria-hidden": "true" });
     body.append(h("div", { class: "dl-top" }, [img, h("div", {}, [h("div", { class: "price", text: price(l.price) }), h("div", { class: "muted", text: "Цена объявления, не цена сделки" })])]));
     // comparable group: same title & rarity, only when big enough
-    const group = state.lots.filter((x) => x.title === l.title && x.rarity === l.rarity && isNum(x.price)).map((x) => x.price).sort((a, b) => a - b);
-    let cmp = "Недостаточно сопоставимых лотов (" + group.length + " из 5 нужных)";
-    if (group.length >= 5 && isNum(l.price)) { const m = median(group); cmp = "Медиана группы " + fmt(m) + " ◉ (" + group.length + " лотов); этот лот " + (l.price < m ? "дешевле" : l.price > m ? "дороже" : "равен") + " медианы на " + fmt(Math.abs(l.price - m) / m * 100) + "%"; }
+    const groupLots = state.lots.filter((x) => x.title === l.title && x.rarity === l.rarity && isNum(x.price));
+    const group = groupLots.map((x) => x.price).sort((a, b) => a - b);
+    const salesProfile = salesProfileForGift(l);
+    let cmp = "Недостаточно данных: нужны 5 сопоставимых продаж или устойчивых объявлений.";
+    if (salesProfile && salesProfile.count >= 5 && isNum(l.price)) {
+      cmp = "Медиана подтверждённых продаж по названию: " + price(salesProfile.median) +
+        " (" + fmt(salesProfile.count) + " продаж). Объявления продавцов не используются как цена сделки.";
+    } else {
+      const offerProfile = robustOfferReference(group);
+      if (offerProfile && !offerProfile.ambiguous && offerProfile.dispersion <= .65) {
+        cmp = "Предварительный ориентир объявлений: " + price(offerProfile.reference) +
+          " (" + fmt(offerProfile.sample_size) + " из " + fmt(offerProfile.raw_size) +
+          " объявлений; исключено выбросов: " + fmt(offerProfile.excluded) + "). Это не цена продажи.";
+      } else if (offerProfile && offerProfile.ambiguous) {
+        cmp = "Цены объявлений разделены на разные ценовые группы. Надёжный ориентир не рассчитан.";
+      }
+    }
     const kv = [["ID", "#" + l.lot_id], ["Серия", l.serial || "—"], ["Редкость", l.rarity || "—"], ["Статус", l.status || "—"], ["Впервые замечен", when(l.first_seen)], ["Последний раз виден", when(l.last_seen)], ["Сравнение с аналогами", cmp]];
     body.append(h("dl", { class: "kv" }, kv.map((p) => h("div", {}, [h("dt", { text: p[0] }), h("dd", { text: p[1] })]))));
+    const attributes = l.gift_details && l.gift_details.attributes && typeof l.gift_details.attributes === "object"
+      ? Object.entries(l.gift_details.attributes).filter(([key,value]) => /^[a-z_]{2,30}$/.test(key) && typeof value === "string" && value.trim())
+      : [];
+    body.append(h("h4", { text: "Характеристики подарка" }));
+    if (attributes.length) {
+      const labels = { model:"Модель", backdrop:"Фон", symbol:"Символ", pattern:"Узор", rarity:"Редкость", serial:"Номер", supply:"Тираж", collection:"Коллекция" };
+      body.append(h("dl", { class: "kv gift-attributes" }, attributes.map(([key,value]) =>
+        h("div", {}, [h("dt", { text: labels[key] || key }), h("dd", { text: value })]))));
+      body.append(h("p", { class: "muted foot", text: "Характеристики извлечены из карточки подарка Huevo. Не распознанные поля и данные владельца не сохраняются." }));
+    } else {
+      body.append(h("div", { class: "empty", text: l.gift_details ? "Карточка проверена, но её характеристики пока не удалось распознать. Мы не подставляем догадки." : "Карточка подарка ещё не проанализирована сборщиком." }));
+    }
+
     const watch=h("div",{class:"detail-watch"});
     const fav=h("button",{class:"btn secondary",type:"button",text:state.favorites.includes(String(l.lot_id))?"★ В избранном":"☆ В избранное"});
     fav.addEventListener("click",()=>{toggleFavorite(l.lot_id);fav.textContent=state.favorites.includes(String(l.lot_id))?"★ В избранном":"☆ В избранное";});
@@ -701,7 +728,9 @@
     const save=h("button",{class:"btn",type:"button",text:"Сохранить цену-цель"});
     save.addEventListener("click",()=>{if(saveTarget(l.lot_id,target.value))save.textContent=target.value.trim()?"Цена-цель сохранена":"Цель удалена";});
     watch.append(fav,target,save);body.append(watch);
-    body.append(h("h4", { text: "История цены" }));
+    body.append(h("h4", { text: "История цены объявления" }));
+    body.append(h("p", { class: "muted foot", text: "Это история изменения цены именно этого лота; она не равна цене завершённых продаж." }));
+
     const hist = l._history, chart = h("div", { class: "chart" });
     body.append(chart);
     if (hist.length < 2) chart.append(h("div", { class: "empty", text: hist.length ? "Цена пока не менялась с первого наблюдения: " + price(hist[0].price) + " (" + when(hist[0].observed_at) + ")." : "История цены ещё не накоплена." }));
@@ -709,6 +738,28 @@
       lineChart(chart, hist.map((p) => ({ label: dayLabel(p.observed_at), value: p.price })), "История цены лота");
       const tbl = h("table", { class: "hist" }, [h("caption", { class: "sr", text: "История цены" }), h("tbody", {}, hist.slice().reverse().map((p) => h("tr", {}, [h("td", { text: when(p.observed_at) }), h("td", { class: "price", text: price(p.price) })])))]);
       body.append(tbl);
+    }
+    body.append(h("h4", { text: "История продаж такого подарка" }));
+    const saleChart = h("div", { class: "chart" });
+    body.append(saleChart);
+    if (salesProfile && salesProfile.count >= 3) {
+      saleChart.append(h("div", { class: "cards" }, [
+        card("Продаж в выборке", fmt(salesProfile.count), "Подтверждённые записи Huevo"),
+        card("Медиана продаж", price(salesProfile.median), "Главный ценовой ориентир"),
+        card("Диапазон 25–75%", isNum(salesProfile.p25)&&isNum(salesProfile.p75)?price(salesProfile.p25)+" – "+price(salesProfile.p75):"—", "Центральная половина продаж")
+      ]));
+      const dated = Array.isArray(salesProfile.history) ? salesProfile.history : [];
+      if (dated.length >= 2) {
+        const datedChart = h("div", { class: "chart" });
+        lineChart(datedChart, dated.map(point => ({ label: dayLabel(point.date), value: point.median })),
+          "Медианная цена подтверждённых продаж подарка");
+        saleChart.append(datedChart);
+        saleChart.append(h("p", { class: "muted foot", text: "График строится только по сделкам с точной датой и часовым поясом, указанными Huevo." }));
+      } else {
+        saleChart.append(h("div", { class: "empty", text: "Huevo показывает время без даты для части сделок. Поэтому хронологический график не строится наугад; ниже остаётся проверенный диапазон и медиана." }));
+      }
+    } else {
+      saleChart.append(h("div", { class: "empty", text: "В локальной базе пока нет достаточного числа подтверждённых продаж этого подарка. Будут показаны данные, когда накопится минимум 3 записи." }));
     }
     body.append(h("p", {}, [h("a", { class: "btn", href: safeUrl(l.lot_url, l.lot_id), target: "_blank", rel: "noopener noreferrer", text: "Открыть лот на Huevo ↗" })]));
     const dlg = $("detail");
