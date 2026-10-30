@@ -8,7 +8,7 @@
 
   const ACCOUNT_PROFILE_URL = "./api/me";
   let accountState = {
-    user: null, profilesReady: false, updatedAt: null, dirty: false, hydrating: false,
+    user: null, profilesReady: false, updatedAt: null, dirty: false, hydrating: false, authRevision: 0,
     revision: 0, saving: false, savePromise: null, profilePollRunning: false, saveTimer: null, pollTimer: null
   };
 
@@ -1530,6 +1530,7 @@
     return !accountState.dirty;
   }
   function acceptAccountSession(data) {
+    accountState.authRevision += 1;
     accountState.user = data.user;
     accountState.profilesReady = true;
     accountState.updatedAt = data.updated_at || null;
@@ -1573,8 +1574,10 @@
   }
 
   async function checkAccountSession() {
+    const authRevision = accountState.authRevision;
     try {
       const data = await accountRequest(ACCOUNT_PROFILE_URL);
+      if (authRevision !== accountState.authRevision) return;
       accountState.profilesReady = data.profiles_ready !== false;
       if (data.authenticated && data.user) {
         if (!accountState.user || accountState.user.id !== data.user.id || accountState.updatedAt !== data.updated_at) {
@@ -1604,10 +1607,13 @@
     if (accountState.pollTimer) return;
     accountState.pollTimer = window.setInterval(async () => {
       if (!accountState.user || accountState.dirty || accountState.profilePollRunning) return;
+      const authRevision = accountState.authRevision;
       accountState.profilePollRunning = true;
       try {
         const data = await accountRequest(ACCOUNT_PROFILE_URL);
+        if (authRevision !== accountState.authRevision || accountState.dirty) return;
         if (!data.authenticated || !data.user) {
+          accountState.authRevision += 1;
           accountState.user = null;
           accountState.updatedAt = null;
           restoreGuestProfile();
@@ -1650,6 +1656,7 @@
       button.disabled = false;
       return;
     }
+    accountState.authRevision += 1;
     accountState.user = null;
     accountState.updatedAt = null;
     accountState.dirty = false;
