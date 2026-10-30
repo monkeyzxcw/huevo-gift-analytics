@@ -116,10 +116,12 @@
       state.liveFingerprint = n.raw.live && n.raw.live.fingerprint ? String(n.raw.live.fingerprint) : null;
       lastSnapshotSignature = snapshotSignature(n.raw, n.lots);
       render();
+      dismissPremiumSplash();
     } catch (error) {
       $("errorText").textContent = "Не удалось загрузить data.json (" + (error && error.message ? error.message : "ошибка") + "). Данные могут быть ещё не опубликованы.";
       setBadge("err", "Данные недоступны");
       show("error");
+      dismissPremiumSplash();
     }
   }
 
@@ -200,6 +202,74 @@
     ["loading", "error", "empty", "content"].forEach((id) => $(id).classList.toggle("hide", id !== which));
   }
   function setBadge(kind, text) { $("stateDot").className = "dot " + kind; $("stateText").textContent = text; }
+
+  // ---------- decorative atmosphere (kept separate from market interactions) ----------
+  let mascotMoodTimer = null;
+  const seasonKey = "amnyam.season.v1";
+  function setMascotMood(mood, message, resetAfter) {
+    const mascot = $("amnyamMascot");
+    if (!mascot) return;
+    mascot.dataset.mood = mood || "neutral";
+    $("mascotSpeech").textContent = message || "На страже выгодных лотов";
+    if (mascotMoodTimer) window.clearTimeout(mascotMoodTimer);
+    if (resetAfter) mascotMoodTimer = window.setTimeout(() => {
+      mascot.dataset.mood = "neutral";
+      $("mascotSpeech").textContent = "На страже выгодных лотов";
+    }, resetAfter);
+  }
+  function applySeasonTheme(value, persist) {
+    const allowed = ["default", "newyear", "halloween", "spring", "summer"];
+    const theme = allowed.includes(value) ? value : "default";
+    document.body.dataset.season = theme;
+    $("seasonTheme").value = theme;
+    if (persist) { try { localStorage.setItem(seasonKey, theme); } catch (_) {} }
+  }
+  function initAmbience() {
+    let savedTheme = "default";
+    try { savedTheme = localStorage.getItem(seasonKey) || "default"; } catch (_) {}
+    applySeasonTheme(savedTheme, false);
+    $("seasonTheme").addEventListener("change", () => applySeasonTheme($("seasonTheme").value, true));
+
+    const decorative = ".top .brand,.hero,.overview-pick,.day-picks,.deal-hero";
+    document.addEventListener("pointermove", (event) => {
+      const overDecoration = event.target && event.target.closest && event.target.closest(decorative);
+      if (!overDecoration) { document.body.classList.remove("cursor-glow-active"); return; }
+      document.body.classList.add("cursor-glow-active");
+      document.documentElement.style.setProperty("--mouse-x", event.clientX + "px");
+      document.documentElement.style.setProperty("--mouse-y", event.clientY + "px");
+      $("cursorGlow").style.left = event.clientX + "px";
+      $("cursorGlow").style.top = event.clientY + "px";
+    }, { passive: true });
+    document.addEventListener("pointerout", (event) => {
+      if (!event.relatedTarget || !(event.relatedTarget.closest && event.relatedTarget.closest(decorative))) document.body.classList.remove("cursor-glow-active");
+    }, { passive: true });
+
+    const ambient = $("ambientLayer");
+    const reduced = (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) || document.body.dataset.motion === "off";
+    if (!reduced) {
+      const dropGift = () => {
+        if (document.hidden) { window.setTimeout(dropGift, 12000); return; }
+        const gift = h("span", { class: "falling-gift", text: Math.random() > .5 ? "🎁" : "🎀", "aria-hidden": "true" });
+        gift.style.left = (7 + Math.random() * 86) + "vw";
+        gift.style.setProperty("--gift-duration", (7 + Math.random() * 3) + "s");
+        ambient.append(gift);
+        window.setTimeout(() => gift.remove(), 11000);
+        const subtle = document.body.dataset.motion === "subtle";
+        window.setTimeout(dropGift, (subtle ? 42000 : 26000) + Math.random() * 22000);
+      };
+      window.setTimeout(dropGift, 16000 + Math.random() * 12000);
+    }
+  }
+  const splashStartedAt = Date.now();
+  function dismissPremiumSplash() {
+    const splash = $("premiumSplash");
+    if (!splash || splash.dataset.dismissed) return;
+    splash.dataset.dismissed = "1";
+    window.setTimeout(() => {
+      splash.classList.add("is-hidden");
+      window.setTimeout(() => splash.remove(), 650);
+    }, Math.max(0, 720 - (Date.now() - splashStartedAt)));
+  }
 
   // ---------- header / data state ----------
   function renderState() {
@@ -691,9 +761,16 @@
     const actions=h("div",{class:"deal-actions"},[
       h("span",{class:"discount-tag deal-discount",text:badgeText}),
       h("a",{class:"btn secondary",href:safeUrl(lot.lot_url,lot.lot_id),target:"_blank",rel:"noopener noreferrer",text:"Открыть ↗"}),
+      ...(dayPick ? [h("button",{class:"btn purchase-confirm",type:"button",text:"Куплено ✓","aria-label":"Подтвердить успешную покупку лота "+(lot.title||id)})] : []),
       h("button",{class:"watch-btn deal-watch",type:"button","aria-pressed":String(fav),"aria-label":(fav?"Убрать из избранного ":"Добавить в избранное ")+(lot.title||id),text:fav?"★":"☆"})
     ]);
     actions.querySelector(".deal-watch").addEventListener("click",()=>toggleFavorite(lot.lot_id));
+    const purchased = actions.querySelector(".purchase-confirm");
+    if (purchased) purchased.addEventListener("click", () => {
+      purchased.disabled = true;
+      purchased.textContent = "Отмечено ✓";
+      setMascotMood("happy", "Ура! Лот куплен! 🎉", 9000);
+    });
     const row=lotItem(lot,actions,"#"+id+(lot.serial?" · "+lot.serial:"")+(lot.rarity?" · "+lot.rarity:""));
     row.classList.add("deal-row","deal-card-rich");if(dayPick)row.classList.add("day-pick-card");
     const metrics=h("div",{class:"deal-metrics"});
@@ -733,6 +810,8 @@
     $("dealsCount").textContent=fmt(signals.length)+" сигналов";
     $("dealsNote").textContent=signals.length?"Сравнение названия + редкости; от 3 аналогов и дисконт от 15%.":"Пока нет подтверждённой группы аналогов";
     $("belowBest").classList.toggle("hide",!best);
+    if (!best) setMascotMood("sad", "Пока нет выгодных лотов… Сканирую дальше");
+    else if ($("amnyamMascot").dataset.mood !== "happy") setMascotMood("neutral", "Нашёл выгодные предложения!");
     if(best){
       state._belowBestId=String(best.lot_id);
       $("belowBestTitle").textContent=best.title||("Лот #"+best.lot_id);
@@ -1008,6 +1087,8 @@
         ? "Каталог пуст: " + (c.message || c.status) + ". Статистика не показывается, чтобы не выдавать пустые значения за реальные."
         : "Первый полный сбор ещё не опубликован. Статистика не показывается, чтобы не выдавать пустые значения за реальные.";
       show("empty");
+      setMascotMood("sad", "Каталог пока пуст… Жду новые лоты");
+      dismissPremiumSplash();
       switchView(state.activeView);
       return;
     }
@@ -1056,6 +1137,7 @@
 
   // ---------- events ----------
   initAppearance();
+  initAmbience();
   document.querySelectorAll("#mainNav [data-view]").forEach(button=>button.addEventListener("click",()=>switchView(button.dataset.view,true)));
   document.querySelectorAll("[data-go-view]").forEach(button=>button.addEventListener("click",()=>switchView(button.dataset.goView,true)));
   $("globalSearch").addEventListener("keydown",event=>{if(event.key!=="Enter")return;event.preventDefault();$("search").value=$("globalSearch").value.trim();state.page=0;switchView("market",true);applyFilters();});
