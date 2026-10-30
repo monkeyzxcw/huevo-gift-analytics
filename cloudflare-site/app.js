@@ -1406,7 +1406,9 @@
     box.hidden = !message;
     box.className = "support-message" + (kind ? " " + kind : "");
     const retry = $("supportRetryStatus");
-    retry.hidden = !(kind === "pending" && Boolean(supportStatusIntentId));
+    const hideRetry = !(kind === "pending" && Boolean(supportStatusIntentId));
+    retry.hidden = hideRetry;
+    retry.classList.toggle("hide", hideRetry);
     retry.disabled = supportStatusLookupRunning;
     retry.setAttribute("aria-busy", String(supportStatusLookupRunning));
   }
@@ -1448,6 +1450,7 @@
       retry.disabled = false;
       retry.removeAttribute("aria-busy");
       retry.hidden = !supportStatusIntentId;
+      retry.classList.toggle("hide", !supportStatusIntentId);
     }
   }
 
@@ -1611,7 +1614,10 @@
     } finally {
       supportPaymentRunning = false;
       buttons.forEach((button) => { button.disabled = false; button.removeAttribute("aria-busy"); });
-      if (supportStatusIntentId) $("supportRetryStatus").hidden = false;
+      if (supportStatusIntentId) {
+        $("supportRetryStatus").hidden = false;
+        $("supportRetryStatus").classList.remove("hide");
+      }
     }
   }
 
