@@ -414,12 +414,16 @@ def main(argv=None):
             print(f"Snapshot not updated: {status}: {message}", file=sys.stderr)
             return 2
 
-        # A complete catalog pass clears prior cooldown, unless the optional detail crawl itself hit a block.
-        if details_result.get("status") == "blocked":
-            detail_pause = max(cooldown_hours * 3600, int(details_result.get("retry_after") or 0))
+        # A complete market pass is publishable even if an optional enrichment pass is blocked.
+        # Persist the cooldown and stop asking Huevo for more detail/history pages.
+        blocked_enrichment = (details_result.get("status") == "blocked" or
+                              instance_result.get("status") == "blocked")
+        if blocked_enrichment:
+            blocked_result = details_result if details_result.get("status") == "blocked" else instance_result
+            detail_pause = max(cooldown_hours * 3600, int(blocked_result.get("retry_after") or 0))
             save_state({"blocked_until": iso(now_utc() + timedelta(seconds=detail_pause)),
-                        "http_status": details_result.get("http_status"), "checked_at": iso(now_utc()),
-                        "source": "gift_detail"})
+                        "http_status": blocked_result.get("http_status"), "checked_at": iso(now_utc()),
+                        "source": "gift_instance" if blocked_result is instance_result else "gift_detail"})
         else:
             save_state({})
         observed_at = utcnow()
@@ -582,10 +586,18 @@ def main(argv=None):
                     "updated": len(new_details),
                     "message": details_result.get("message", ""),
                 },
+                "gift_instances": {
+                    "status": instance_result.get("status", "skipped"),
+                    "pages": instance_result.get("pages", 0),
+                    "updated": len(instance_result.get("instances") or {}),
+                    "message": instance_result.get("message", ""),
+                    "limit": args.instance_limit,
+                },
             },
             "stats": {"n_total": len(lots), **summary},
             "lots": lots,
             "gone_lots": gone_lots,
+            "catalog_events": catalog_events,
             "snapshots": snapshots,
             "price_bins": price_bins(current_prices),
             "facets": facets,
