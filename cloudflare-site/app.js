@@ -960,7 +960,7 @@
       } else {
         // Asking prices are not transaction prices. Use them only when the distribution
         // has a sufficiently large, non-dispersed core; otherwise suppress the deal signal.
-        if (!offers || offers.ambiguous || offers.dispersion > .65) continue;
+        if (!offers || offers.ambiguous || offers.dispersion > 1.0) continue;
         reference = offers.reference; basis = "active"; sampleSize = offers.sample_size;
         p25 = offers.p25; p75 = offers.p75; dispersion = offers.dispersion; excluded = offers.excluded;
       }
