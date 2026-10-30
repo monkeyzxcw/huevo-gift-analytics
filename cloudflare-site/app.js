@@ -907,7 +907,7 @@
 
   function normaliseSaleTitle(value) {
     return String(value || "").trim().toLocaleLowerCase("ru")
-      .replace(/\\s*#\\s*\\d+.*$/, "").replace(/\\s+/g, " ").trim();
+      .replace(/\s*#\s*\\d+.*$/, "").replace(/\s+/g, " ").trim();
   }
 
   function salesProfileForGift(lot) {
@@ -939,9 +939,9 @@
     const active = state.lots.filter(lot => lot && lot.active !== false && isNum(lot.price) &&
       lot.price > 0 && String(lot.title || "").trim());
     for (const lot of active) {
-      const title = String(lot.title || "").trim().toLocaleLowerCase("ru").replace(/\\s+/g, " ");
+      const title = String(lot.title || "").trim().toLocaleLowerCase("ru").replace(/\s+/g, " ");
       const rarity = String(lot.rarity || "").trim().toLocaleLowerCase("ru");
-      const key = title + "\\u0000" + rarity;
+      const key = title + "\u0000" + rarity;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(lot);
     }
