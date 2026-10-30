@@ -987,8 +987,10 @@
     const badgeEl = h("span", { class: "discount-tag", text: badge || price(lot.price) });
     const actions = h("div", { class: "deal-actions" }, [
       badgeEl,
+      h("button", { class: "btn secondary deal-detail", type: "button", text: "Анализ" }),
       h("a", { class: "btn secondary", href: safeUrl(lot.lot_url, lot.lot_id), target: "_blank", rel: "noopener noreferrer", text: linkLabel || "Открыть ↗" })
     ]);
+    actions.querySelector(".deal-detail").addEventListener("click", event => openDetail(lot, event.currentTarget));
     const row = lotItem(lot, actions, sub);
     row.classList.add("deal-row");
     return row;
@@ -1002,10 +1004,12 @@
     const fav=state.favorites.includes(id);
     const actions=h("div",{class:"deal-actions"},[
       h("span",{class:"discount-tag deal-discount",text:badgeText}),
+      h("button",{class:"btn secondary deal-detail",type:"button",text:"Анализ","aria-label":"Анализировать "+(lot.title||id)}),
       h("a",{class:"btn secondary",href:safeUrl(lot.lot_url,lot.lot_id),target:"_blank",rel:"noopener noreferrer",text:"Открыть ↗"}),
       ...(dayPick ? [h("button",{class:"btn purchase-confirm",type:"button",text:"Куплено ✓","aria-label":"Подтвердить успешную покупку лота "+(lot.title||id)})] : []),
       h("button",{class:"watch-btn deal-watch",type:"button","aria-pressed":String(fav),"aria-label":(fav?"Убрать из избранного ":"Добавить в избранное ")+(lot.title||id),text:fav?"★":"☆"})
     ]);
+    actions.querySelector(".deal-detail").addEventListener("click",event=>openDetail(lot,event.currentTarget));
     actions.querySelector(".deal-watch").addEventListener("click",()=>toggleFavorite(lot.lot_id));
     const purchased = actions.querySelector(".purchase-confirm");
     if (purchased) purchased.addEventListener("click", () => {
