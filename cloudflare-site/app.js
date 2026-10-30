@@ -43,6 +43,7 @@
     user: null, profilesReady: false, updatedAt: null, dirty: false, hydrating: false, authRevision: 0,
     revision: 0, saving: false, savePromise: null, profilePollRunning: false, saveTimer: null, pollTimer: null, authPromise: null, saveRetryCount: 0
   };
+  let pushState = { loaded: false, authenticated: false, subscriptions: 0, error: "" };
 
   // ---------- safe DOM helpers (no innerHTML anywhere: all text goes through textContent) ----------
   function h(tag, attrs, children) {
@@ -1376,6 +1377,7 @@
       ? targets+" целевых цен сохранено"+(reached?" · цель достигнута у "+reached+" лотов":"")+". "
       : "Добавь лот в избранное и задай цену, при которой хочешь получить сигнал. ") + notificationNote;
     updateNotificationButton();
+    updatePushControls();
     if(!found.length){list.append(h("li",{class:"empty",text:state.favorites.length?"Сохранённые лоты не попали в текущий снимок. Они останутся в избранном и появятся при следующем обнаружении.":"Пока пусто. Нажми ☆ в каталоге, чтобы сохранить лот в этом браузере."}));return;}
     found.slice().sort((a,b)=>(a.price??Infinity)-(b.price??Infinity)).forEach(lot=>{
       const id=String(lot.lot_id),target=state.targets[id];
@@ -1399,7 +1401,83 @@
     if(!("Notification" in window)){b.disabled=true;b.textContent="Уведомления недоступны";return;}
     if (!window.isSecureContext) { b.disabled=true; b.textContent="Нужен HTTPS"; return; }
     b.disabled=false;
-    b.textContent=Notification.permission==="granted"?"Проверить уведомление":Notification.permission==="denied"?"Разрешение запрещено":"Разрешить уведомления";
+    b.textContent=Notification.permission==="granted"?"Тест уведомления":Notification.permission==="denied"?"Разрешение запрещено":"Разрешить браузер";
+  }
+
+  function updatePushControls(){
+    const connect=$("enablePushNotifications"), test=$("testPushNotifications"), disable=$("disablePushNotifications"), status=$("pushStatus");
+    if(!connect||!test||!disable||!status)return;
+    const supported=window.isSecureContext&&("serviceWorker" in navigator)&&("PushManager" in window)&&("Notification" in window);
+    connect.disabled=!supported||!accountState.user;
+    test.disabled=!supported||!accountState.user||!pushState.subscriptions;
+    disable.disabled=!pushState.subscriptions;
+    connect.textContent=!supported?"Push недоступен в этом браузере":!accountState.user?"Сначала войди через huEVO":pushState.subscriptions?"Обновить push-подписку":"Подключить push на рабочий стол";
+    if(pushState.error){status.textContent=pushState.error;status.dataset.state="error";}
+    else if(!pushState.loaded){status.textContent="Проверяем состояние push…";status.dataset.state="loading";}
+    else if(!pushState.authenticated){status.textContent="Push привязывается к аккаунту huEVO. Открой приложение внутри huEVO и дождись подключения профиля.";status.dataset.state="muted";}
+    else if(pushState.subscriptions){status.textContent="Серверный push подключён · устройств: "+pushState.subscriptions+". Уведомления отправляются сервером, даже когда вкладка AMNYAM закрыта.";status.dataset.state="ok";}
+    else{status.textContent="Аккаунт huEVO подключён, но push-подписка этого браузера ещё не создана.";status.dataset.state="muted";}
+  }
+
+  async function refreshPushStatus(){
+    try{
+      const data=await accountRequest("./api/push/status");
+      pushState={loaded:true,authenticated:Boolean(data.authenticated),subscriptions:Number(data.subscriptions)||0,error:""};
+    }catch(error){
+      pushState={...pushState,loaded:true,error:"Не удалось проверить push-сервер: "+error.message};
+    }
+    updatePushControls();
+  }
+
+  function decodeApplicationServerKey(value){
+    const raw=String(value||"").replace(/-/g,"+").replace(/_/g,"/");
+    const binary=atob(raw+"=".repeat((4-raw.length%4)%4));
+    return Uint8Array.from(binary,char=>char.charCodeAt(0));
+  }
+
+  async function connectPushNotifications(){
+    if(!accountState.user)throw new Error("Сначала открой AMNYAM MODE внутри huEVO, чтобы подтвердить аккаунт.");
+    if(!window.isSecureContext||!("serviceWorker" in navigator)||!("PushManager" in window))throw new Error("Этот браузер не поддерживает push в текущем контексте. Открой AMNYAM в отдельной вкладке HTTPS.");
+    const config=await fetchJson("./api/push/config",{cache:"no-store"},12000);
+    if(!config.enabled||!config.public_key)throw new Error("Серверный push ещё не настроен.");
+    const registration=await navigator.serviceWorker.register("./service-worker.js?v=amnyam-push-v1",{scope:"./",updateViaCache:"none"});
+    await navigator.serviceWorker.ready;
+    let subscription=await registration.pushManager.getSubscription();
+    if(!subscription){
+      subscription=await registration.pushManager.subscribe({
+        userVisibleOnly:true,
+        applicationServerKey:decodeApplicationServerKey(config.public_key)
+      });
+    }
+    await accountRequest("./api/push/subscribe",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(subscription.toJSON())
+    });
+    await refreshPushStatus();
+    if(!pushState.subscriptions)throw new Error("Сервер не подтвердил сохранение push-подписки.");
+  }
+
+  async function testServerPush(){
+    const result=await accountRequest("./api/push/test",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:"{}"
+    });
+    if(!result.ok||!result.sent)throw new Error("Push не доставлен. Статусы сервера: "+(result.statuses||[]).join(", "));
+    return result.sent;
+  }
+
+  async function disableServerPush(){
+    const registration=await navigator.serviceWorker.getRegistration("./");
+    const subscription=registration?await registration.pushManager.getSubscription():null;
+    if(subscription)await subscription.unsubscribe();
+    await accountRequest("./api/push/unsubscribe",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({endpoint:subscription?subscription.endpoint:""})
+    });
+    await refreshPushStatus();
   }
 
   function showDesktopNotification(title, body, lot){
@@ -1930,6 +2008,7 @@
     if (accountState.saveTimer) window.clearTimeout(accountState.saveTimer);
     applyAccountProfile(data.profile);
     updateAccountUI();
+    refreshPushStatus();
     if ($("accountDialog").open) $("accountDialog").close();
     setAccountStatus("Профиль huEVO загружен", "ok");
   }
@@ -1978,12 +2057,14 @@
         }
         updateAccountUI();
         startAccountProfilePolling();
+        refreshPushStatus();
       } else {
         accountState.user = null;
         accountState.updatedAt = null;
         accountState.dirty = false;
         restoreGuestProfile();
         updateAccountUI();
+        refreshPushStatus();
         setAccountStatus(accountState.profilesReady
           ? "Открой AMNYAM MODE внутри huEVO — профиль подключится автоматически."
           : "Серверное хранилище профилей ещё не подготовлено.", "muted");
@@ -2042,6 +2123,7 @@
     $("accountClose").addEventListener("click", () => $("accountDialog").close());
     $("accountDialog").addEventListener("click", event => { if (event.target === $("accountDialog")) $("accountDialog").close(); });
     checkAccountSession();
+    refreshPushStatus();
   }
 
   // ---------- main render ----------
@@ -2208,26 +2290,80 @@
   $("enableNotifications").addEventListener("click",async()=>{
     if(!("Notification" in window)){
       $("notificationHint").textContent="Этот браузер не поддерживает системные уведомления.";
-      updateNotificationButton();
-      return;
+      updateNotificationButton();return;
     }
     if(!window.isSecureContext){
       $("notificationHint").textContent="Системные уведомления доступны только на защищённом HTTPS-соединении.";
-      updateNotificationButton();
-      return;
+      updateNotificationButton();return;
     }
-    let permission = Notification.permission;
-    if(permission === "default"){
-      try { permission = await Notification.requestPermission(); } catch (_) { permission = Notification.permission; }
+    let permission=Notification.permission;
+    if(permission==="default"){
+      try{permission=await Notification.requestPermission();}catch(_){permission=Notification.permission;}
     }
     updateNotificationButton();
-    if(permission === "granted"){
-      $("notificationHint").textContent="Разрешение включено. Это тестовое уведомление AMNYAM; при достижении целевой цены придёт такое же системное сообщение.";
-      showDesktopNotification("AMNYAM · уведомления включены","Отлично! Системные уведомления готовы сообщать о достижении твоих цен-целей.");
-    } else if(permission === "denied"){
+    if(permission==="granted"){
+      $("notificationHint").textContent="Разрешение включено. Это локальное тестовое уведомление; для доставки после закрытия вкладки отдельно подключи push.";
+      showDesktopNotification("AMNYAM · уведомления включены","Локальное уведомление работает. Подключи push ниже, чтобы получать сообщения при закрытой вкладке.");
+    }else if(permission==="denied"){
       $("notificationHint").textContent="Разрешение запрещено. Нажми значок настроек сайта слева от адреса страницы и включи уведомления вручную.";
-    } else {
+    }else{
       $("notificationHint").textContent="Разрешение не получено. Пока будут работать только сигналы внутри приложения.";
+    }
+  });
+  $("enablePushNotifications").addEventListener("click",async()=>{
+    if(!("Notification" in window)){
+      pushState.error="Браузер не поддерживает системные уведомления.";
+      updatePushControls();return;
+    }
+    if(!window.isSecureContext){
+      pushState.error="Push доступен только по HTTPS.";
+      updatePushControls();return;
+    }
+    let permission=Notification.permission;
+    if(permission==="default"){
+      try{permission=await Notification.requestPermission();}catch(_){permission=Notification.permission;}
+    }
+    updateNotificationButton();
+    if(permission!=="granted"){
+      pushState.error=permission==="denied"
+        ?"Разрешение запрещено. Включи уведомления в настройках сайта рядом с адресной строкой."
+        :"Браузер не выдал разрешение на уведомления.";
+      updatePushControls();return;
+    }
+    try{
+      $("enablePushNotifications").disabled=true;
+      pushState.error="";
+      updatePushControls();
+      await connectPushNotifications();
+      showDesktopNotification("AMNYAM · push подключён","Серверная подписка создана. Теперь проверь доставку push.");
+      $("pushStatus").textContent="Подписка сохранена. Нажми «Проверить push», затем закрой вкладку для проверки фоновой доставки.";
+      $("pushStatus").dataset.state="ok";
+    }catch(error){
+      pushState.error=error.message||"Не удалось подключить push.";
+      updatePushControls();
+    }
+  });
+  $("testPushNotifications").addEventListener("click",async()=>{
+    try{
+      $("testPushNotifications").disabled=true;
+      $("pushStatus").textContent="Отправляем тестовый push с Cloudflare…";
+      const sent=await testServerPush();
+      $("pushStatus").textContent="Cloudflare отправил тестовый push на "+sent+" устройство(а). Проверь системный центр уведомлений.";
+      $("pushStatus").dataset.state="ok";
+    }catch(error){
+      pushState.error=error.message||"Тестовый push не доставлен.";
+      updatePushControls();
+    }finally{await refreshPushStatus();}
+  });
+  $("disablePushNotifications").addEventListener("click",async()=>{
+    try{
+      $("disablePushNotifications").disabled=true;
+      await disableServerPush();
+      $("pushStatus").textContent="Push отключён для этого браузера.";
+      $("pushStatus").dataset.state="muted";
+    }catch(error){
+      pushState.error=error.message||"Не удалось отключить push.";
+      updatePushControls();
     }
   });
   $("closeWatchAlert").addEventListener("click",()=>$("watchAlert").classList.add("hide"));
