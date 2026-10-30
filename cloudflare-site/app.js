@@ -482,12 +482,53 @@
   // ---------- sales (only when the file really contains confirmed data) ----------
   function renderSales() {
     const sales = state.data.sales, panel = $("salesPanel");
-    if (!sales || !sales.summary || !isNum(sales.summary.count) || sales.summary.count < 1) { panel.classList.add("hide"); return; }
+    if (!sales || !sales.summary || !isNum(sales.summary.count) || sales.summary.count < 1) {
+      panel.classList.add("hide"); return;
+    }
     panel.classList.remove("hide");
     const sm = sales.summary, body = clear($("salesBody"));
     $("salesNote").textContent = "подтверждённых записей: " + fmt(sm.count);
-    body.append(h("div", { class: "cards" }, [card("Продаж в базе", fmt(sm.count), "Цена неизвестна у " + fmt(sm.unknown || 0)), card("Медианная цена продажи", price(sm.median), sm.enough_data ? "Выборка достаточна" : "Выборка мала — ориентир"), card("Диапазон", sm.min != null ? short(sm.min) + "–" + short(sm.max) : "—", "Минимум–максимум")]));
+    body.append(h("div", { class: "cards" }, [
+      card("Продаж в базе", fmt(sm.count), "Цена неизвестна у " + fmt(sm.unknown || 0)),
+      card("Медианная цена продажи", price(sm.median), sm.enough_data ? "Основной ориентир оценки" : "Выборка мала — только подсказка"),
+      card("Диапазон", sm.min != null ? short(sm.min) + "–" + short(sm.max) : "—", "Минимум–максимум")
+    ]));
     if (sm.note) body.append(h("p", { class: "muted foot", text: sm.note }));
+    const profiles = Array.isArray(sales.by_title) ? sales.by_title.filter(x => x && typeof x.title === "string" && isNum(x.median)) : [];
+    if (!profiles.length) {
+      body.append(h("div", { class: "empty", text: "Группы подарков появятся, когда накопится минимум 3 сделки с известной ценой для одного названия." }));
+      return;
+    }
+    const wrap = h("div", { class: "sale-history-browser" });
+    const label = h("label", { class: "f sale-history-select" }, [
+      h("span", { text: "Подарок" }),
+      h("select", { class: "select", id: "giftSalesSelect" },
+        profiles.slice().sort((a,b) => b.count-a.count).map((profile,index) =>
+          h("option", { value: profile.title, text: profile.title + " · " + fmt(profile.count) + " продаж" })))
+    ]);
+    const detail = h("div", { id: "giftSalesProfile", class: "gift-sales-profile" });
+    wrap.append(label, detail);
+    body.append(wrap);
+    const draw = (title) => {
+      const profile = profiles.find(item => item.title === title) || profiles[0];
+      clear(detail);
+      detail.append(h("div", { class: "cards" }, [
+        card("Медиана продаж", price(profile.median), fmt(profile.count) + " завершённых сделок"),
+        card("P25 – P75", isNum(profile.p25)&&isNum(profile.p75)?price(profile.p25)+" – "+price(profile.p75):"—", "Центральные 50% цен"),
+        card("Нижняя / верхняя", price(profile.min)+" / "+price(profile.max), "Все цены в выборке")
+      ]));
+      const dated = Array.isArray(profile.history) ? profile.history : [];
+      if (dated.length >= 2) {
+        const chart = h("div", { class: "chart sale-history-chart" });
+        lineChart(chart, dated.map(point => ({ label: dayLabel(point.date), value: point.median })),
+          "Медиана подтверждённых продаж подарка " + profile.title);
+        detail.append(chart);
+      } else {
+        detail.append(h("div", { class: "empty", text: "Для этих сделок Huevo не передал надёжную календарную дату. Медиана и диапазон рассчитаны по подтверждённым ценам, но временную линию без даты мы не выдумываем." }));
+      }
+    };
+    draw(profiles.slice().sort((a,b)=>b.count-a.count)[0].title);
+    $("giftSalesSelect").addEventListener("change", event => draw(event.target.value));
   }
 
   // ---------- table ----------
