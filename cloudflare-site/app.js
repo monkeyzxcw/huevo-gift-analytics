@@ -682,47 +682,99 @@
     return row;
   }
 
-  function renderDeals() {
-    const deals = buildDealSignals();
-    const best = deals[0] || null;
-    const list = clear($("dealsList"));
-    $("dealsCount").textContent = fmt(deals.length) + " сигналов";
-    $("dealsNote").textContent = deals.length ? "Сравнение с медианой аналогов" : "Пока нет подтверждённой группы аналогов";
-    $("belowBest").classList.toggle("hide", !best);
-    if (best) {
-      $("belowBestTitle").textContent = best.title || ("Лот #" + best.lot_id);
-      $("belowBestPrice").textContent = price(best.price);
-      $("belowBestMeta").textContent = "На " + fmt(best.discount_pct) + "% ниже медианы " + price(best.reference_price) + " · " + fmt(best.sample_size) + " похожих лотов · #" + best.lot_id;
-      $("belowBestOpen").href = safeUrl(best.lot_url, best.lot_id);
-      $("overviewPickHint").textContent = "Лучшее текущее отклонение от медианы аналогов: −" + fmt(best.discount_pct) + "%.";
-      const pick = clear($("overviewPickLot"));
-      if (best.image_url && /^https:\/\//i.test(best.image_url)) {
-        const img = h("img", { class: "pick-img", src: best.image_url, alt: "", loading: "lazy", referrerpolicy: "no-referrer" });
-        img.addEventListener("error", () => img.replaceWith(h("span", { class: "pick-img", text: "🎁" })));
-        pick.append(img);
-      }
-      pick.append(h("div", {}, [
-        h("strong", { text: best.title || ("Лот #" + best.lot_id) }),
-        h("span", { class: "pick-price", text: price(best.price) }),
-        h("small", { text: "−" + fmt(best.discount_pct) + "% к медиане похожих лотов · #" + best.lot_id })
-      ]));
-      deals.slice(1, 31).forEach((lot) => list.append(compactSignalItem(
-        lot,
-        "#" + lot.lot_id + (lot.rarity ? " · " + lot.rarity : "") + " · ориентир " + price(lot.reference_price),
-        "−" + fmt(lot.discount_pct) + "%",
-        "Лот ↗"
-      )));
-    } else {
-      $("belowBestTitle").textContent = "Пока нет уверенного кандидата";
-      $("belowBestPrice").textContent = "—";
-      $("belowBestMeta").textContent = "Нужно минимум три похожих активных предложения и разница не менее 15%.";
-      $("belowBestOpen").href = "https://huevo.su/market/gifts";
-      $("overviewPickHint").textContent = "Когда в каталоге появится группа сопоставимых лотов, здесь отобразится лучший текущий ценовой разрыв.";
-      const pick = clear($("overviewPickLot"));
-      pick.append(h("span", { class: "muted", text: "Пока нет группы аналогов для честного сравнения." }));
-      list.append(h("li", { class: "empty", text: "Нет лотов, цена которых минимум на 15% ниже медианы трёх или более похожих активных предложений." }));
+  function renderDealCard(lot,label,dayPick){
+    const id=String(lot.lot_id),saved=isNum(lot.reference_price)?Math.max(0,lot.reference_price-lot.price):null;
+    const histValues=(Array.isArray(lot._history)?lot._history:[]).filter(p=>isNum(p.price)).map(p=>p.price);
+    const histLow=histValues.length>=2?Math.min(...histValues):null;
+    const badgeText=isNum(lot.discount_pct)?"−"+fmt(lot.discount_pct)+"%":(label||"Рыночный лот");
+    const fav=state.favorites.includes(id);
+    const actions=h("div",{class:"deal-actions"},[
+      h("span",{class:"discount-tag deal-discount",text:badgeText}),
+      h("a",{class:"btn secondary",href:safeUrl(lot.lot_url,lot.lot_id),target:"_blank",rel:"noopener noreferrer",text:"Открыть ↗"}),
+      h("button",{class:"watch-btn deal-watch",type:"button","aria-pressed":String(fav),"aria-label":(fav?"Убрать из избранного ":"Добавить в избранное ")+(lot.title||id),text:fav?"★":"☆"})
+    ]);
+    actions.querySelector(".deal-watch").addEventListener("click",()=>toggleFavorite(lot.lot_id));
+    const row=lotItem(lot,actions,"#"+id+(lot.serial?" · "+lot.serial:"")+(lot.rarity?" · "+lot.rarity:""));
+    row.classList.add("deal-row","deal-card-rich");if(dayPick)row.classList.add("day-pick-card");
+    const metrics=h("div",{class:"deal-metrics"});
+    metrics.append(
+      h("span",{class:"deal-metric ask"},[h("small",{text:"ЦЕНА ЛОТА"}),h("b",{text:price(lot.price)})]),
+      h("span",{class:"deal-metric"},[h("small",{text:"МЕДИАНА АНАЛОГОВ"}),h("b",{text:isNum(lot.reference_price)?price(lot.reference_price):"Нет ориентира"})]),
+      h("span",{class:"deal-metric saving"},[h("small",{text:"РАЗНИЦА"}),h("b",{text:isNum(saved)?price(saved)+" ниже":"Не рассчитана"})]),
+      h("span",{class:"deal-metric"},[h("small",{text:"ВЫБОРКА"}),h("b",{text:isNum(lot.sample_size)&&lot.sample_size>0?fmt(lot.sample_size)+" аналогов":"Мало данных"})])
+    );
+    if(histLow!==null)metrics.append(h("span",{class:"deal-metric history-low"},[h("small",{text:"МИНИМУМ В ИСТОРИИ"}),h("b",{text:price(histLow)})]));
+    const mini=sparkline(lot._history);
+    if(mini)metrics.append(h("div",{class:"deal-sparkline"},[mini,h("small",{text:"История цены"})]));
+    row.children[1].append(metrics);
+    const target=h("input",{class:"input target-input deal-target-input",type:"number",min:"1",step:"1",inputmode:"numeric",placeholder:"Желаемая цена","aria-label":"Цена-цель для "+(lot.title||id)});
+    target.value=state.targets[id]?String(state.targets[id]):"";
+    const save=h("button",{class:"btn target-save",type:"button",text:state.targets[id]?"Обновить уведомление":"Уведомить при цене"});
+    save.addEventListener("click",()=>{if(saveTarget(lot.lot_id,target.value)){renderDeals();renderDayPicks();}});
+    const quick=h("button",{class:"btn secondary target-quick",type:"button",text:"Цель −10%"});
+    quick.addEventListener("click",()=>{target.value=String(Math.max(1,Math.floor(lot.price*.9)));if(saveTarget(lot.lot_id,target.value)){renderDeals();renderDayPicks();}});
+    const status=h("small",{class:"target-status",text:state.targets[id]?(lot.active!==false&&isNum(lot.price)&&lot.price<=state.targets[id]?"✓ Цель достигнута":"Цель "+price(state.targets[id])):"Цель не задана"});
+    row.children[1].append(h("div",{class:"deal-target-row"},[target,save,quick,status]));
+    return row;
+  }
+
+  function renderDeals(){
+    const signals=buildDealSignals(),best=signals[0]||null;
+    let deals=signals.slice(),sortBy=$("dealSort").value||"discount";
+    if(sortBy==="price")deals.sort((a,b)=>a.price-b.price||b.discount_pct-a.discount_pct);
+    else if(sortBy==="savings")deals.sort((a,b)=>(b.reference_price-b.price)-(a.reference_price-a.price)||b.discount_pct-a.discount_pct);
+    else if(sortBy==="sample")deals.sort((a,b)=>b.sample_size-a.sample_size||b.discount_pct-a.discount_pct);
+    else if(sortBy==="historical")deals.sort((a,b)=>{
+      const low=lot=>{const v=(lot._history||[]).filter(p=>isNum(p.price)).map(p=>p.price);return v.length?Math.min(...v):Infinity;};
+      return (a.price/low(a))-(b.price/low(b))||b.discount_pct-a.discount_pct;
+    });
+    else deals.sort((a,b)=>b.discount_pct-a.discount_pct||a.price-b.price);
+    const list=clear($("dealsList"));
+    $("dealsCount").textContent=fmt(signals.length)+" сигналов";
+    $("dealsNote").textContent=signals.length?"Сравнение названия + редкости; от 3 аналогов и дисконт от 15%.":"Пока нет подтверждённой группы аналогов";
+    $("belowBest").classList.toggle("hide",!best);
+    if(best){
+      state._belowBestId=String(best.lot_id);
+      $("belowBestTitle").textContent=best.title||("Лот #"+best.lot_id);
+      $("belowBestPrice").textContent=price(best.price);
+      $("belowBestMeta").textContent="Экономия к медиане: "+price(Math.max(0,best.reference_price-best.price))+" · −"+fmt(best.discount_pct)+"% · "+fmt(best.sample_size)+" похожих лотов · #"+best.lot_id;
+      $("belowBestOpen").href=safeUrl(best.lot_url,best.lot_id);
+      $("belowBestTarget").value=state.targets[String(best.lot_id)]?String(state.targets[String(best.lot_id)]):"";
+      $("overviewPickHint").textContent="Лучший текущий дисконт: −"+fmt(best.discount_pct)+"% от медианы похожих предложений.";
+      const pick=clear($("overviewPickLot"));
+      if(best.image_url&&/^https:\/\//i.test(best.image_url)){const img=h("img",{class:"pick-img",src:best.image_url,alt:"",loading:"lazy",referrerpolicy:"no-referrer"});img.addEventListener("error",()=>img.replaceWith(h("span",{class:"pick-img",text:"🎁"})));pick.append(img);}
+      pick.append(h("div",{},[h("strong",{text:best.title||("Лот #"+best.lot_id)}),h("span",{class:"pick-price",text:price(best.price)}),h("small",{text:"−"+fmt(best.discount_pct)+"% к медиане · выгода "+price(best.reference_price-best.price)})]));
+      deals.slice(0,30).forEach((lot,index)=>list.append(renderDealCard(lot,"#"+(index+1),false)));
+    }else{
+      state._belowBestId=null;
+      $("belowBestTitle").textContent="Пока нет уверенного кандидата";$("belowBestPrice").textContent="—";
+      $("belowBestMeta").textContent="Нужно минимум три похожих активных предложения и цена хотя бы на 15% ниже их медианы.";
+      $("belowBestOpen").href="https://huevo.su/market/gifts";$("belowBestTarget").value="";
+      $("overviewPickHint").textContent="Когда появится сопоставимая группа, здесь будет показан лучший текущий дисконт.";
+      const pick=clear($("overviewPickLot"));pick.append(h("span",{class:"muted",text:"Пока нет группы аналогов для честного сравнения."}));
+      list.append(h("li",{class:"empty",text:"Нет лотов на 15% дешевле медианы трёх или более похожих активных предложений."}));
     }
     updateViewCounts();
+  }
+
+  function renderDayPicks(){
+    const box=clear($("dayPicks")),signals=buildDealSignals(),chosen=[],seen=new Set();
+    const add=(lot,tag,description)=>{if(!lot||seen.has(String(lot.lot_id))||chosen.length>=3)return;seen.add(String(lot.lot_id));chosen.push({lot,tag,description});};
+    if(signals.length){
+      add(signals[0],"ЛУЧШИЙ ДИСКОНТ","Самое сильное отличие от медианы аналогов");
+      add(signals.slice().sort((a,b)=>a.price-b.price||b.discount_pct-a.discount_pct)[0],"НИЗКАЯ ЦЕНА","Самая низкая цена среди лотов ниже рынка");
+      add(signals.slice().sort((a,b)=>b.sample_size-a.sample_size||b.discount_pct-a.discount_pct)[0],"БОЛЬШЕ АНАЛОГОВ","Самая широкая выборка похожих предложений");
+    }
+    const fallback=state.lots.filter(l=>l&&l.active!==false&&isNum(l.price)&&l.price>0).slice().sort((a,b)=>a.price-b.price);
+    for(const lot of fallback)add(lot,"ДОСТУПНАЯ ЦЕНА","Бюджетный лот; дисконт к медиане не подтверждён");
+    $("dayPicksNote").textContent=chosen.length===3?"3 кандидата · по текущему снимку":fmt(chosen.length)+" кандидата";
+    if(!chosen.length){box.append(h("div",{class:"empty",text:"Появятся после первого успешного снимка цен."}));return;}
+    chosen.forEach((item,index)=>{
+      const lot={...item.lot,reference_price:isNum(item.lot.reference_price)?item.lot.reference_price:null,discount_pct:isNum(item.lot.discount_pct)?item.lot.discount_pct:null,sample_size:isNum(item.lot.sample_size)?item.lot.sample_size:0};
+      const card=renderDealCard(lot,item.tag,true);
+      card.prepend(h("div",{class:"day-pick-label"},[h("span",{text:"0"+(index+1)}),h("b",{text:item.tag}),h("small",{text:item.description})]));
+      box.append(card);
+    });
   }
 
   function renderCheapest() {
@@ -773,7 +825,7 @@
 
   function showWatchAlert(lot){
     const text=(lot.title||("Лот #"+lot.lot_id))+" достиг целевой цены: "+price(lot.price)+" (цель "+price(state.targets[String(lot.lot_id)])+").";
-    $("watchAlertText").textContent=text;$("watchAlert").classList.remove("hide");
+    $("watchAlertText").textContent=text;$("watchAlertOpen").href=safeUrl(lot.lot_url,lot.lot_id);$("watchAlert").classList.remove("hide");
     if("Notification" in window&&Notification.permission==="granted"){try{new Notification("AMNYAM MODE · цена-цель",{body:text,tag:"amnyam-target-"+lot.lot_id});}catch(_){}}
   }
 
@@ -793,14 +845,14 @@
     if(value!==null&&(!Number.isFinite(value)||value<=0)){$("watchAlertText").textContent="Введи целевую цену больше нуля.";$("watchAlert").classList.remove("hide");return false;}
     if(value===null){delete state.targets[id];state.alertedTargets=state.alertedTargets.filter(v=>v!==id);}
     else{state.targets[id]=Math.round(value);if(!state.favorites.includes(id))state.favorites=[...state.favorites,id].slice(-5000);}
-    writeTargets();writeAlertedTargets();writeFavorites();checkTargetAlerts();renderFavorites();renderRows();updateViewCounts();return true;
+    writeTargets();writeAlertedTargets();writeFavorites();checkTargetAlerts();renderFavorites();renderRows();renderDeals();renderDayPicks();updateViewCounts();return true;
   }
 
   function toggleFavorite(lotId){
     const id=String(lotId);
     if(state.favorites.includes(id)){state.favorites=state.favorites.filter(v=>v!==id);delete state.targets[id];state.alertedTargets=state.alertedTargets.filter(v=>v!==id);writeTargets();writeAlertedTargets();}
     else state.favorites=[...state.favorites,id].slice(-5000);
-    writeFavorites();renderFavorites();updateViewCounts();renderRows();
+    writeFavorites();renderFavorites();updateViewCounts();renderRows();renderDeals();renderDayPicks();
   }
 
   function renderSavedFilters(){
@@ -961,7 +1013,7 @@
     }
     show("content");
     checkTargetAlerts();
-    renderDeals(); renderCheapest(); renderFavorites();
+    checkTargetAlerts();renderDeals();renderDayPicks();renderCheapest();renderFavorites();
     renderCards(); renderCharts(); renderChanges(); renderTop(); renderSales(); fillFacets();
     renderSavedFilters();setSortMenuOptions();applyFilters();
     switchView(state.activeView);
@@ -974,6 +1026,9 @@
   document.querySelectorAll("[data-search-token]").forEach(button=>button.addEventListener("click",()=>{
     const token=button.dataset.searchToken||"",input=$("search");input.value=(input.value.trim()+" "+token).trim();$("globalSearch").value=input.value;state.page=0;switchView("market",true);applyFilters();
   }));
+  $("dealSort").addEventListener("change",renderDeals);
+  $("saveBelowBestTarget").addEventListener("click",()=>{const id=state._belowBestId;if(id&&saveTarget(id,$("belowBestTarget").value)){renderDeals();renderDayPicks();}});
+  $("belowBestMinus10").addEventListener("click",()=>{const id=state._belowBestId,lot=state.lots.find(item=>String(item.lot_id)===String(id));if(lot&&isNum(lot.price)&&lot.price>0){$("belowBestTarget").value=String(Math.max(1,Math.floor(lot.price*.9)));if(saveTarget(id,$("belowBestTarget").value)){renderDeals();renderDayPicks();}}});
   $("supportAmounts").addEventListener("click",event=>{const b=event.target.closest("[data-amount]");if(b&&!b.disabled)makeSupportPayment(b.dataset.amount);});
   document.querySelectorAll("[data-catalog-mode]").forEach(b=>b.addEventListener("click",()=>switchCatalogMode(b.dataset.catalogMode)));
   ["search","pmin","pmax"].forEach(id=>$(id).addEventListener("input",()=>{state.page=0;$("globalSearch").value=$("search").value;applyFilters();}));
