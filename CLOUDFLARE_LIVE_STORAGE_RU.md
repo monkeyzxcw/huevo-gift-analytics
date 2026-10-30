@@ -66,7 +66,7 @@ Workflow будет отправлять полный снимок в D1 тол�
 ```powershell
 $env:HUEVO_CHROME_PROFILE = "Default"
 $env:HUEVO_BASE_URL = "https://huevo.su"
-$env:HUEVO_LIVE_INGEST_URL = "https://huevo-gift-analytics.monkeyzxc1437.workers.dev/api/live/page"
+$env:HUEVO_LIVE_INGEST_URL = "https://huevo-gift-analytics.monkeyzxcw.workers.dev/api/live/page"
 $env:HUEVO_LIVE_INGEST_TOKEN = "<твой локальный ingest-токен>"
 $env:HUEVO_LIVE_POLL_SECONDS = "3"
 py scripts/poll_first_page.py
@@ -76,8 +76,8 @@ py scripts/poll_first_page.py
 
 Проверить Worker можно по адресу:
 
-- `https://huevo-gift-analytics.monkeyzxc1437.workers.dev/api/health` — должно показать `storage_configured: true`, `schema_ready: true`, `ingest_enabled: true`.
-- `https://huevo-gift-analytics.monkeyzxc1437.workers.dev/api/live/status` — после старта появятся `last_poll_at`, `item_count` и `fresh: true`.
+- `https://huevo-gift-analytics.monkeyzxcw.workers.dev/api/health` — должно показать `storage_configured: true`, `schema_ready: true`, `ingest_enabled: true`.
+- `https://huevo-gift-analytics.monkeyzxcw.workers.dev/api/live/status` — после старта появятся `last_poll_at`, `item_count` и `fresh: true`.
 
 В панели обновляются цены первой страницы; прочие лоты и графики остаются на последнем полном снимке. Значок `Live · первая страница` означает именно это, а не свежесть всего каталога.
 
