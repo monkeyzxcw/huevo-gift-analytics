@@ -230,15 +230,13 @@ test("detail dialog: price history, comparison, safe link, Escape closes", async
   await browser.close();
 });
 
-test("gift instance metadata and history feed render in the detail and catalog changes panels", async () => {
+test("gift instance and catalogue edition use separate verified data sources", async () => {
   const data = dataV2();
   data.lots[3].gift_details = {
     gift_id: "18336", gift_url: "https://huevo.su/gift/18336",
     checked_at: NOW, attributes: {
       model: { name: "Лунная модель", rarity: "1.2%" },
-      backdrop: "Синий космос",
-      symbol: "Комета",
-      pattern: { value: "Звёздный узор" }
+      backdrop: "Синий космос", symbol: "Комета", pattern: { value: "Звёздный узор" }
     }
   };
   data.lots[3].gift_catalog = {
@@ -251,12 +249,14 @@ test("gift instance metadata and history feed render in the detail and catalog c
     attributes: { model: "Green Adidas" }, checked_at: NOW,
     source: "huevo_gift_catalog_page"
   };
+  // Deliberately conflicting values prove that /gift/{instance_id} is not
+  // allowed to override catalogue supply, drop price, designer or collection.
   data.lots[3].gift_instance = {
     gift_id: "18336", gift_url: "https://huevo.su/gift/18336",
     title: "Адидас-Тян Зеленая", serial: 4, supply: 111,
     rarity: "Лимитированный", drop_price: 5555, drop_price_text: "5555 монэток",
-    edition_sold_out: true, author: "hhiૐvi buritania XVII",
-    collection: "ADIDAS-Тян", current_owner: "monkeyzxcw",
+    edition_sold_out: true, author: "Автор экземпляра (не использовать)",
+    collection: "Чужая коллекция (не использовать)", current_owner: "monkeyzxcw",
     history_found: true, checked_at: NOW,
     history: [
       { event_id: "event-1", type: "purchase", label: "Куплен", from_user: "monkeyzxcw", to_user: "monkeyzxcw", time_raw: "22 окт в 03:35" },
@@ -288,15 +288,24 @@ test("gift instance metadata and history feed render in the detail and catalog c
   await page.click("#rows button");
   const detail = await page.textContent("#dBody");
   assert.match(detail, /№ 4/);
-  assert.match(detail, /Полный тираж/);\n  assert.match(detail, /222/);\n  assert.doesNotMatch(detail, /Полный тираж\\s*111/);
+  assert.match(detail, /Полный тираж/);
+  assert.match(detail, /222/);
+  assert.doesNotMatch(detail, /Полный тираж\s*111/);
   assert.match(detail, /Лунная модель/);
   assert.match(detail, /Синий космос/);
   assert.match(detail, /Комета/);
   assert.match(detail, /Звёздный узор/);
-  assert.ok(detail.replace(/\s/g, "").includes("5555"), "grouped drop price must still be checked");
-  assert.match(detail, /Продан в Маркете/);\n  assert.equal(await page.locator("#dBody a").filter({ hasText: "Открыть страницу подарка и тираж" }).getAttribute("href"), "https://huevo.su/gifts/131");\n  assert.equal(await page.locator("#dBody a").filter({ hasText: "Открыть страницу конкретного экземпляра" }).getAttribute("href"), "https://huevo.su/gift/18336");
+  assert.ok(detail.replace(/\s/g, "").includes("7777"), "drop price must come from the /gifts/ catalogue record");
+  assert.doesNotMatch(detail, /5555/, "instance-page price must not appear as catalogue drop price");
+  assert.match(detail, /Дизайнер каталога/);
+  assert.match(detail, /Каталог Адидас/);
+  assert.doesNotMatch(detail, /Автор экземпляра/);
+  assert.doesNotMatch(detail, /Чужая коллекция/);
+  assert.match(detail, /Продан в Маркете/);
   assert.match(detail, /teeth/);
   assert.match(detail, /не содержит сумму каждой сделки/);
+  assert.equal(await page.locator("#dBody a").filter({ hasText: "Открыть страницу подарка и тираж" }).getAttribute("href"), "https://huevo.su/gifts/131");
+  assert.equal(await page.locator("#dBody a").filter({ hasText: "Открыть страницу конкретного экземпляра" }).getAttribute("href"), "https://huevo.su/gift/18336");
   await page.keyboard.press("Escape");
 
   await page.click('#mainNav [data-view="analytics"]');
