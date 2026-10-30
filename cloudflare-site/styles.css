@@ -357,7 +357,7 @@ body[data-season="summer"]{--amnyam-acid:#ffd36a;--green:#ffd36a;--bar:#ffd36a;-
 .day-pick-card,.day-pick-card>*{min-width:0}
 .day-pick-card .t,.day-pick-card .m,.day-pick-card .p{min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:normal}
 .day-pick-card .p{grid-column:1/-1!important;display:flex;align-items:center;justify-content:flex-start;gap:7px;flex-wrap:wrap;text-align:left}
-.day-pick-card .deal-actions{display:flex;flex-direction:row;justify-content:flex-start;align-items:center;flex-wrap:wrap;gap:7px;min-width:0;max-width:100%}
+.day-pick-card .deal-actions{display:flex;flex-direction:row;justify-content:flex-start;align-items:center;flex-wrap:wrap;gap:7px;min-width:0;width:100%;max-width:100%}
 .day-pick-card .deal-actions .btn{white-space:normal;max-width:100%;text-align:center}
 .day-pick-card .deal-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
 .day-pick-card .deal-metric,.day-pick-card .deal-metric b{min-width:0;overflow-wrap:anywhere;white-space:normal}
