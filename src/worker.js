@@ -33,9 +33,12 @@ function responseHeaders(request, env, extra = {}) {
   headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), notifications=(self)");
   const pagePath = new URL(request.url).pathname;
   const supportsHuEvoSdk = pagePath === "/" || pagePath === "/index.html";
+  const isServiceWorkerScript = pagePath === "/service-worker.js";
   const csp = supportsHuEvoSdk
     ? `default-src 'none'; script-src 'self' https://huevo.su; style-src 'self'; img-src 'self' https://huevo.su https://*.huevo.su https://huevo.departament.site data:; connect-src 'self' https://huevo.su https://*.huevo.su; base-uri 'none'; form-action 'none'; frame-ancestors ${FRAME_ANCESTORS}`
-    : `default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors ${FRAME_ANCESTORS}`;
+    : isServiceWorkerScript
+      ? "default-src 'none'; script-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+      : `default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors ${FRAME_ANCESTORS}`;
   headers.set("Content-Security-Policy", csp);
   const origin = corsOrigin(request, env);
   if (origin) {
