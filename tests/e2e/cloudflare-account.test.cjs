@@ -40,6 +40,12 @@ async function openApp(search = "") {
     const url = new URL(route.request().url());
     const request = route.request();
     const respond = (body, status = 200) => route.fulfill({ status, headers: { "content-type": "application/json", "cache-control": "no-store" }, body: JSON.stringify(body) });
+    if (url.pathname === "/api/push/status") {
+      return respond({ ok: true, authenticated: Boolean(state.user), enabled: true, subscriptions: 0 });
+    }
+    if (url.pathname === "/api/contact/status") {
+      return respond({ configured: true, available: false, can_manage: false, updated_at: null });
+    }
     if (url.pathname === "/api/me") {
       return respond(state.user ? { ok: true, authenticated: true, profiles_ready: true, user: state.user, profile: state.profile, updated_at: "2026-10-30T00:00:00.000Z" } : { ok: true, authenticated: false, profiles_ready: true, user: null, profile: {}, updated_at: null });
     }
