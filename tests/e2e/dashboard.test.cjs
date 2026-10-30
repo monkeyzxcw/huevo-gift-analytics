@@ -363,6 +363,12 @@ test("AMNYAM atmosphere: daily picks wrap, seasonal themes persist, and mascot c
   });
   assert.ok(layout.width > 0 && layout.titleRight <= layout.cardRight + 1, "long title stays inside its card");
   assert.ok(layout.actionsRight <= layout.cardRight + 1, "action controls stay inside their card");
+  const heroTitle = await page.locator("#heroTitle").boundingBox();
+  await page.mouse.move(heroTitle.x + heroTitle.width / 2, heroTitle.y + heroTitle.height / 2);
+  assert.ok((await page.locator("body").getAttribute("class") || "").includes("cursor-glow-active"), "cursor glow appears over decoration");
+  const buyButton = await page.locator("#dayPicks .purchase-confirm").first().boundingBox();
+  await page.mouse.move(buyButton.x + buyButton.width / 2, buyButton.y + buyButton.height / 2);
+  assert.ok(!(await page.locator("body").getAttribute("class") || "").includes("cursor-glow-active"), "cursor glow stays off interactive purchase controls");
   await page.selectOption("#seasonTheme", "halloween");
   assert.equal(await page.locator("body").getAttribute("data-season"), "halloween");
   await page.reload();
