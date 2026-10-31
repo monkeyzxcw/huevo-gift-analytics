@@ -155,12 +155,16 @@
     window.AMNYAM_MARKET = detail;
     window.dispatchEvent(new CustomEvent("amnyam:market", { detail }));
   }
-  let livePollRunning = false;
+  let snapshotPollRunning = false;
   let lastHiddenPollAt = 0;
   let snapshotLoadRunning = false;
   let supportPaymentRunning = false;
-  let pollFailureCount = 0;
-  let pollBackoffUntil = 0;
+  // Keep the fast Live status endpoint and full snapshot endpoint isolated:
+  // a failure in one lane must not suppress the other lane's recovery polling.
+  let snapshotPollFailureCount = 0;
+  let snapshotPollBackoffUntil = 0;
+  let livePollFailureCount = 0;
+  let livePollBackoffUntil = 0;
   let lastSnapshotSignature = "";
   let supportConfig = { enabled: false, amounts: [5000, 10000, 25000, 50000, 100000] };
   let supportSdkReady = false;
@@ -286,22 +290,22 @@
     // The dashboard polls the Worker's merged /data.json, not only the first-page
     // endpoint. This lets both the 3-second live stream and the 5-minute full snapshot
     // reach every panel without reloading the document.
-    if (livePollRunning || !state.data || Date.now() < pollBackoffUntil) return;
+    if (snapshotPollRunning || !state.data || Date.now() < snapshotPollBackoffUntil) return;
     if (document.visibilityState !== "visible") {
       // Do not poll a background tab every 3 seconds, but keep target alerts alive
       // while the browser is running and the app is minimized or on another tab.
       if (Date.now() - lastHiddenPollAt < 15000) return;
       lastHiddenPollAt = Date.now();
     }
-    livePollRunning = true;
+    snapshotPollRunning = true;
     try {
       const json = await fetchJson("./data.json?_=" + Date.now(), {
         cache: "no-store",
         headers: { "Accept": "application/json" }
       }, 10000);
       if (!Array.isArray(json.lots)) throw new Error("Некорректный снимок рынка: отсутствует список lots.");
-      pollFailureCount = 0;
-      pollBackoffUntil = 0;
+      snapshotPollFailureCount = 0;
+      snapshotPollBackoffUntil = 0;
       const n = normalise(json);
       const signature = snapshotSignature(n.raw, n.lots);
       const changed = signature !== lastSnapshotSignature;
@@ -342,22 +346,22 @@
       }
     } catch (_) {
       // Preserve the last valid snapshot and back off network requests on intermittent failures.
-      pollFailureCount = Math.min(pollFailureCount + 1, 5);
+      snapshotPollFailureCount = Math.min(snapshotPollFailureCount + 1, 5);
       const delays = [3000, 6000, 12000, 20000, 30000];
-      pollBackoffUntil = Date.now() + delays[pollFailureCount - 1];
+      snapshotPollBackoffUntil = Date.now() + delays[snapshotPollFailureCount - 1];
       const dot = $("stateDot"), label = $("stateText");
       if (dot && label && state.data) {
         dot.className = "dot warn";
         label.textContent = "Связь восстанавливается";
       }
     } finally {
-      livePollRunning = false;
+      snapshotPollRunning = false;
     }
   }
 
   let fastLivePollRunning = false;
   async function pollLive() {
-    if (fastLivePollRunning || !state.data || Date.now() < pollBackoffUntil) return;
+    if (fastLivePollRunning || !state.data || Date.now() < livePollBackoffUntil) return;
     if (document.visibilityState !== "visible") {
       if (Date.now() - lastHiddenPollAt < 15000) return;
       lastHiddenPollAt = Date.now();
@@ -365,8 +369,8 @@
     fastLivePollRunning = true;
     try {
       const live = await fetchJson("./api/live/status?_=" + Date.now(), { cache: "no-store" }, 8000);
-      pollFailureCount = 0;
-      pollBackoffUntil = 0;
+      livePollFailureCount = 0;
+      livePollBackoffUntil = 0;
       state.data.live = {
         enabled: Boolean(live.enabled),
         fresh: Boolean(live.fresh),
@@ -427,9 +431,9 @@
         renderSourceHealth();
       }
     } catch (_) {
-      pollFailureCount = Math.min(pollFailureCount + 1, 5);
+      livePollFailureCount = Math.min(livePollFailureCount + 1, 5);
       const delays = [3000, 6000, 12000, 20000, 30000];
-      pollBackoffUntil = Date.now() + delays[pollFailureCount - 1];
+      livePollBackoffUntil = Date.now() + delays[livePollFailureCount - 1];
       const dot = $("stateDot"), label = $("stateText");
       if (dot && label && state.data) {
         dot.className = "dot warn";
@@ -3253,8 +3257,10 @@
   window.setInterval(pollFullSnapshot, 5 * 60 * 1000);
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) {
-      pollBackoffUntil = 0;
-      pollFailureCount = 0;
+      snapshotPollBackoffUntil = 0;
+      snapshotPollFailureCount = 0;
+      livePollBackoffUntil = 0;
+      livePollFailureCount = 0;
       pollLive();
       pollFullSnapshot();
     }
