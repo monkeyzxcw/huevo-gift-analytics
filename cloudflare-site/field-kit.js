@@ -104,8 +104,6 @@
   function apply() {
     $("globalSearch").value = input.value;
     input.dispatchEvent(new Event("input", { bubbles: true }));
-    min.dispatchEvent(new Event("input", { bubbles: true }));
-    max.dispatchEvent(new Event("input", { bubbles: true }));
     announce("Фильтр применён · " + new Date().toLocaleTimeString("ru-RU"));
   }
   function priceRange(low, high) { min.value = low; max.value = high; apply(); }
