@@ -9,7 +9,6 @@
   const allowedViews = ["overview", "market", "sniper", "deals", "analytics", "favorites", "data", "settings"];
   let profileKey = "guest";
   let audioContext = null;
-  let currentPreview = null;
 
   const blankState = () => ({
     items: [], favorites: [], targets: {}, alertedTargets: {},
@@ -49,7 +48,14 @@
       const raw = JSON.parse(localStorage.getItem(localKey()) || "null");
       if (!raw || typeof raw !== "object" || Array.isArray(raw)) return blankState();
       return {
-        items: Array.isArray(raw.items) ? raw.items.slice(0, MAX_ITEMS) : [],
+        items: Array.isArray(raw.items) ? raw.items.slice(0, MAX_ITEMS).map(rawItem => {
+          const item = normalizeRecord(rawItem);
+          if (!item) return null;
+          item.history = Array.isArray(rawItem.history)
+            ? rawItem.history.filter(point => point && Number.isSafeInteger(point.price) && point.price > 0 && safeDate(point.at)).slice(-8)
+            : [];
+          return item;
+        }).filter(Boolean) : [],
         favorites: Array.isArray(raw.favorites) ? [...new Set(raw.favorites.filter(x => typeof x === "string"))].slice(0, MAX_ITEMS) : [],
         targets: raw.targets && typeof raw.targets === "object" && !Array.isArray(raw.targets) ? raw.targets : {},
         alertedTargets: raw.alertedTargets && typeof raw.alertedTargets === "object" && !Array.isArray(raw.alertedTargets) ? raw.alertedTargets : {},
@@ -380,7 +386,7 @@
       const target = state.targets[item.key];
       if (!Number.isSafeInteger(target) || !Number.isSafeInteger(item.price)) return;
       if (item.price <= target) {
-        if (state.alertedTargets[item.key] !== target) {
+        if (state.soundEnabled && state.alertedTargets[item.key] !== target) {
           state.alertedTargets[item.key] = target;
           reached++;
         }
@@ -728,7 +734,7 @@
       state.soundEnabled = event.target.checked;
       persist();
       renderAll();
-      if (state.soundEnabled) playSound(true);
+      if (state.soundEnabled) { playSound(true); checkTargets(); }
     });
     $("usernameClearData").addEventListener("click", () => {
       if (!window.confirm("Удалить импортированные объявления, историю и события юзернеймов для текущего профиля браузера?")) return;
@@ -736,8 +742,6 @@
       state.favorites = []; state.targets = {}; state.alertedTargets = {};
       persist(); renderAll(); announce("Локальная база юзернеймов очищена.", "success");
     });
-    $("usernamePreviewClose").addEventListener("click", () => $("usernamePreviewDialog").close());
-    $("usernamePreviewDialog").addEventListener("click", event => { if (event.target === $("usernamePreviewDialog")) $("usernamePreviewDialog").close(); });
   }
 
   function hydrateProfile(nextKey) {
@@ -750,9 +754,9 @@
     const next = event.detail && event.detail.profileKey ? String(event.detail.profileKey) : "guest";
     hydrateProfile(next);
   });
+  state = readState();
   bind();
   if (window.AMNYAM_MARKET && window.AMNYAM_MARKET.profileKey) hydrateProfile(String(window.AMNYAM_MARKET.profileKey));
-  else state = readState();
   renderAll();
   switchView("overview");
 })();
