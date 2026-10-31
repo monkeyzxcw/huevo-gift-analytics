@@ -1497,7 +1497,7 @@ test("username workspace imports real rows, calculates peer signals and keeps gi
     assert.equal(await page.locator("#usernameRows tr").count(), 1);
     assert.match(await page.textContent("#usernameRows"), /@alfaee/);
     await page.fill("#usernameSearch", "");
-    await page.selectOption("#usernameLength", "6");
+    await page.selectOption("#usernameLength", "6+");
     assert.equal(await page.locator("#usernameRows tr").count(), 7);
     await page.selectOption("#usernameKind", "digits");
     assert.equal(await page.locator("#usernameRows tr").count(), 1);
