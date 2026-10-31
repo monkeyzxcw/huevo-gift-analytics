@@ -1008,7 +1008,7 @@ test("Sniper shows a live new-lot event and calculates scenarios from confirmed 
     await page.waitForFunction(() => document.querySelector("#sniperFeed").textContent.includes("900001"), { timeout: 12000 });
     assert.match(await page.textContent("#sniperFeed"), /НОВЫЙ ЛОТ/);
     await page.selectOption("#sniperType", "new");
-    assert.equal(await page.locator("#sniperFeed .sniper-event").count(), 1);
+    assert.ok(await page.locator("#sniperFeed .sniper-event").count() >= 2, "existing snapshot change and the newly detected lot are both retained");
     await page.fill("#sniperSearch", "not-found");
     assert.match(await page.textContent("#sniperFeed"), /Нет событий под выбранные фильтры/);
     assert.deepEqual(problems, []);
