@@ -154,3 +154,32 @@ test("server keeps the pending intent when huEVO status API is unavailable", asy
     globalThis.fetch = originalFetch;
   }
 });
+
+test("Worker aborts a hung huEVO API request and does not write an unresolved payment row", async () => {
+  const db = mockD1();
+  const originalFetch = globalThis.fetch;
+  let signalSeen = false;
+  globalThis.fetch = async (_url, options = {}) => {
+    signalSeen = Boolean(options.signal);
+    return new Promise((_resolve, reject) => {
+      if (!options.signal) return reject(new Error("missing AbortSignal"));
+      if (options.signal.aborted) return reject(new Error("already aborted"));
+      options.signal.addEventListener("abort", () => reject(new Error("request aborted")), { once: true });
+    });
+  };
+  try {
+    const response = await invokeIntent({
+      DB: db,
+      HU_CLIENT_ID: CLIENT_ID,
+      HU_SECRET: SECRET,
+      HU_APPS_TIMEOUT_MS: 250
+    }, signedQuery());
+    assert.equal(signalSeen, true, "provider requests must carry an AbortSignal");
+    assert.equal(response.status, 502);
+    assert.match(response.body.detail, /huevo_api_timeout/);
+    assert.equal(db.state.inserts, 0, "a timed-out create must not be recorded as a confirmed provider intent");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
