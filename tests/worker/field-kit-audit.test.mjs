@@ -48,7 +48,7 @@ test("invalid price ranges are reported explicitly and do not leave stale rows v
 test("audited dashboard cache versions and motion preferences are present", async () => {
   const html = await read("cloudflare-site/index.html");
   const css = await read("cloudflare-site/styles.css");
-  assert.match(html, /styles\.css\?v=amnyam-dota2-hud-v3/);
+  assert.match(html, /styles\.css\?v=amnyam-dota2-hud-v4/);
   assert.match(html, /app\.js\?v=amnyam-workspace-v25/);
   assert.match(css, /body\.amnyam-compact/);
   assert.match(css, /amnyam-focus \.catalog-panel/);
