@@ -965,7 +965,8 @@ test("target price crossing plays sound only without browser notifications", asy
 test("help tab documents market workflows and sound-only target alerts", async () => {
   const { browser, page, problems } = await open(serve(dataV2()));
   await page.waitForSelector("#content:not(.hide)");
-  await page.click('#mainNav [data-view="help"]');
+  await page.click('#mainNav [data-view="appearance"]');
+  await page.click('#workspaceSubnav [data-view="help"]');
   assert.equal(await page.locator("#helpPanel:not(.view-hidden)").count(), 1);
   const guide = await page.textContent("#helpPanel");
   assert.match(guide, /Маркет/);
@@ -1083,7 +1084,8 @@ test("support payment status failures do not invite duplicate intents and can be
     }
   });
   await page.waitForSelector("#content:not(.hide)");
-  await page.click('#mainNav [data-view="support"]');
+  await page.click('#mainNav [data-view="appearance"]');
+  await page.click('#workspaceSubnav [data-view="support"]');
   await page.waitForFunction(() => document.querySelector("#supportHint").textContent.includes("Платёж будет создан"));
   await page.click('#supportAmounts [data-amount="5000"]');
   await page.waitForFunction(() => document.querySelector("#supportRetryStatus") && !document.querySelector("#supportRetryStatus").hidden);
@@ -1094,7 +1096,8 @@ test("support payment status failures do not invite duplicate intents and can be
 
   await page.reload();
   await page.waitForSelector("#content:not(.hide)");
-  await page.click('#mainNav [data-view="support"]');
+  await page.click('#mainNav [data-view="appearance"]');
+  await page.click('#workspaceSubnav [data-view="support"]');
   await page.waitForFunction(() => document.querySelector("#supportRetryStatus") && !document.querySelector("#supportRetryStatus").hidden);
   assert.match(await page.textContent("#supportMsgText"), /ранее созданный платёж/i);
 
