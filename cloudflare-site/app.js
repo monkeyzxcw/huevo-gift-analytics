@@ -2979,7 +2979,7 @@
     let saved = "";
     try { saved = localStorage.getItem(CUSTOM_MEDIA_KEY) || ""; } catch (_) {}
     if (saved && /^data:image\/(?:png|jpeg|webp|gif);base64,/i.test(saved) && saved.length <= 720000) {
-      node.style.backgroundImage = "url('" + saved + "')";
+      node.src = saved;
       node.classList.add("is-active");
       if (hint) hint.textContent = "Собственный фон включён. Файл хранится только в этом браузере.";
     } else {
