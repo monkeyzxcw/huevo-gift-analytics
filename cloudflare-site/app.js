@@ -882,10 +882,10 @@
     const rarity = String(item.rarity || "").trim().toLocaleLowerCase("ru");
     const group = state.lots.filter(lot => lot.active !== false &&
       String(lot.title || "").trim().toLocaleLowerCase("ru") === title &&
-      (!rarity || String(lot.rarity || "").trim().toLocaleLowerCase("ru") === rarity) &&
+      String(lot.rarity || "").trim().toLocaleLowerCase("ru") === rarity &&
       isNum(lot.price) && lot.price > 0);
     const sale = salesProfileForGift({ title: item.title, rarity: item.rarity || "" });
-    if (sale && Number(sale.count) >= 3 && isNum(sale.median) && sale.median > 0) {
+    if (sale && sale.match_scope !== "title" && Number(sale.count) >= 3 && isNum(sale.median) && sale.median > 0) {
       return { value: sale.median, basis: "подтверждённые продажи", sample: sale.count };
     }
     const offers = robustOfferReference(group.map(lot => lot.price));
@@ -1989,8 +1989,10 @@
     const discount = Math.max(0, Math.min(80, Number(lot.discount_pct))) / 80;
     const sample = Math.max(0, Number(lot.sample_size) || 0);
     const evidence = Math.min(1, sample / 20);
-    const basis = lot.basis === "sales" ? 1 : 0.62;
-    return Math.round(Math.max(0, Math.min(100, discount * 55 + evidence * 27 + basis * 18)));
+    const exactSales = lot.basis === "sales" && lot.reference_scope !== "title";
+    const confidence = lot.confidence === "high" ? 1 : lot.confidence === "medium" ? 0.82 : 0.58;
+    const raw = discount * 60 + evidence * 25 + (exactSales ? 15 : 6);
+    return Math.round(Math.max(0, Math.min(100, raw * confidence)));
   }
 
   function renderDealCard(lot,label,dayPick){
