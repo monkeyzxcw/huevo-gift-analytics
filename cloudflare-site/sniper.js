@@ -443,8 +443,32 @@
       else if (titles.length) select.value = titles[0];
     });
   }
+  function fillCalcRaritySelect(title, preferred) {
+    const select = $("sniperGiftRarity");
+    const previous = preferred != null ? preferred : select.value;
+    while (select.firstChild) select.removeChild(select.firstChild);
+    const rarities = Array.from(new Set(state.lots
+      .filter(lot => normaliseTitle(lot.title) === normaliseTitle(title))
+      .map(lot => String(lot.rarity || "").trim()).filter(Boolean)))
+      .sort((a, b) => a.localeCompare(b, "ru"));
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = rarities.length ? "Выбери редкость" : "Редкость не указана";
+    select.append(placeholder);
+    rarities.forEach(rarity => {
+      const option = document.createElement("option");
+      option.value = rarity;
+      option.textContent = rarity;
+      select.append(option);
+    });
+    if (rarities.includes(previous)) select.value = previous;
+    else if (rarities.length === 1) select.value = rarities[0];
+    return rarities;
+  }
+
   function calcPurchase() {
     const title = $("sniperGiftSelect").value;
+    const rarity = $("sniperGiftRarity").value;
     const buy = Number($("sniperBuyPrice").value);
     const box = $("sniperCalcResult");
     while (box.firstChild) box.removeChild(box.firstChild);
@@ -455,12 +479,26 @@
       box.append(message);
       return;
     }
-    const sale = extractSalesProfile(title);
+    const rarities = fillCalcRaritySelect(title, rarity);
+    if (rarities.length > 1 && !rarity) {
+      const message = document.createElement("div");
+      message.className = "empty";
+      message.textContent = "У этого названия несколько редкостей. Выбери точную редкость, чтобы не смешивать цены.";
+      box.append(message);
+      return;
+    }
+    const representative = state.lots.find(lot =>
+      normaliseTitle(lot.title) === normaliseTitle(title) &&
+      normaliseRarity(lot.rarity) === normaliseRarity(rarity));
+    const sale = representative ? extractSalesProfile(representative) : null;
     let profile = null;
     if (sale && Number(sale.count) >= 3 && Number(sale.median) > 0) {
       profile = { p25: Number(sale.p25) || Number(sale.median), median: Number(sale.median), p75: Number(sale.p75) || Number(sale.median), count: Number(sale.count), basis: "Подтверждённые продажи" };
     } else {
-      const group = state.lots.filter((lot) => normaliseTitle(lot.title) === normaliseTitle(title) && lot.active !== false);
+      const group = state.lots.filter((lot) =>
+        normaliseTitle(lot.title) === normaliseTitle(title) &&
+        normaliseRarity(lot.rarity) === normaliseRarity(rarity) &&
+        lot.active !== false);
       const offers = robustReference(group.map((lot) => Number(lot.price)));
       if (offers) profile = { p25: offers.p25, median: offers.median, p75: offers.p75, count: offers.count, basis: "Активные объявления — не сделки" };
     }
@@ -587,6 +625,7 @@
     if (nav) nav.textContent = fmt(state.events.filter((event) => event.type === "new").length);
     renderFeed();
     fillGiftSelects();
+    fillCalcRaritySelect($("sniperGiftSelect").value);
     calcPurchase();
     renderRarity();
     const settings = window.AMNYAM_SOUND_SETTINGS && window.AMNYAM_SOUND_SETTINGS.get
@@ -621,7 +660,11 @@
     $("sniperDealSound").addEventListener("change", () => {
       if (window.AMNYAM_SOUND_SETTINGS) window.AMNYAM_SOUND_SETTINGS.set("deal", $("sniperDealSound").checked);
     });
-    $("sniperGiftSelect").addEventListener("change", calcPurchase);
+    $("sniperGiftSelect").addEventListener("change", () => {
+      fillCalcRaritySelect($("sniperGiftSelect").value, "");
+      calcPurchase();
+    });
+    $("sniperGiftRarity").addEventListener("change", calcPurchase);
     $("sniperBuyPrice").addEventListener("input", calcPurchase);
     $("sniperCalculate").addEventListener("click", calcPurchase);
     $("sniperRarityGift").addEventListener("change", renderRarity);
