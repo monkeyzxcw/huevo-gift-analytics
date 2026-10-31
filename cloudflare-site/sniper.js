@@ -92,6 +92,14 @@
     state.seen = new Set(Array.isArray(rawSeen) ? rawSeen.filter((key) => typeof key === "string").slice(-1200) : []);
     state.events.forEach((event) => state.seen.add(event.key || eventKey(event)));
   }
+  function unlockEventAudio() {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+    try {
+      soundContext = soundContext || new AudioContextClass();
+      if (soundContext.state === "suspended") soundContext.resume().catch(() => {});
+    } catch (_) {}
+  }
   function playEventSound(type) {
     if (!state.eventSound.master) return;
     if (type === "new" && !state.eventSound.new) return;
@@ -498,7 +506,10 @@
       state.eventSound = event.detail || { new: false, deal: false, master: false };
       $("sniperNewSound").checked = state.eventSound.new === true;
       $("sniperDealSound").checked = state.eventSound.deal === true;
+      if (state.eventSound.master) unlockEventAudio();
     });
+    document.addEventListener("pointerdown", unlockEventAudio, { once: true, passive: true });
+    document.addEventListener("keydown", unlockEventAudio, { once: true });
     if (window.AMNYAM_MARKET) ingest(window.AMNYAM_MARKET);
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init, { once: true });
