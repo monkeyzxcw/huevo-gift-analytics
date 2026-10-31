@@ -135,7 +135,7 @@
   };
   function publishMarketData() {
     const detail = {
-      data: state.data, lots: state.lots, targets: { ...state.targets },
+      data: state.data, lots: state.lots, targets: { ...state.targets }, deals: buildDealSignals(),
       profileKey: accountState.user && accountState.user.id ? String(accountState.user.id) : "guest"
     };
     window.AMNYAM_MARKET = detail;
