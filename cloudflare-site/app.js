@@ -781,6 +781,188 @@
     top.forEach((l) => list.append(lotItem(l, price(l.price), "#" + l.lot_id + (l.rarity ? " · " + l.rarity : ""))));
   }
 
+  function portfolioReference(item) {
+    const title = String(item.title || "").trim().toLocaleLowerCase("ru");
+    const rarity = String(item.rarity || "").trim().toLocaleLowerCase("ru");
+    const group = state.lots.filter(lot => lot.active !== false &&
+      String(lot.title || "").trim().toLocaleLowerCase("ru") === title &&
+      (!rarity || String(lot.rarity || "").trim().toLocaleLowerCase("ru") === rarity) &&
+      isNum(lot.price) && lot.price > 0);
+    const sale = salesProfileForGift({ title: item.title, rarity: item.rarity || "" });
+    if (sale && Number(sale.count) >= 3 && isNum(sale.median) && sale.median > 0) {
+      return { value: sale.median, basis: "подтверждённые продажи", sample: sale.count };
+    }
+    const offers = robustOfferReference(group.map(lot => lot.price));
+    if (offers && !offers.ambiguous) return { value: offers.reference, basis: "активные объявления", sample: offers.sample_size };
+    return null;
+  }
+
+  function renderPortfolio() {
+    const list = $("portfolioList"), summary = $("portfolioSummary");
+    if (!list || !summary) return;
+    clear(list); clear(summary);
+    $("portfolioCount").textContent = fmt(state.portfolio.length) + " позиций";
+    if (!state.portfolio.length) {
+      list.append(h("div", { class: "empty", text: "Портфель пока пуст. Добавь подарок, количество и цену покупки." }));
+      summary.append(card("Позиций", "0", "Добавь свои покупки"));
+      return;
+    }
+    let invested = 0, estimated = 0, valued = 0;
+    const rows = state.portfolio.map(item => {
+      const reference = portfolioReference(item);
+      const cost = item.purchase_price * item.quantity;
+      invested += cost;
+      if (reference) { estimated += reference.value * item.quantity; valued += 1; }
+      const pnl = reference ? (reference.value - item.purchase_price) * item.quantity : null;
+      const row = h("article", { class: "portfolio-row" }, [
+        h("div", {}, [
+          h("b", { text: item.title }),
+          h("small", { text: (item.rarity || "Редкость не указана") + " · " + fmt(item.quantity) + " шт." })
+        ]),
+        h("div", { class: "portfolio-metric" }, [
+          h("small", { text: "ВЛОЖЕНО" }), h("b", { text: price(cost) })
+        ]),
+        h("div", { class: "portfolio-metric" }, [
+          h("small", { text: "ОЦЕНКА" }),
+          h("b", { text: reference ? price(reference.value * item.quantity) : "Нет данных" }),
+          h("small", { text: reference ? reference.basis + " · " + fmt(reference.sample) + " записей" : "Нужна выборка" })
+        ]),
+        h("div", { class: "portfolio-metric " + (pnl == null ? "" : pnl >= 0 ? "good" : "bad") }, [
+          h("small", { text: "РЕЗУЛЬТАТ" }),
+          h("b", { text: pnl == null ? "—" : (pnl >= 0 ? "+" : "") + price(pnl) })
+        ]),
+        h("button", { class: "btn secondary", type: "button", text: "Удалить", "aria-label": "Удалить " + item.title })
+      ]);
+      row.querySelector("button").addEventListener("click", () => {
+        state.portfolio = state.portfolio.filter(entry => entry.id !== item.id);
+        writePortfolio();
+      });
+      return row;
+    });
+    rows.forEach(row => list.append(row));
+    summary.append(
+      card("Покупок", fmt(state.portfolio.length), "Разных позиций"),
+      card("Вложено", price(invested), "По сохранённой цене покупки"),
+      card("Оценка", valued ? price(estimated) : "Нет данных", fmt(valued) + " позиций с ориентиром"),
+      card("Результат", valued ? (estimated - invested >= 0 ? "+" : "") + price(estimated - invested) : "—", "Только по позициям с оценкой")
+    );
+  }
+
+  function addPortfolioItem() {
+    const title = $("portfolioGift").value.trim();
+    const rarity = $("portfolioRarity").value.trim();
+    const quantity = Number($("portfolioQuantity").value);
+    const cost = Number($("portfolioCost").value);
+    if (!title || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 1000 ||
+        !Number.isSafeInteger(cost) || cost < 1 || cost > TARGET_PRICE_MAX) {
+      $("portfolioForm").reportValidity();
+      return;
+    }
+    const id = String(Date.now()) + "-" + Math.random().toString(36).slice(2, 8);
+    state.portfolio.unshift({
+      id, title: title.slice(0, 120), rarity: rarity.slice(0, 80),
+      quantity, purchase_price: cost, added_at: new Date().toISOString()
+    });
+    state.portfolio = state.portfolio.slice(0, 100);
+    $("portfolioForm").reset();
+    $("portfolioQuantity").value = "1";
+    writePortfolio();
+  }
+
+  function renderMarketEvents() {
+    const list = $("marketEventsList");
+    if (!list || !state.data) return;
+    clear(list);
+    const events = [];
+    const add = (type, label, item) => {
+      if (!item || typeof item !== "object") return;
+      const title = item.title || item.gift_title || item.name || ("Лот #" + (item.lot_id || "—"));
+      const time = item.observed_at || item.event_at || item.first_seen || item.last_seen || null;
+      events.push({
+        type, label, title: String(title), time,
+        price: isNum(item.price) ? item.price : null,
+        id: item.lot_id || item.id || null
+      });
+    };
+    const changes = state.data.changes && typeof state.data.changes === "object" ? state.data.changes : {};
+    (Array.isArray(changes.new) ? changes.new : []).slice(0, 40).forEach(item => add("new", "Новый лот", item));
+    (Array.isArray(changes.price_changes) ? changes.price_changes : []).slice(0, 40).forEach(item => add("price", "Изменение цены", item));
+    (Array.isArray(changes.gone) ? changes.gone : []).slice(0, 40).forEach(item => add("gone", "Лот больше не найден", item));
+    (Array.isArray(state.data.catalog_events) ? state.data.catalog_events : []).slice(0, 40)
+      .forEach(item => add("catalog", item.label || item.event || "Событие экземпляра", item));
+    const timeValue = value => {
+      const parsed = Date.parse(value || "");
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+    const sorted = events.sort((a, b) => timeValue(b.time) - timeValue(a.time)).slice(0, 30);
+    $("marketEventsCount").textContent = fmt(events.length) + " событий";
+    if (!sorted.length) {
+      list.append(h("li", { class: "empty", text: "События появятся после следующих сравнений снимков и истории экземпляров." }));
+      return;
+    }
+    sorted.forEach(event => list.append(h("li", { class: "market-event-row" }, [
+      h("div", {}, [
+        h("b", { text: event.title }),
+        h("small", { text: event.label + " · " + (event.time ? when(event.time) : "дата не указана") + (event.id ? " · #" + event.id : "") })
+      ]),
+      h("span", { class: "event-value", text: event.price != null ? price(event.price) : " " })
+    ])));
+  }
+
+  function renderGiftCatalogIndex() {
+    const grid = $("giftCatalogGrid");
+    if (!grid || !state.data) return;
+    clear(grid);
+    const rows = Array.isArray(state.data.gift_catalog_index) ? state.data.gift_catalog_index : [];
+    const search = String($("giftCatalogSearch").value || "").trim().toLocaleLowerCase("ru");
+    const sort = $("giftCatalogSort").value;
+    const filtered = rows.filter(item => item && typeof item === "object" &&
+      (!search || [item.title, item.name, item.catalog_id, item.gift_catalog_id].some(value =>
+        String(value || "").toLocaleLowerCase("ru").includes(search))));
+    if (sort === "supply_desc") filtered.sort((a, b) => (Number(b.supply) || 0) - (Number(a.supply) || 0));
+    else if (sort === "supply_asc") filtered.sort((a, b) => (Number(a.supply) || 0) - (Number(b.supply) || 0));
+    else filtered.sort((a, b) => String(a.title || a.name || "").localeCompare(String(b.title || b.name || ""), "ru"));
+    $("giftCatalogCount").textContent = fmt(filtered.length) + " из " + fmt(rows.length) + " карточек";
+    if (!filtered.length) {
+      grid.append(h("div", { class: "empty", text: rows.length ? "Нет совпадений по поиску." : "Индекс /gifts пока не поступил. Он собирается независимо от активных лотов." }));
+      return;
+    }
+    filtered.slice(0, 150).forEach(item => {
+      const id = String(item.catalog_id || item.gift_catalog_id || item.id || "");
+      const imageUrl = typeof item.image_url === "string" && /^https:\/\//i.test(item.image_url) ? item.image_url : "";
+      const image = imageUrl ? h("img", { src: imageUrl, alt: "", loading: "lazy", referrerpolicy: "no-referrer" }) : h("span", { class: "thumb", text: "🎁" });
+      const title = String(item.title || item.name || ("Подарок #" + (id || "—")));
+      const body = h("div", {}, [
+        h("b", { text: title }),
+        h("small", { text: (id ? "Каталог #" + id : "ID не указан") +
+          (item.supply ? " · тираж " + fmt(Number(item.supply)) : "") +
+          (item.rarity ? " · " + item.rarity : "") })
+      ]);
+      const node = h("article", { class: "catalog-index-card" }, [image, body]);
+      if (/^\d{1,20}$/.test(id)) node.append(h("a", {
+        class: "btn secondary", href: "https://huevo.su/gifts/" + encodeURIComponent(id),
+        target: "_blank", rel: "noopener noreferrer", text: "Открыть /gifts ↗"
+      }));
+      grid.append(node);
+    });
+  }
+
+  function refreshGlobalSearchSuggestions() {
+    const box = $("globalSearchSuggestions");
+    if (!box || !state.data) return;
+    clear(box);
+    const names = new Set();
+    state.lots.forEach(lot => {
+      if (lot.title) names.add(String(lot.title));
+      names.add(String(lot.lot_id));
+    });
+    const sales = state.data.sales && Array.isArray(state.data.sales.by_title) ? state.data.sales.by_title : [];
+    sales.forEach(item => { if (item.title) names.add(String(item.title)); });
+    const catalog = Array.isArray(state.data.gift_catalog_index) ? state.data.gift_catalog_index : [];
+    catalog.forEach(item => { if (item && (item.title || item.name)) names.add(String(item.title || item.name)); });
+    Array.from(names).slice(0, 500).forEach(value => box.append(h("option", { value })));
+  }
+
   // ---------- collector source health: expose real per-source progress, never infer success ----------
   function renderSourceHealth() {
     const data = state.data || {};
