@@ -83,7 +83,6 @@ test("legacy uncompressed full_snapshot rows remain readable", async () => {
     generated_at: "2026-10-30T10:00:00.000Z",
     lots: [{ lot_id: "legacy-1", title: "Старый снимок", price: 100 }],
   };
-  env.DB.prepare("INSERT INTO full_snapshot").bind(JSON.stringify(snapshot));
   await env.DB.prepare("INSERT INTO full_snapshot").bind(JSON.stringify(snapshot)).run();
 
   const get = await worker.fetch(new Request("https://amnyam.test/data.json"), env, {});
