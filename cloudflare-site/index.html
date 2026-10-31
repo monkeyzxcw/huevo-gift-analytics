@@ -630,19 +630,11 @@
       <article class="panel username-import-card"><span class="section-index">/ 01 · IMPORT</span><h3>Загрузить объявления</h3><p class="muted">JSON: массив или объект с полем usernames/items. CSV: столбцы username, price, lot_id, status, url. Максимум 5 000 строк, валидные цены — положительные целые числа.</p><label class="btn username-file-label" for="usernameImportFile">ВЫБРАТЬ JSON / CSV</label><input id="usernameImportFile" type="file" accept=".json,.csv,application/json,text/csv" hidden><button class="btn secondary" id="usernameExportCsv" type="button">ЭКСПОРТ ТЕКУЩЕЙ БАЗЫ CSV</button><button class="btn secondary" id="usernameDownloadTemplate" type="button">СКАЧАТЬ ШАБЛОН JSON</button><small id="usernameImportFeedback" class="username-feedback" role="status" aria-live="polite">Ничего не загружено.</small></article>
       <article class="panel username-import-card"><span class="section-index">/ 02 · SOURCE</span><h3>Оригинальный Huevo Market</h3><p>Открой отдельный рынок юзернеймов и выполни вход в Huevo вручную, если он потребуется. AMNYAM не запрашивает и не копирует cookies, пароли или коды входа.</p><a class="btn" href="https://huevo.su/market" target="_blank" rel="noopener noreferrer">ОТКРЫТЬ HUEVO MARKET ↗</a><p class="muted foot">Автоматическая выгрузка из авторизованного окна Huevo пока не подключена к локальному HuevoDualScan. До её интеграции импортируй фактическую выгрузку вручную.</p></article>
     </div>
-    <article class="panel"><div class="panel-head"><h3>Формат импорта</h3><small class="muted">Пустой шаблон — без демонстрационных цен</small></div><pre class="username-json-example">{
+    <article class="panel"><div class="panel-head"><h3>Формат импорта</h3><small class="muted">Пустой шаблон — без вымышленных объявлений и цен</small></div><pre class="username-json-example">{
   "schema_version": 1,
-  "generated_at": "2026-11-01T12:00:00Z",
-  "usernames": [
-    {
-      "username": "example_name",
-      "lot_id": "12345",
-      "price": 1000,
-      "status": "active",
-      "url": "https://huevo.su/market"
-    }
-  ]
-}</pre><p class="muted foot">Пример выше иллюстрирует структуру, а не реальное объявление или рыночную цену. Удали example_name и подставь данные из своей выгрузки.</p></article>
+  "generated_at": null,
+  "usernames": []
+}</pre><p class="muted foot">Шаблон пустой. Добавь в массив usernames реальные строки из выгрузки Huevo Market.</p></article>
   </section>
 
   <section class="username-view hide" data-username-section="settings">
