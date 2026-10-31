@@ -2723,13 +2723,27 @@
     tabs[next].focus();
   });
   document.querySelectorAll("#mainNav [data-view]").forEach(button=>button.addEventListener("click",()=>switchView(button.dataset.view,true)));
+  document.querySelectorAll(".workspace-subnav [data-view]").forEach(button=>button.addEventListener("click",()=>switchView(button.dataset.view,true)));
   document.querySelectorAll("[data-go-view]").forEach(button=>button.addEventListener("click",()=>switchView(button.dataset.goView,true)));
+  $("globalSearch").addEventListener("input",refreshGlobalSearchSuggestions);
   $("globalSearch").addEventListener("keydown",event=>{if(event.key!=="Enter")return;event.preventDefault();$("search").value=$("globalSearch").value.trim();state.page=0;switchView("market",true);applyFilters();});
   document.querySelectorAll("[data-search-token]").forEach(button=>button.addEventListener("click",()=>{
     const token=button.dataset.searchToken||"",input=$("search");input.value=(input.value.trim()+" "+token).trim();$("globalSearch").value=input.value;state.page=0;switchView("market",true);applyFilters();
   }));
   $("dealSort").addEventListener("change",renderDeals);
   $("exportCsv").addEventListener("click",exportMarketCsv);
+  $("portfolioForm").addEventListener("submit",event=>{event.preventDefault();addPortfolioItem();});
+  $("marketWorkspaceTabs").addEventListener("click",event=>{
+    const button=event.target.closest("[data-market-tab]");
+    if(!button)return;
+    const catalog=button.dataset.marketTab==="catalog";
+    $("catalog").classList.toggle("hide",catalog);
+    $("giftCatalogPanel").classList.toggle("hide",!catalog);
+    document.querySelectorAll("[data-market-tab]").forEach(tab=>tab.setAttribute("aria-selected",String(tab===button)));
+    if(catalog)renderGiftCatalogIndex();
+  });
+  $("giftCatalogSearch").addEventListener("input",renderGiftCatalogIndex);
+  $("giftCatalogSort").addEventListener("change",renderGiftCatalogIndex);
   $("saveBelowBestTarget").addEventListener("click",()=>{const id=state._belowBestId;if(id)saveTarget(id,$("belowBestTarget").value);});
   $("belowBestMinus10").addEventListener("click",()=>{const id=state._belowBestId,lot=state.lots.find(item=>String(item.lot_id)===String(id));if(lot&&isNum(lot.price)&&lot.price>0){$("belowBestTarget").value=String(Math.max(1,Math.floor(lot.price*.9)));saveTarget(id,$("belowBestTarget").value);}});
   $("supportAmounts").addEventListener("click",event=>{const b=event.target.closest("[data-amount]");if(b&&!b.disabled)makeSupportPayment(b.dataset.amount);});
@@ -2770,5 +2784,13 @@
   initSupport();
   pollLive();
   window.setInterval(pollLive, 3000);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) { pollBackoffUntil = 0; pollFailureCount = 0; pollLive(); } });
+  window.setInterval(pollFullSnapshot, 5 * 60 * 1000);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      pollBackoffUntil = 0;
+      pollFailureCount = 0;
+      pollLive();
+      pollFullSnapshot();
+    }
+  });
 })();
