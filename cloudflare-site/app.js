@@ -653,45 +653,20 @@
 
   // ---------- header / data state ----------
   function renderState() {
-    const d = state.data, c = d.collector && typeof d.collector === "object" ? d.collector : {};
-    const live = d.live && typeof d.live === "object" ? d.live : {};
-    const liveFresh = Boolean(live.enabled && live.fresh);
-    const okAt = d.generated_at;
+    const d = state.data || {}, live = d.live && typeof d.live === "object" ? d.live : {};
+    const liveFresh = Boolean(live.enabled && live.fresh), okAt = d.generated_at;
     $("lastOk").textContent = okAt ? when(okAt) + " (" + ago(okAt) + ")" : "—";
-    $("lastTry").textContent = c.checked_at ? when(c.checked_at) + (c.status ? " · " + c.status : "") : "—";
-    const notice = $("notice");
-    notice.className = "notice hide";
+    $("lastTry").textContent = live.last_poll_at ? when(live.last_poll_at) : "—";
+    const notice = $("notice"); notice.className = "notice hide";
     const parts = [];
-    let kind = okAt ? "ok" : "";
-    let label = okAt ? "Данные актуальны" : "Ожидает первого сбора";
-    if (okAt && (Date.now() - new Date(okAt).getTime()) > STALE_HOURS * 3600e3) {
-      if (liveFresh) {
-        parts.push("В реальном времени обновляется первая страница; остальные лоты и графики используют последний полный снимок от " + when(okAt) + ".");
-      } else {
-        kind = ""; label = "Данные устарели";
-        parts.push("Последний успешный полный сбор был больше " + STALE_HOURS + " ч назад.");
-      }
+    let kind = okAt ? "ok" : "", label = okAt ? "Данные доступны" : "Ожидаем данные";
+    if (okAt && Date.now() - new Date(okAt).getTime() > STALE_HOURS * 3600e3) {
+      if (liveFresh) parts.push("Live обновляет первую страницу; полный каталог и исторические графики используют последний снимок от " + when(okAt) + ".");
+      else { kind = ""; label = "Снимок может быть устаревшим"; parts.push("Полный каталог не обновлялся более " + STALE_HOURS + " часов."); }
     }
-    if (liveFresh) {
-      kind = "ok";
-      label = "Live · первая страница";
-      if (live.last_poll_at && !(okAt && (Date.now() - new Date(okAt).getTime()) > STALE_HOURS * 3600e3)) {
-        parts.push("Первая страница обновлена " + when(live.last_poll_at) + "; полный каталог обновляется отдельно.");
-      }
-    } else if (live.enabled) {
-      parts.push(live.last_poll_at
-        ? "Live-опрос не обновлялся с " + when(live.last_poll_at) + "."
-        : "Live-хранилище готово, но локальный опрос ещё не запущен.");
-    } else {
-      parts.push(live.message || "Live-хранилище Cloudflare пока не подключено; показывается опубликованный снимок.");
-    }
-    if (c.status && c.status !== "ok") {
-      if (!liveFresh) {
-        kind = "err"; label = c.status === "blocked" ? "Сбор на паузе" : "Последний сбор не удался";
-      }
-      parts.push("Последняя попытка полного сбора: " + (c.message || c.status) + (c.blocked_until ? " Пауза до " + when(c.blocked_until) + "." : "") + " Показан последний полный снимок.");
-      notice.classList.add("bad");
-    }
+    if (liveFresh) { kind = "ok"; label = "Live · первая страница"; if (live.last_poll_at) parts.push("Последнее обновление первой страницы: " + when(live.last_poll_at) + "."); }
+    else if (live.enabled) parts.push(live.last_poll_at ? "Последнее обновление первой страницы: " + when(live.last_poll_at) + "." : "Live-обновление первой страницы пока не поступило.");
+    else parts.push("Показан последний опубликованный снимок; свежесть Live-сигнала пока не подтверждена.");
     setBadge(kind, label);
     if (parts.length) { notice.textContent = parts.join(" "); notice.classList.remove("hide"); }
   }
@@ -1119,112 +1094,32 @@
 
   // ---------- collector source health: expose real per-source progress, never infer success ----------
   function renderSourceHealth() {
-    const data = state.data || {};
-    const collector = data.collector && typeof data.collector === "object" ? data.collector : {};
-    const live = data.live && typeof data.live === "object" ? data.live : {};
-    const salesState = collector.sales_history || data.sales_history_state || {};
-    const indexState = collector.gift_catalog_index || {};
-    const detailState = collector.gift_catalog_details || {};
-    const instanceState = collector.gift_instances || {};
-    const salesRows = Array.isArray(data.sales_history) ? data.sales_history : [];
-    const catalogIndex = Array.isArray(data.gift_catalog_index) ? data.gift_catalog_index : [];
-    const catalogDetails = Array.isArray(data.gift_catalogs) ? data.gift_catalogs : [];
-
-    const statusText = (value) => ({
-      ok: "Успешно",
-      blocked: "Пауза Huevo",
-      error: "Ошибка",
-      pending: "В очереди",
-      saved: "Данные сохранены",
-      fresh: "Обновляется",
-      stale: "Нет свежего сигнала",
-      unknown: "Нет метаданных"
-    }[String(value || "unknown").toLowerCase()] || "Неизвестный статус");
-    const dateText = (value) => {
-      if (!value) return "Время проверки не записано";
-      const date = new Date(value);
-      return Number.isFinite(date.getTime()) ? "Проверено: " + when(date.toISOString()) : "Время проверки не распознано";
-    };
-    const card = (name, status, value, detail, checkedAt, progress) => {
-      const key = ["ok", "blocked", "error", "pending", "saved", "fresh", "stale"].includes(status) ? status : "unknown";
-      const children = [
-        h("div", { class: "source-health-head" }, [
-          h("b", { text: name }),
-          h("span", { class: "source-health-status " + key, text: statusText(key) })
-        ]),
-        h("strong", { class: "source-health-value", text: value }),
-        h("p", { class: "source-health-detail", text: detail })
-      ];
-      if (progress && Number.isFinite(progress.value) && progress.value >= 0 && progress.value <= 100) {
-        children.push(h("div", { class: "source-progress-wrap" }, [
-          h("div", { class: "source-progress-caption" }, [
-            h("small", { text: progress.label }),
-            h("b", { text: progress.value + "%" })
-          ]),
-          h("progress", { class: "source-progress", max: 100, value: progress.value, "aria-label": progress.label })
-        ]));
-      }
-      children.push(h("small", { class: "source-health-time", text: dateText(checkedAt) }));
-      return h("article", { class: "source-health-card" }, children);
-    };
-    const queueProgress = (current, total, label) => {
-      const done = Number(current), all = Number(total);
-      return Number.isFinite(done) && Number.isFinite(all) && all > 0
-        ? { value: Math.max(0, Math.min(100, Math.round(done / all * 100))), label: label + " · " + fmt(done) + " / " + fmt(all) }
-        : null;
-    };
-
-    const marketCount = Number.isFinite(Number(collector.lots)) ? Number(collector.lots) : state.lots.length;
-    const marketStatus = collector.status || (data.generated_at ? "saved" : "unknown");
-    const liveStatus = live.fresh ? "fresh" : (live.enabled ? "stale" : "unknown");
-    const salesCount = Number.isFinite(Number(salesState.total)) ? Number(salesState.total)
-      : (Number.isFinite(Number(salesState.total_records)) ? Number(salesState.total_records) : salesRows.length);
-    const indexCount = Number.isFinite(Number(indexState.cards)) ? Number(indexState.cards) : catalogIndex.length;
-    const detailsCount = Number.isFinite(Number(detailState.known)) ? Number(detailState.known) : catalogDetails.length;
-    const detailsIndexTotal = Number(detailState.index_total) || indexCount;
-    const detailsCoverage = detailsIndexTotal > 0
-      ? Math.min(100, Math.round(detailsCount / detailsIndexTotal * 100)) : null;
+    // Shared users see data freshness and coverage only, never collector-stage diagnostics.
+    const data = state.data || {}, live = data.live && typeof data.live === "object" ? data.live : {};
+    const sales = data.sales && data.sales.summary && typeof data.sales.summary === "object" ? data.sales.summary : {};
+    const index = Array.isArray(data.gift_catalog_index) ? data.gift_catalog_index.length : 0;
+    const details = Array.isArray(data.gift_catalogs) ? data.gift_catalogs.length : 0;
+    const stamp = value => value && Number.isFinite(Date.parse(value)) ? when(new Date(value).toISOString()) : "Пока нет подтверждённой отметки";
+    const make = (name, status, value, detail, checkedAt) => h("article", { class: "source-health-card" }, [
+      h("div", { class: "source-health-head" }, [
+        h("b", { text: name }),
+        h("span", { class: "source-health-status " + status, text: status === "fresh" ? "Обновляется" : status === "saved" ? "Данные доступны" : status === "stale" ? "Не подтверждено" : "Ожидаем данные" })
+      ]),
+      h("strong", { class: "source-health-value", text: value }),
+      h("p", { class: "source-health-detail", text: detail }),
+      h("small", { class: "source-health-time", text: "Обновлено: " + stamp(checkedAt) })
+    ]);
+    const generated = data.generated_at || null, liveStatus = live.fresh ? "fresh" : live.enabled ? "stale" : "unknown";
     const cards = [
-      card("Полный рынок", marketStatus, fmt(marketCount) + " лотов",
-        (collector.pages ? fmt(collector.pages) + " страниц в последнем проходе" : "Число страниц последнего прохода не записано") +
-        (collector.message ? " · " + collector.message : ""), collector.checked_at || data.generated_at,
-        queueProgress(collector.pages_done ?? collector.pages_completed ?? collector.pages,
-          collector.total_pages ?? collector.pages_total, "Полный обход")),
-      card("Live · первая страница", liveStatus, fmt(Number(live.item_count) || 0) + " лотов",
-        live.last_poll_at ? "Последний сигнал: " + when(live.last_poll_at) : "Локальный опрос первой страницы ещё не поступал",
-        live.last_poll_at),
-      card("История завершённых продаж", salesState.status || (salesCount ? "saved" : "unknown"),
-        fmt(salesCount) + " записей",
-        (salesState.pages ? fmt(salesState.pages) + " страниц обработано в последнем цикле" : "Страницы истории ещё не подтверждены") +
-        (salesState.total_pages ? " · всего страниц: " + fmt(salesState.total_pages) : "") +
-        (salesState.new_records ? " · новых: " + fmt(salesState.new_records) : (salesState.updated ? " · новых: " + fmt(salesState.updated) : "")),
-        salesState.checked_at, queueProgress(salesState.pages, salesState.total_pages, "История продаж")),
-      card("Независимый индекс /gifts", indexState.status || (indexCount ? "saved" : "unknown"),
-        fmt(indexCount) + " карточек",
-        "Канонический список подарков, собирается независимо от активных объявлений",
-        indexState.checked_at || data.gift_catalog_index_checked_at,
-        queueProgress(indexState.pages, indexState.total_pages, "Индекс /gifts")),
-      card("Подробности каталога", detailState.status || (detailsCount ? "saved" : "unknown"),
-        fmt(Number(detailState.updated) || 0) + " обновлено",
-        fmt(detailsCount) + " полных карточек · из " + fmt(detailsIndexTotal) + " в индексе" +
-        (detailsCoverage == null ? "" : " · покрытие " + detailsCoverage + "%") +
-        " · попыток: " + fmt(Number(detailState.attempted) || 0),
-        detailState.checked_at, detailsCoverage == null ? null : { value: detailsCoverage, label: "Полнота каталога · " + fmt(detailsCount) + " / " + fmt(detailsIndexTotal) }),
-      card("Экземпляры и история владельцев", instanceState.status || "unknown",
-        fmt(Number(instanceState.updated) || 0) + " обновлено",
-        fmt(Number(instanceState.events_added) || 0) + " новых событий истории · попыток: " +
-        fmt(Number(instanceState.attempted) || 0) + " · пакетов: " + fmt(Number(instanceState.batches) || 0),
-        instanceState.checked_at, queueProgress(instanceState.updated, instanceState.total || instanceState.known, "Экземпляры"))
+      make("Каталог рынка", generated ? "saved" : "unknown", fmt(state.lots.length) + " лотов", "Доступные объявления в последнем опубликованном снимке.", generated),
+      make("Полный снимок", generated ? "saved" : "unknown", generated ? when(generated) : "—", generated ? "Возраст: " + ago(generated) : "Дата полного снимка пока отсутствует.", generated),
+      make("Live · первая страница", liveStatus, fmt(Number(live.item_count) || 0) + " лотов", live.last_poll_at ? "Последний сигнал: " + when(live.last_poll_at) : "Метка свежести первой страницы пока не поступила.", live.last_poll_at),
+      make("История продаж", Number(sales.count) > 0 ? "saved" : "unknown", Number(sales.count) > 0 ? fmt(sales.count) + " записей" : "—", sales.note || "Исторические цены показываются только при наличии записей.", generated),
+      make("Каталог подарков", index || details ? "saved" : "unknown", fmt(index) + " карточек", details ? fmt(details) + " карточек с подробными данными" : "Подробные карточки появятся по мере накопления данных.", generated)
     ];
-
-    const grid = clear($("sourceHealthGrid"));
-    grid.append(...cards);
-    const checked = [collector.checked_at, salesState.checked_at, indexState.checked_at,
-      detailState.checked_at, instanceState.checked_at || instanceState.updated_at || instanceState.last_attempt_at || instanceState.last_checked_at, live.last_poll_at]
-      .filter(Boolean).map(value => new Date(value).getTime()).filter(Number.isFinite);
-    $("sourceHealthUpdated").textContent = checked.length
-      ? "Последняя активность · " + when(new Date(Math.max(...checked)).toISOString())
-      : "Ожидаются первые метаданные сборщика";
+    clear($("sourceHealthGrid")).append(...cards);
+    const checked = [generated, live.last_poll_at].filter(Boolean).map(Date.parse).filter(Number.isFinite);
+    $("sourceHealthUpdated").textContent = checked.length ? "Данные · " + when(new Date(Math.max(...checked)).toISOString()) : "Ожидаем данные";
   }
 
   // ---------- sales (only when the file really contains confirmed data) ----------
