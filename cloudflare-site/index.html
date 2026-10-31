@@ -44,6 +44,14 @@
   <button role="tab" aria-selected="false" data-view="appearance" data-main="settings" type="button"><span>08</span> Настройки</button>
 </nav>
 <nav class="workspace-subnav" id="workspaceSubnav" aria-label="Подразделы">
+  <div class="workspace-subnav-group" data-subnav-group="data">
+    <button type="button" data-view="data" aria-selected="true">Состояние сборщика</button>
+    <button type="button" data-view="sales" aria-selected="false">История продаж</button>
+  </div>
+  <div class="workspace-subnav-group" data-subnav-group="analytics">
+    <button type="button" data-view="analytics" aria-selected="true">Графики и изменения</button>
+    <button type="button" data-view="events" aria-selected="false">Рыночные события</button>
+  </div>
   <div class="workspace-subnav-group" data-subnav-group="opportunities">
     <button type="button" data-view="deals" aria-selected="true">Ниже рынка</button>
     <button type="button" data-view="cheap" aria-selected="false">Самые дешёвые</button>
@@ -168,11 +176,11 @@
   <article class="panel"><div class="panel-head"><h3>Самые дорогие лоты</h3><span class="muted">по цене объявления</span></div><ol class="list" id="topList"></ol></article>
 </section>
 
-<section class="panel market-events-panel" id="marketEventsPanel" data-view-section="analytics" aria-labelledby="marketEventsTitle">
+<section class="panel market-events-panel" id="marketEventsPanel" data-view-section="events" aria-labelledby="marketEventsTitle">
   <div class="panel-head"><div><h3 id="marketEventsTitle">Рыночные события</h3><p class="muted">Новые лоты, изменения каталога и подтверждённые события из сохранённых снимков.</p></div><span class="view-stat" id="marketEventsCount">— событий</span></div>
   <ol class="market-events-list" id="marketEventsList" aria-live="polite"></ol>
 </section>
-<section class="panel hide" id="salesPanel" data-view-section="data" aria-labelledby="salesTitle">
+<section class="panel hide" id="salesPanel" data-view-section="sales" aria-labelledby="salesTitle">
   <div class="panel-head"><h3 id="salesTitle">История продаж</h3><span class="muted" id="salesNote"></span></div>
   <div id="salesBody"></div>
 </section>
@@ -382,7 +390,7 @@
   <p class="muted foot">Платёж подтверждается в официальном окне huEVO. Пароль и данные аккаунта приложение не запрашивает.</p>
 </section>
 
-<div class="workspace-tabs market-workspace-tabs" id="marketWorkspaceTabs" role="tablist" aria-label="Разделы маркета">
+<div class="workspace-tabs market-workspace-tabs" id="marketWorkspaceTabs" data-view-section="market" role="tablist" aria-label="Разделы маркета">
   <button type="button" role="tab" aria-selected="true" data-market-tab="lots">Активные лоты</button>
   <button type="button" role="tab" aria-selected="false" data-market-tab="catalog">Каталог подарков /gifts</button>
 </div>
@@ -523,7 +531,7 @@
 
 <footer class="footer"><span>Huevo Gift Analytics · Cloudflare multi-user</span><span>Данные собирает локальный сборщик на ПК владельца; блокировки источника не обходятся.</span></footer>
 </main>
-<div id="ambientLayer" aria-hidden="true"></div><div id="cursorGlow" aria-hidden="true"></div>
+<div id="customWallpaper" aria-hidden="true"></div><div id="ambientLayer" aria-hidden="true"></div><div id="cursorGlow" aria-hidden="true"></div>
 <div class="premium-splash" id="premiumSplash" aria-hidden="true"><div class="splash-mark">H<span>•</span></div><div class="splash-title">AMNYAM <b>MODE</b></div><div class="splash-subtitle">GIFT MARKET INTELLIGENCE</div><div class="splash-loader"><i></i></div></div>
 <script src="./app.js?v=amnyam-workspace-v22" defer></script>
 <script src="./sniper.js?v=amnyam-sniper-rules-v2" defer></script>
