@@ -297,6 +297,7 @@ test("saved filters, target prices, mini charts and comparison work", async () =
   await page.fill("#search","1003");
   assert.equal(await page.locator("#rows .sparkline").count(),1);
   await page.locator("#rows button[aria-label^='Подробнее о лоте']").click();
+  await page.click('#detailWorkspaceTabs [data-detail-tab="actions"]');
   await page.fill("#dBody .target-input","120");
   await page.click("#dBody button:has-text('Сохранить цену-цель')");
   assert.match(await page.textContent("#dBody"),/Цена-цель сохранена/);
@@ -430,6 +431,7 @@ test("detail dialog: price history, comparison, safe link, Escape closes", async
   await page.fill("#search", "1003");
   await page.click("#rows button");
   assert.ok(await page.locator("#detail[open]").count());
+  await page.click('#detailWorkspaceTabs [data-detail-tab="history"]');
   assert.equal(await page.locator("#dBody table.hist tr").count(), 3, "three history points");
   assert.ok(await page.locator("#dBody svg polyline").count());
   assert.match(await page.textContent("#dBody"), /не цена сделки/);
@@ -499,6 +501,7 @@ test("gift instance and catalogue edition use separate verified data sources", a
   await page.click('#mainNav [data-view="market"]');
   await page.fill("#search", "1003");
   await page.click("#rows button");
+  await page.click('#detailWorkspaceTabs [data-detail-tab="catalog"]');
   const detail = await page.textContent("#dBody");
   assert.match(detail, /№ 4/);
   assert.match(detail, /Полный тираж/);
@@ -514,8 +517,10 @@ test("gift instance and catalogue edition use separate verified data sources", a
   assert.match(detail, /Каталог Адидас/);
   assert.doesNotMatch(detail, /Автор экземпляра/);
   assert.doesNotMatch(detail, /Чужая коллекция/);
-  assert.match(detail, /Продан в Маркете/);
-  assert.match(detail, /teeth/);
+  await page.click('#detailWorkspaceTabs [data-detail-tab="history"]');
+  const historyDetail = await page.textContent("#dBody");
+  assert.match(historyDetail, /Продан в Маркете/);
+  assert.match(historyDetail, /teeth/);
   assert.match(detail, /не содержат сумму каждой сделки/);
   assert.equal(await page.locator("#dBody a").filter({ hasText: "Открыть страницу подарка и тираж" }).getAttribute("href"), "https://huevo.su/gifts/131");
   assert.equal(await page.locator("#dBody a").filter({ hasText: "Открыть страницу конкретного экземпляра" }).getAttribute("href"), "https://huevo.su/gift/18336");
@@ -759,12 +764,17 @@ test("live polling refreshes every gift-instance field and event detail", async 
     label: "Продан в Маркете", from_user: "seller", to_user: "buyer", time_raw: "28 окт в 21:37"
   };
 
-  await page.waitForTimeout(3600);
+  // Full catalogue enrichment refreshes with the full snapshot, not the lightweight Live endpoint.
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await page.waitForFunction(() => document.querySelector("#dBody").textContent.includes("Новый автор"), { timeout: 8000 });
+  await page.click('#detailWorkspaceTabs [data-detail-tab="catalog"]');
+  const catalogDetail = await page.textContent("#dBody");
+  assert.match(catalogDetail, /Новый автор/);
+  assert.match(catalogDetail, /Обновлённая коллекция/);
+  assert.match(catalogDetail, /Тираж разошёлся/);
+  await page.click('#detailWorkspaceTabs [data-detail-tab="history"]');
   const detail = await page.textContent("#dBody");
-  assert.match(detail, /Новый автор/);
-  assert.match(detail, /Обновлённая коллекция/);
   assert.match(detail, /new_owner/);
-  assert.match(detail, /Тираж разошёлся/);
   assert.match(detail, /Продан в Маркете/);
   assert.match(detail, /seller → buyer/);
   assert.deepEqual(problems, []);
@@ -1014,6 +1024,7 @@ test("target prices reject fractions and values above the safe limit; blank inpu
   await page.click('#mainNav [data-view="market"]');
   await page.fill("#search", "1003");
   await page.locator("#rows button[aria-label^='Подробнее о лоте']").click();
+  await page.click('#detailWorkspaceTabs [data-detail-tab="actions"]');
 
   const input = page.locator("#dBody .target-input");
   const save = page.locator("#dBody .detail-watch button.btn:not(.secondary)");
