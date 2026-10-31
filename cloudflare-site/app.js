@@ -1380,7 +1380,12 @@
       setMascotMood("happy", "Ура! Лот куплен! 🎉", 9000);
     });
     const row=lotItem(lot,actions,"#"+id+(lot.serial?" · "+lot.serial:"")+(lot.rarity?" · "+lot.rarity:""));
-    row.classList.add("deal-row","deal-card-rich");if(dayPick)row.classList.add("day-pick-card");
+    row.classList.add("deal-row","deal-card-rich");
+    if(dayPick){
+      row.classList.add("day-pick-card");
+      row.children[1].classList.add("day-pick-content");
+      row.children[2].classList.add("day-pick-actions");
+    }
     const metrics=h("div",{class:"deal-metrics"});
     metrics.append(
       h("span",{class:"deal-metric ask"},[h("small",{text:"ЦЕНА ЛОТА"}),h("b",{text:price(lot.price)})]),
