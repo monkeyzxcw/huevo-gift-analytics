@@ -119,7 +119,7 @@ test("collector source health distinguishes completed, paused and missing source
   const data = dataV2({
     live: { enabled: true, fresh: true, item_count: 30, last_poll_at: NOW },
     collector: {
-      status: "ok", message: "Full scan completed", checked_at: NOW, pages: 22, lots: 474,
+      status: "ok", message: "Full scan completed", checked_at: NOW, pages: 22, pages_total: 30, lots: 474,
       sales_history: { status: "ok", pages: 4, updated: 12, total: 120, total_pages: 652, checked_at: NOW },
       gift_catalog_index: { status: "ok", cards: 123, checked_at: NOW },
       gift_catalog_details: { status: "ok", attempted: 4, updated: 4, known: 89, index_total: 123, checked_at: NOW },
@@ -140,6 +140,9 @@ test("collector source health distinguishes completed, paused and missing source
   assert.match(panel, /Независимый индекс \/gifts[\s\S]*123 карточек/);
   assert.match(panel, /Подробности каталога[\s\S]*4 обновлено[\s\S]*89 полных карточек/);
   assert.match(panel, /Экземпляры и история владельцев[\s\S]*В очереди[\s\S]*1 новых событий/);
+  assert.equal(await page.locator("#sourceHealthGrid progress").count(), 3, "progress is shown only for sources with real totals");
+  const progress = await page.locator("#sourceHealthGrid progress").evaluateAll(nodes => nodes.map(node => Number(node.value)));
+  assert.deepEqual(progress, [73, 1, 72], "market scan, sales pages and catalogue detail coverage");
   assert.deepEqual(problems, []);
   await browser.close();
 });
@@ -753,6 +756,7 @@ test("appearance settings switch themes, mascot and motion and persist locally",
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("amnyam.appearance.v1")));
   assert.deepEqual(saved, { background: "liquid", mascot: "none", motion: "off", glass: false });
 
+  assert.equal(await page.locator("#soundVolume").inputValue(), "100", "legacy users retain the original full volume");
   await page.selectOption("#soundPattern", "soft");
   await page.locator("#soundVolume").fill("35");
   assert.equal(await page.locator("#soundVolumeLabel").textContent(), "35%");
