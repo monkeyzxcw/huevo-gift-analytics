@@ -886,13 +886,14 @@
     ];
     const cell = value => {
       let text = value == null ? "" : String(value);
-      if (/^[\\s]*[=+@\\-\\t\\r]/.test(text)) text = "'" + text;
+      const trimmed = text.trimStart();
+      if (["=", "+", "-", "@", "\t", "\r"].some(prefix => trimmed.startsWith(prefix))) text = "'" + text;
       return '"' + text.replace(/"/g, '""') + '"';
     };
     const csv = [columns.map(column => cell(column[0])).join(";")]
       .concat(rows.map(lot => columns.map(column => cell(column[1](lot))).join(";")))
       .join("\r\n");
-    const blob = new Blob(["\\ufeff", csv], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob([String.fromCharCode(0xfeff), csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
