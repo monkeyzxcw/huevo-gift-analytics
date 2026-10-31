@@ -87,3 +87,62 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '\r\n')"
           export CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
           npx --yes wrangler@4 deploy --config wrangler.jsonc
+      - name: Smoke-test deployed Worker, D1, and published snapshot
+        env:
+          WORKER_URL: https://huevo-gift-analytics.monkeyzxc1437.workers.dev
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import time
+          from urllib.request import Request, urlopen
+
+          base = os.environ["WORKER_URL"].rstrip("/")
+          last_error = None
+
+          def get_json(path):
+              request = Request(base + path, headers={"Accept": "application/json", "Cache-Control": "no-cache"})
+              with urlopen(request, timeout=12) as response:
+                  if response.status != 200:
+                      raise RuntimeError(f"{path}: HTTP {response.status}")
+                  value = json.loads(response.read().decode("utf-8"))
+              if not isinstance(value, dict):
+                  raise RuntimeError(f"{path}: expected a JSON object")
+              return value
+
+          for attempt in range(1, 9):
+              try:
+                  health = get_json("/api/health")
+                  live = get_json("/api/live/status")
+                  snapshot = get_json("/data.json")
+                  checks = {
+                      "health_ok": health.get("ok") is True,
+                      "d1_configured": health.get("storage_configured") is True,
+                      "schema_ready": health.get("schema_ready") is True,
+                      "ingest_secret_configured": health.get("ingest_enabled") is True,
+                      "live_endpoint_ready": live.get("enabled") is True and live.get("schema_ready") is True,
+                      "snapshot_has_lots": isinstance(snapshot.get("lots"), list) and len(snapshot["lots"]) > 0,
+                      "snapshot_timestamp_present": isinstance(snapshot.get("generated_at"), str) and bool(snapshot["generated_at"]),
+                  }
+                  if not all(checks.values()):
+                      raise RuntimeError("post-deploy checks failed: " + ", ".join(k for k, ok in checks.items() if not ok))
+                  print("Production smoke check passed:", json.dumps({
+                      "worker": base,
+                      "checks": checks,
+                      "snapshot_lots": len(snapshot["lots"]),
+                      "snapshot_generated_at": snapshot.get("generated_at"),
+                      "live_fresh": live.get("fresh"),
+                      "live_last_poll_at": live.get("last_poll_at"),
+                      "live_item_count": live.get("item_count"),
+                  }, ensure_ascii=False))
+                  if not live.get("fresh"):
+                      print("NOTE: Worker and D1 are healthy, but the local HuevoDualScan collector has not reported fresh Live data.")
+                  break
+              except Exception as exc:
+                  last_error = exc
+                  print(f"Post-deploy smoke attempt {attempt}/8 failed: {type(exc).__name__}: {exc}")
+                  if attempt < 8:
+                      time.sleep(5)
+          else:
+              raise SystemExit(f"Production smoke check failed after retries: {last_error}")
+          PY
