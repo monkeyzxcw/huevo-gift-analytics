@@ -154,3 +154,31 @@ test("server keeps the pending intent when huEVO status API is unavailable", asy
     globalThis.fetch = originalFetch;
   }
 });
+
+test("server aborts a stalled huEVO Apps API request and returns a stable timeout error", async () => {
+  const db = mockD1();
+  const originalFetch = globalThis.fetch;
+  let signalObserved = false;
+  globalThis.fetch = async (_url, options = {}) => new Promise((_resolve, reject) => {
+    const signal = options.signal;
+    assert.ok(signal, "provider request must have an AbortSignal");
+    signal.addEventListener("abort", () => {
+      signalObserved = true;
+      reject(new DOMException("The operation was aborted", "AbortError"));
+    }, { once: true });
+  });
+  try {
+    const response = await invokeIntent(
+      { DB: db, HU_CLIENT_ID: CLIENT_ID, HU_SECRET: SECRET },
+      signedQuery()
+    );
+    assert.equal(response.status, 502);
+    assert.equal(response.body.ok, false);
+    assert.match(response.body.detail, /huevo_api_timeout/);
+    assert.equal(signalObserved, true);
+    assert.equal(db.state.inserts, 0, "a timed-out request must not create a false pending record");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
