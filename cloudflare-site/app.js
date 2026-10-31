@@ -1359,11 +1359,53 @@
       .replace(/\s*#\s*\d+.*$/, "").replace(/\s+/g, " ").trim();
   }
 
+  function normaliseSaleRarity(value) {
+    return String(value || "").trim().toLocaleLowerCase("ru").replace(/\\s+/g, " ");
+  }
+
+  function salesReferenceDescription(lot) {
+    if (lot && lot.reference_scope === "catalog_rarity") return "точному каталогу и редкости";
+    if (lot && lot.reference_scope === "title_rarity") return "названию и редкости";
+    return "названию без подтверждённой редкости";
+  }
+
+  function salesReferenceLabel(lot) {
+    if (!lot || lot.basis !== "sales") return "МЕДИАНА ОБЪЯВЛЕНИЙ";
+    if (lot.reference_scope === "catalog_rarity") return "МЕДИАНА ПРОДАЖ · КАТАЛОГ И РЕДКОСТЬ";
+    if (lot.reference_scope === "title_rarity") return "МЕДИАНА ПРОДАЖ · НАЗВАНИЕ И РЕДКОСТЬ";
+    return "МЕДИАНА ПРОДАЖ · ТОЛЬКО НАЗВАНИЕ";
+  }
+
   function salesProfileForGift(lot) {
-    const list = state.data && state.data.sales && Array.isArray(state.data.sales.by_title)
-      ? state.data.sales.by_title : [];
+    const sales = state.data && state.data.sales && typeof state.data.sales === "object" ? state.data.sales : {};
     const title = normaliseSaleTitle(lot && lot.title);
-    return list.find(item => normaliseSaleTitle(item.title) === title && isNum(item.median) && item.median > 0) || null;
+    const rarity = normaliseSaleRarity(lot && lot.rarity);
+    const catalog = lot && lot.gift_catalog && typeof lot.gift_catalog === "object" ? lot.gift_catalog : {};
+    const instance = lot && lot.gift_instance && typeof lot.gift_instance === "object" ? lot.gift_instance : {};
+    const catalogId = String(catalog.catalog_id || catalog.gift_catalog_id ||
+      instance.catalog_id || instance.gift_catalog_id || "").trim();
+    const valid = item => item && isNum(item.median) && item.median > 0;
+    const catalogProfiles = Array.isArray(sales.by_catalog_rarity) ? sales.by_catalog_rarity : [];
+    const rarityProfiles = Array.isArray(sales.by_title_rarity) ? sales.by_title_rarity : [];
+    const titleProfiles = Array.isArray(sales.by_title) ? sales.by_title : [];
+
+    // Prefer a profile proven by the exact previously observed Huevo lot ID.
+    if (catalogId && rarity) {
+      const exactCatalog = catalogProfiles.find(item =>
+        String(item.catalog_id || "") === catalogId &&
+        normaliseSaleRarity(item.rarity) === rarity && valid(item));
+      if (exactCatalog) return exactCatalog;
+    }
+    // If the catalog relation is not available, exact title + rarity is still
+    // narrower than a title-wide benchmark.
+    if (title && rarity) {
+      const exactRarity = rarityProfiles.find(item =>
+        normaliseSaleTitle(item.title) === title &&
+        normaliseSaleRarity(item.rarity) === rarity && valid(item));
+      if (exactRarity) return exactRarity;
+    }
+    // Retain legacy / title-only sales, but the caller marks this as low confidence.
+    return titleProfiles.find(item => normaliseSaleTitle(item.title) === title && valid(item)) || null;
   }
 
   function robustOfferReference(prices) {
@@ -1399,9 +1441,10 @@
       if (group.length < 3) continue;
       const sales = salesProfileForGift(group[0]);
       const offers = robustOfferReference(group.map(lot => lot.price));
-      let reference, basis, sampleSize, p25, p75, dispersion, excluded;
+      let reference, basis, sampleSize, p25, p75, dispersion, excluded, referenceScope;
       if (sales && sales.count >= 5) {
         reference = sales.median; basis = "sales"; sampleSize = sales.count;
+        referenceScope = sales.match_scope || "title";
         p25 = isNum(sales.p25) ? sales.p25 : null;
         p75 = isNum(sales.p75) ? sales.p75 : null;
         dispersion = p25 != null && p75 != null && reference > 0 ? (p75-p25)/reference : null;
@@ -1411,6 +1454,7 @@
         // has a sufficiently large, non-dispersed core; otherwise suppress the deal signal.
         if (!offers || offers.ambiguous || offers.dispersion > 1.0) continue;
         reference = offers.reference; basis = "active"; sampleSize = offers.sample_size;
+        referenceScope = "title_rarity";
         p25 = offers.p25; p75 = offers.p75; dispersion = offers.dispersion; excluded = offers.excluded;
       }
       if (!isNum(reference) || reference <= 0) continue;
@@ -1419,8 +1463,11 @@
         const discount = Math.round((1 - lot.price / reference) * 1000) / 10;
         signals.push({
           ...lot, reference_price: reference, discount_pct: discount, sample_size: sampleSize,
-          basis, reference_p25: p25, reference_p75: p75, dispersion, excluded_outliers: excluded,
-          confidence: basis === "sales" ? (sampleSize >= 20 ? "high" : "medium") : "low",
+          basis, reference_scope: referenceScope,
+          reference_p25: p25, reference_p75: p75, dispersion, excluded_outliers: excluded,
+          confidence: basis === "sales"
+            ? (referenceScope === "title" ? "low" : (sampleSize >= 20 ? "high" : "medium"))
+            : "low",
           suspicious: discount > 80,
         });
       }
@@ -1476,15 +1523,16 @@
     const metrics=h("div",{class:"deal-metrics"});
     metrics.append(
       h("span",{class:"deal-metric ask"},[h("small",{text:"ЦЕНА ЛОТА"}),h("b",{text:price(lot.price)})]),
-      h("span",{class:"deal-metric"},[h("small",{text:lot.basis==="sales"?"МЕДИАНА ПРОДАЖ":"МЕДИАНА ОБЪЯВЛЕНИЙ"}),h("b",{text:isNum(lot.reference_price)?price(lot.reference_price):"Нет ориентира"})]),
+      h("span",{class:"deal-metric"},[h("small",{text:salesReferenceLabel(lot)}),h("b",{text:isNum(lot.reference_price)?price(lot.reference_price):"Нет ориентира"})]),
       h("span",{class:"deal-metric saving"},[h("small",{text:"РАЗНИЦА"}),h("b",{text:isNum(saved)?price(saved)+" ниже":"Не рассчитана"})]),
-      h("span",{class:"deal-metric"},[h("small",{text:lot.basis==="sales"?"СОВЕРШЁННЫЕ ПРОДАЖИ":"АКТИВНЫЕ ОБЪЯВЛЕНИЯ"}),h("b",{text:isNum(lot.sample_size)&&lot.sample_size>0?fmt(lot.sample_size)+" записей":"Мало данных"})])
+      h("span",{class:"deal-metric"},[h("small",{text:lot.basis==="sales"?"ПРОДАЖИ · "+salesReferenceDescription(lot).toUpperCase():"АКТИВНЫЕ ОБЪЯВЛЕНИЯ · ТО ЖЕ НАЗВАНИЕ И РЕДКОСТЬ"}),h("b",{text:isNum(lot.sample_size)&&lot.sample_size>0?fmt(lot.sample_size)+" записей":"Мало данных"})])
     );
     if(histLow!==null)metrics.append(h("span",{class:"deal-metric history-low"},[h("small",{text:"МИНИМУМ В ИСТОРИИ"}),h("b",{text:price(histLow)})]));
     const mini=sparkline(lot._history);
     if(mini)metrics.append(h("div",{class:"deal-sparkline"},[mini,h("small",{text:"История цены"})]));
     row.children[1].append(metrics);
     if(lot.suspicious)row.children[1].append(h("p",{class:"deal-warning",text:"Экстремальный дисконт более 80%. Не выбран верхним сигналом: проверь совпадение подарка, редкость, статус и возможную ошибку цены."}));
+    if(lot.basis==="sales" && lot.reference_scope==="title")row.children[1].append(h("p",{class:"deal-warning",text:"Исторические сделки пока не связаны с точным каталогом и редкостью. Это широкий ориентир по названию, уверенность снижена."}));
     const target=h("input",{class:"input target-input deal-target-input",type:"number",min:"1",step:"1",inputmode:"numeric",placeholder:"Желаемая цена","aria-label":"Цена-цель для "+(lot.title||id)});
     target.value=state.targets[id]?String(state.targets[id]):"";
     const save=h("button",{class:"btn target-save",type:"button",text:state.targets[id]?"Обновить цену-цель":"Задать цену-цель"});
@@ -1518,7 +1566,10 @@
       $("belowBestTitle").textContent=best.title||("Лот #"+best.lot_id);
       $("belowBestPrice").textContent=price(best.price);
       const extremeCount=signals.filter(lot=>lot.suspicious).length;
-      $("belowBestMeta").textContent="На "+fmt(best.discount_pct)+"% ниже "+(best.basis==="sales"?"медианы подтверждённых продаж":"устойчивой медианы объявлений")+" · разница "+price(Math.max(0,best.reference_price-best.price))+" · "+fmt(best.sample_size)+(best.basis==="sales"?" продаж":" лотов")+" · "+(best.confidence==="high"?"высокая выборка":best.confidence==="medium"?"средняя выборка":"низкая уверенность")+" · #"+best.lot_id+(extremeCount?" · "+fmt(extremeCount)+" экстремальных скидок >80% оставлено ниже как подозрительные":"");
+      const bestReference = best.basis==="sales"
+        ? "медианы подтверждённых продаж ("+salesReferenceDescription(best)+")"
+        : "устойчивой медианы объявлений той же редкости";
+      $("belowBestMeta").textContent="На "+fmt(best.discount_pct)+"% ниже "+bestReference+" · разница "+price(Math.max(0,best.reference_price-best.price))+" · "+fmt(best.sample_size)+(best.basis==="sales"?" продаж":" лотов")+" · "+(best.confidence==="high"?"высокая выборка":best.confidence==="medium"?"средняя выборка":"низкая уверенность")+" · #"+best.lot_id+(extremeCount?" · "+fmt(extremeCount)+" экстремальных скидок >80% оставлено ниже как подозрительные":"");
       $("belowBestOpen").href=safeUrl(best.lot_url,best.lot_id);
       const bestImage=$("belowBestImage"),bestArt=$("belowBestArt");
       const imageUrl=typeof best.image_url==="string"&&best.image_url.startsWith("https://")&&(best.image_url.includes("huevo.su/")||best.image_url.includes("huevo.departament.site/"))?best.image_url:"";
@@ -1528,7 +1579,7 @@
       if(imageUrl&&bestImage.src!==imageUrl)bestImage.src=imageUrl;
       if(!imageUrl)bestImage.removeAttribute("src");
       $("belowBestTarget").value=state.targets[String(best.lot_id)]?String(state.targets[String(best.lot_id)]):"";
-      $("overviewPickHint").textContent="Лучший лот по размеру дисконта, а не по минимальной цене: −"+fmt(best.discount_pct)+"% от "+(best.basis==="sales"?"медианы подтверждённых продаж":"устойчивого диапазона объявлений")+". "+(best.confidence==="low"?"Ориентир предварительный.":"");
+      $("overviewPickHint").textContent="Лучший лот по размеру дисконта, а не по минимальной цене: −"+fmt(best.discount_pct)+"% от "+(best.basis==="sales"?"медианы подтверждённых продаж ("+salesReferenceDescription(best)+")":"устойчивого диапазона объявлений той же редкости")+". "+(best.confidence==="low"?"Ориентир предварительный.":"");
       const pick=clear($("overviewPickLot"));
       if(best.image_url&&/^https:\/\//i.test(best.image_url)){const img=h("img",{class:"pick-img",src:best.image_url,alt:"",loading:"lazy",referrerpolicy:"no-referrer"});img.addEventListener("error",()=>img.replaceWith(h("span",{class:"pick-img",text:"🎁"})));pick.append(img);}
       pick.append(h("div",{},[h("strong",{text:best.title||("Лот #"+best.lot_id)}),h("span",{class:"pick-price",text:price(best.price)}),h("small",{text:"−"+fmt(best.discount_pct)+"% к "+(best.basis==="sales"?"продажам":"объявлениям")+" · разница "+price(best.reference_price-best.price)})]));
