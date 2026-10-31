@@ -1127,7 +1127,7 @@
     const grid = clear($("sourceHealthGrid"));
     grid.append(...cards);
     const checked = [collector.checked_at, salesState.checked_at, indexState.checked_at,
-      detailState.checked_at, instanceState.checked_at, live.last_poll_at]
+      detailState.checked_at, instanceState.checked_at || instanceState.updated_at || instanceState.last_attempt_at || instanceState.last_checked_at, live.last_poll_at]
       .filter(Boolean).map(value => new Date(value).getTime()).filter(Number.isFinite);
     $("sourceHealthUpdated").textContent = checked.length
       ? "Последняя активность · " + when(new Date(Math.max(...checked)).toISOString())
