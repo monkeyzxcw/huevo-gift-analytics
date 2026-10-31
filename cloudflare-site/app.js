@@ -448,7 +448,8 @@
   let soundPattern = "signature";
   let sniperSoundPrefs = { new: false, deal: false };
   try {
-    const savedVolume = Number(localStorage.getItem("amnyam.sound.volume.v1"));
+    const rawVolume = localStorage.getItem("amnyam.sound.volume.v1");
+    const savedVolume = rawVolume === null ? NaN : Number(rawVolume);
     if (Number.isInteger(savedVolume) && savedVolume >= 0 && savedVolume <= 100) soundVolume = savedVolume;
     const savedPattern = localStorage.getItem("amnyam.sound.pattern.v1");
     if (["signature", "soft", "double"].includes(savedPattern)) soundPattern = savedPattern;
