@@ -51,7 +51,7 @@
   const state = {
     data: null, lots: [], deals: [], targets: {}, events: [], seen: new Set(), lastIds: null,
     lastPrices: new Map(), lastDeals: new Set(), profileKey: "guest", eventSound: { new: false, deal: false, master: false },
-    filter: { type: "all", search: "", min: "", max: "", discount: "" }, profileLoaded: false
+    filter: { type: "all", search: "", min: "", max: "", discount: "" }, profileLoaded: false, ruleProfiles: []
   };
   const EVENTS_KEY = "amnyam.sniper.events.v1";
   const SEEN_KEY = "amnyam.sniper.seen.v1";
@@ -85,8 +85,87 @@
     storageWrite(EVENTS_KEY + "." + state.profileKey, state.events);
     storageWrite(SEEN_KEY + "." + state.profileKey, Array.from(state.seen).slice(-1200));
   }
+  const RULES_KEY = "amnyam.sniper.rules.v1";
+  function cleanRuleProfiles(value) {
+    if (!Array.isArray(value)) return [];
+    return value.slice(0, 20).filter(item => item && typeof item.name === "string" && item.name.trim()).map(item => ({
+      id: String(item.id || "").slice(0, 80),
+      name: String(item.name || "").trim().slice(0, 40),
+      filter: {
+        type: ["all", "new", "price", "deal", "target"].includes(item.filter && item.filter.type) ? item.filter.type : "all",
+        search: String(item.filter && item.filter.search || "").slice(0, 120),
+        min: String(item.filter && item.filter.min || "").slice(0, 24),
+        max: String(item.filter && item.filter.max || "").slice(0, 24),
+        discount: String(item.filter && item.filter.discount || "").slice(0, 4)
+      }
+    })).filter(item => item.id);
+  }
+  function saveRuleProfiles() {
+    storageWrite(RULES_KEY + "." + state.profileKey, state.ruleProfiles);
+    window.dispatchEvent(new CustomEvent("amnyam:sniper-rules"));
+    renderRuleProfiles();
+  }
+  function renderRuleProfiles() {
+    const select = $("sniperRuleProfiles");
+    if (!select) return;
+    const selected = select.value;
+    while (select.firstChild) select.removeChild(select.firstChild);
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = state.ruleProfiles.length ? "Выбери сохранённый профиль" : "Нет сохранённых профилей";
+    select.append(placeholder);
+    state.ruleProfiles.forEach(profile => {
+      const option = document.createElement("option");
+      option.value = profile.id;
+      option.textContent = profile.name;
+      select.append(option);
+    });
+    if (state.ruleProfiles.some(profile => profile.id === selected)) select.value = selected;
+    const hasSelection = Boolean(state.ruleProfiles.find(profile => profile.id === select.value));
+    $("sniperRuleApply").disabled = !hasSelection;
+    $("sniperRuleDelete").disabled = !hasSelection;
+  }
+  function currentRuleFilter() {
+    return {
+      type: $("sniperType").value,
+      search: $("sniperSearch").value,
+      min: $("sniperMinPrice").value,
+      max: $("sniperMaxPrice").value,
+      discount: $("sniperMinDiscount").value
+    };
+  }
+  function applyRuleFilter(profile) {
+    if (!profile) return;
+    $("sniperType").value = profile.filter.type;
+    $("sniperSearch").value = profile.filter.search;
+    $("sniperMinPrice").value = profile.filter.min;
+    $("sniperMaxPrice").value = profile.filter.max;
+    $("sniperMinDiscount").value = profile.filter.discount;
+    updateFilters();
+    $("sniperRuleStatus").textContent = "Применён профиль «" + profile.name + "».";
+  }
+  function loadRuleProfiles() {
+    const local = storageRead(RULES_KEY + "." + state.profileKey, []);
+    state.ruleProfiles = cleanRuleProfiles(local);
+    renderRuleProfiles();
+  }
+  window.AMNYAM_RULE_PROFILES = {
+    get: () => cleanRuleProfiles(state.ruleProfiles),
+    set: value => {
+      state.ruleProfiles = cleanRuleProfiles(value);
+      storageWrite(RULES_KEY + "." + state.profileKey, state.ruleProfiles);
+      renderRuleProfiles();
+    }
+  };
+  if (Array.isArray(window.AMNYAM_PENDING_RULE_PROFILES)) {
+    state.ruleProfiles = cleanRuleProfiles(window.AMNYAM_PENDING_RULE_PROFILES);
+    storageWrite(RULES_KEY + ".guest", state.ruleProfiles);
+    delete window.AMNYAM_PENDING_RULE_PROFILES;
+  }
+
   function loadEvents(profileKey) {
     state.profileKey = profileKey || "guest";
+    loadRuleProfiles();
     const rawEvents = storageRead(EVENTS_KEY + "." + state.profileKey, []);
     const rawSeen = storageRead(SEEN_KEY + "." + state.profileKey, []);
     state.events = Array.isArray(rawEvents) ? rawEvents.filter((event) => event && typeof event.type === "string").slice(0, MAX_EVENTS) : [];
@@ -507,6 +586,37 @@
     $("sniperBuyPrice").addEventListener("input", calcPurchase);
     $("sniperCalculate").addEventListener("click", calcPurchase);
     $("sniperRarityGift").addEventListener("change", renderRarity);
+    $("sniperRuleProfiles").addEventListener("change", () => {
+      const selected = state.ruleProfiles.find(item => item.id === $("sniperRuleProfiles").value);
+      $("sniperRuleApply").disabled = !selected;
+      $("sniperRuleDelete").disabled = !selected;
+    });
+    $("sniperRuleSave").addEventListener("click", () => {
+      const name = $("sniperRuleName").value.trim();
+      if (!name) { $("sniperRuleStatus").textContent = "Укажи название профиля."; return; }
+      const existing = state.ruleProfiles.findIndex(item => item.name.toLocaleLowerCase("ru") === name.toLocaleLowerCase("ru"));
+      const id = existing >= 0 ? state.ruleProfiles[existing].id : "rule-" + Date.now().toString(36);
+      const profile = { id, name: name.slice(0, 40), filter: currentRuleFilter() };
+      if (existing >= 0) state.ruleProfiles[existing] = profile;
+      else if (state.ruleProfiles.length < 20) state.ruleProfiles.push(profile);
+      else { $("sniperRuleStatus").textContent = "Достигнут лимит 20 профилей."; return; }
+      saveRuleProfiles();
+      $("sniperRuleProfiles").value = id;
+      $("sniperRuleName").value = profile.name;
+      $("sniperRuleStatus").textContent = "Профиль «" + profile.name + "» сохранён.";
+    });
+    $("sniperRuleApply").addEventListener("click", () => {
+      const profile = state.ruleProfiles.find(item => item.id === $("sniperRuleProfiles").value);
+      applyRuleFilter(profile);
+    });
+    $("sniperRuleDelete").addEventListener("click", () => {
+      const id = $("sniperRuleProfiles").value;
+      const profile = state.ruleProfiles.find(item => item.id === id);
+      if (!profile) return;
+      state.ruleProfiles = state.ruleProfiles.filter(item => item.id !== id);
+      saveRuleProfiles();
+      $("sniperRuleStatus").textContent = "Профиль «" + profile.name + "» удалён.";
+    });
     window.addEventListener("amnyam:market", (event) => ingest(event.detail));
     window.addEventListener("amnyam:sniper-sounds", (event) => {
       state.eventSound = event.detail || { new: false, deal: false, master: false };
