@@ -95,27 +95,52 @@ jobs:
           import json
           import os
           import time
+          from urllib.error import HTTPError
           from urllib.request import Request, urlopen
 
           base = os.environ["WORKER_URL"].rstrip("/")
           last_error = None
 
+          def request_bytes(path, accept="*/*"):
+              request = Request(base + path, headers={
+                  "Accept": accept,
+                  "Accept-Language": "en-US,en;q=0.9",
+                  "Cache-Control": "no-cache",
+                  "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+              })
+              try:
+                  with urlopen(request, timeout=12) as response:
+                      return response.status, response.headers, response.read()
+              except HTTPError as exc:
+                  body = exc.read(800).decode("utf-8", errors="replace")
+                  ray = exc.headers.get("cf-ray", "missing")
+                  server = exc.headers.get("server", "missing")
+                  mitigated = exc.headers.get("cf-mitigated", "none")
+                  preview = " ".join(body.split())[:350]
+                  raise RuntimeError(
+                      f"{path}: HTTP {exc.code}; server={server}; cf-ray={ray}; "
+                      f"cf-mitigated={mitigated}; body={preview}"
+                  ) from exc
+
           def get_json(path):
-              request = Request(base + path, headers={"Accept": "application/json", "Cache-Control": "no-cache"})
-              with urlopen(request, timeout=12) as response:
-                  if response.status != 200:
-                      raise RuntimeError(f"{path}: HTTP {response.status}")
-                  value = json.loads(response.read().decode("utf-8"))
+              status, headers, raw = request_bytes(path, "application/json")
+              if status != 200:
+                  raise RuntimeError(f"{path}: HTTP {status}")
+              value = json.loads(raw.decode("utf-8"))
               if not isinstance(value, dict):
                   raise RuntimeError(f"{path}: expected a JSON object")
               return value
 
           for attempt in range(1, 9):
               try:
+                  root_status, root_headers, root_body = request_bytes("/", "text/html")
+                  art_status, art_headers, art_body = request_bytes("/assets/amnyam-battlefield.webp", "image/webp")
                   health = get_json("/api/health")
                   live = get_json("/api/live/status")
                   snapshot = get_json("/data.json")
                   checks = {
+                      "dashboard_html_ready": root_status == 200 and b"AMNYAM" in root_body,
+                      "hero_art_ready": art_status == 200 and "image/webp" in art_headers.get("Content-Type", ""),
                       "health_ok": health.get("ok") is True,
                       "d1_configured": health.get("storage_configured") is True,
                       "schema_ready": health.get("schema_ready") is True,

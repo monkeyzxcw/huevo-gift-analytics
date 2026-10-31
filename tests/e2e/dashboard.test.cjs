@@ -7,7 +7,7 @@ const { chromium } = require("playwright");
 
 const SITE = path.resolve(__dirname, "../../cloudflare-site");
 const CSP = fs.readFileSync(path.join(SITE, "_headers"), "utf8").match(/Content-Security-Policy: (.+)/)[1].trim();
-const TYPES = { ".html": "text/html", ".css": "text/css", ".js": "application/javascript", ".svg": "image/svg+xml" };
+const TYPES = { ".html": "text/html", ".css": "text/css", ".js": "application/javascript", ".svg": "image/svg+xml", ".webp": "image/webp" };
 const XSS = '<img src=x onerror="window.__xss=1">';
 const NOW = new Date().toISOString();
 const OPEN_BROWSERS = new Set();
@@ -97,14 +97,14 @@ test("full v2 data: cards, charts, changes, top, table render with no errors", a
   const { browser, page, problems } = await open(serve(dataV2()));
   await page.waitForSelector("#content:not(.hide)");
   const heroArtwork = await page.locator("#hero").evaluate((el) => getComputedStyle(el).backgroundImage);
-  assert.ok(heroArtwork.includes("amnyam-battlefield.svg"), "fantasy battlefield artwork is attached to the real hero section");
+  assert.ok(heroArtwork.includes("amnyam-battlefield.webp"), "fantasy battlefield artwork is attached to the real hero section");
   const artworkResponse = await page.evaluate(async () => {
-    const response = await fetch("/assets/amnyam-battlefield.svg");
+    const response = await fetch("/assets/amnyam-battlefield.webp");
     return { status: response.status, contentType: response.headers.get("content-type"), body: await response.text() };
   });
   assert.equal(artworkResponse.status, 200, "hero artwork is served from the static asset directory");
-  assert.ok(artworkResponse.contentType.includes("image/svg+xml"));
-  assert.ok(artworkResponse.body.startsWith("<svg"), "hero artwork is a valid SVG document");
+  assert.ok(artworkResponse.contentType.includes("image/webp"));
+  assert.ok(artworkResponse.body.length > 10000, "hero artwork is a non-empty optimized WebP image");
   assert.match(await page.textContent("#cards"), /Активные лоты/);
   assert.equal(await page.locator("#cards .card").count(), 6);
   assert.ok(await page.locator("#chartBins svg rect").count() >= 3, "price distribution bars");
