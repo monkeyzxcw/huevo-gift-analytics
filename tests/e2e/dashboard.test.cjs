@@ -952,6 +952,20 @@ test("target price crossing plays sound only without browser notifications", asy
   const { browser, page, problems } = await open((route) => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify(latest)
   }), { width: 1280, height: 900 }, {
+    supportRoutes: {
+      "/api/live/status": route => {
+        const lot = latest.lots[0];
+        return route.fulfill({
+          status: 200, contentType: "application/json",
+          body: JSON.stringify({
+            enabled: true, fresh: true, last_poll_at: NOW, age_seconds: 0,
+            fingerprint: "lot-1000-price-" + lot.price, item_count: 1,
+            items: [{ lot_id: lot.lot_id, title: lot.title, price: lot.price, rarity: lot.rarity,
+              status: lot.status, lot_url: lot.lot_url, image_url: lot.image_url }]
+          })
+        });
+      }
+    },
     initScript: () => {
       localStorage.setItem("amnyam.targets", JSON.stringify({ "1000": 120 }));
       localStorage.setItem("amnyam.alertSound.v1", "on");
@@ -973,6 +987,7 @@ test("target price crossing plays sound only without browser notifications", asy
   assert.equal(await page.locator("#enablePushNotifications, #enableNotifications").count(), 0);
   assert.equal(await page.locator("#watchAlert").count(), 0);
   assert.equal(await page.evaluate(() => window.__soundNotes), 0, "no sound before the ask reaches the target");
+  await page.waitForTimeout(3300);
   latest = JSON.parse(JSON.stringify(latest));
   latest.lots[0].price = 100;
   await page.waitForFunction(() => window.__soundNotes === 5, { timeout: 10000 });
@@ -1173,9 +1188,25 @@ test("Sniper shows a live new-lot event and calculates scenarios from confirmed 
         history: [{ date: "2026-10-29", median: 980 }, { date: "2026-10-30", median: 1000 }] }]
     }
   });
+  let liveCalls = 0;
   const { browser, page, problems } = await open((route) => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify(latest)
-  }));
+  }), { width: 1280, height: 900 }, {
+    supportRoutes: {
+      "/api/live/status": route => {
+        liveCalls += 1;
+        const items = latest.lots.slice(0, 100).map(lot => ({
+          lot_id: lot.lot_id, title: lot.title, price: lot.price, rarity: lot.rarity,
+          serial: lot.serial, status: lot.status, lot_url: lot.lot_url, image_url: lot.image_url
+        }));
+        const fingerprint = items.map(item => String(item.lot_id) + ":" + String(item.price)).join("|");
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+          enabled: true, fresh: true, last_poll_at: NOW, age_seconds: 0,
+          fingerprint, item_count: items.length, items
+        }) });
+      }
+    }
+  });
   try {
     await page.waitForSelector("#content:not(.hide)");
     await page.click('#mainNav [data-view="sniper"]');
@@ -1189,8 +1220,9 @@ test("Sniper shows a live new-lot event and calculates scenarios from confirmed 
     assert.match(await page.textContent("#sniperCalcResult"), /Оптимистичный/);
     assert.match(await page.textContent("#sniperRarityResult"), /характеристик|нескольких сопоставимых/i);
 
+    await page.waitForFunction(() => liveCalls > 0, { timeout: 8000 });
     latest = JSON.parse(JSON.stringify(latest));
-    latest.lots.push({
+    latest.lots.unshift({
       lot_id: "900001", title: "Звезда", rarity: "Редкий", price: 650, status: "На продаже",
       first_seen: new Date().toISOString(), last_seen: new Date().toISOString(), active: true,
       lot_url: "https://huevo.su/market/lot/900001", history: []
