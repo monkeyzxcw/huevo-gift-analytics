@@ -405,6 +405,8 @@ test("only the authenticated owner receives the availability switch and may chan
   });
   await page.waitForSelector("#content:not(.hide)");
   await page.waitForFunction(()=>!document.querySelector("#ownerPresenceToggle").hidden);
+  await page.click('#mainNav [data-view="appearance"]');
+  await page.click('#workspaceSubnav [data-view="support"]');
   const toggle=page.locator("#ownerPresenceToggle");
   assert.equal(await toggle.getAttribute("aria-checked"),"false");
   await toggle.click();
@@ -610,9 +612,16 @@ test("page has no inline handlers/styles and fits a phone screen", async () => {
 test("AMNYAM navigation renders all views and author support shows five levels", async () => {
   const { browser, page, problems } = await open(serve(dataV2()), { width: 1280, height: 900 });
   await page.waitForSelector("#content:not(.hide)");
-  for (const view of ["overview", "market", "sniper", "deals", "cheap", "analytics", "favorites", "support"]) {
-    await page.click('#mainNav [data-view="' + view + '"]');
-    assert.equal(await page.getAttribute('#mainNav [data-view="' + view + '"]', "aria-selected"), "true", view + " tab selected");
+  const routes = [
+    ["overview","overview"],["market","market"],["sniper","sniper"],
+    ["deals","deals"],["cheap","deals"],["analytics","analytics"],
+    ["events","analytics"],["data","data"],["sales","data"],
+    ["favorites","favorites"],["portfolio","favorites"],
+    ["appearance","appearance"],["support","appearance"],["help","appearance"]
+  ];
+  for (const [view,parent] of routes) {
+    await page.click('#mainNav [data-view="' + parent + '"]');
+    if (view !== parent) await page.click('#workspaceSubnav [data-view="' + view + '"]');
     assert.equal(await page.locator('[data-view-section="' + view + '"]:not(.view-hidden)').count() > 0, true, view + " view visible");
   }
   assert.equal(await page.locator("#supportAmounts [data-amount]").count(), 5);
