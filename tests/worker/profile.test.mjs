@@ -13,6 +13,8 @@ test("profile validator drops invalid lot IDs, targets and unsupported preferenc
     ],
     preferences: {
       alertSound: true,
+      soundVolume: 35,
+      soundPattern: "soft",
       sniperNewSound: true,
       sniperDealSound: false,
       appearance: { background: "not-a-theme", mascot: "none", motion: "off", glass: false },
@@ -36,6 +38,8 @@ test("profile validator drops invalid lot IDs, targets and unsupported preferenc
   assert.equal(profile.savedFilters[0].filters.mode, "gifts");
   assert.deepEqual(profile.savedFilters[0].filters.sort, { key: "price", dir: -1 });
   assert.equal(profile.preferences.alertSound, true);
+  assert.equal(profile.preferences.soundVolume, 35);
+  assert.equal(profile.preferences.soundPattern, "soft");
   assert.equal(profile.preferences.sniperNewSound, true);
   assert.equal(profile.preferences.sniperDealSound, false);
   assert.equal(profile.preferences.appearance.background, "cosmic");
@@ -61,6 +65,8 @@ test("profile validator returns isolated empty defaults for absent data", () => 
   first.favorites.push("100");
   assert.deepEqual(second.favorites, []);
   assert.equal(second.preferences.alertSound, false);
+  assert.equal(second.preferences.soundVolume, 100);
+  assert.equal(second.preferences.soundPattern, "signature");
   assert.equal(second.preferences.sniperNewSound, false);
   assert.equal(second.preferences.sniperDealSound, false);
   assert.equal(second.preferences.appearance.background, "cosmic");
