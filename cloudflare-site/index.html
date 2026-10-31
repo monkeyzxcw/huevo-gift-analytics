@@ -8,7 +8,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://huevo.su; style-src 'self'; img-src 'self' https://huevo.su https://huevo.departament.site data:; connect-src 'self' https://huevo.su https://*.huevo.su; base-uri 'none'; form-action 'none'">
 <title>AMNYAM MODE — Huevo Gift Intelligence</title>
 <link rel="preload" as="image" href="./assets/amnyam-battlefield.webp" fetchpriority="high">
-<link rel="stylesheet" href="./styles.css?v=amnyam-dota2-hud-v3">
+<link rel="stylesheet" href="./styles.css?v=amnyam-dota2-hud-v4">
 </head>
 <body>
 <a class="skip" href="#catalog">К каталогу</a>
@@ -659,10 +659,7 @@
   <form id="usernameTargetForm"><input type="hidden" id="usernameTargetKey"><label class="f"><span>Целевая цена в ◉</span><input class="input" id="usernameTargetPrice" type="number" min="1" max="1000000000000000" step="1" required></label><div class="username-target-actions"><button type="submit" class="btn">СОХРАНИТЬ ЦЕЛЬ</button><button type="button" class="btn secondary" id="usernameTargetRemove">УБРАТЬ ЦЕЛЬ</button></div></form>
 </dialog>
 
-<dialog id="usernamePreviewDialog" aria-labelledby="usernamePreviewTitle">
-  <div class="dlg-head"><h3 id="usernamePreviewTitle">Юзернейм</h3><button type="button" class="btn secondary" id="usernamePreviewClose">✕</button></div>
-  <div id="usernamePreviewBody"></div>
-</dialog>
+
 
 
 <dialog id="commandPalette" class="command-palette" aria-labelledby="commandPaletteTitle">
@@ -726,5 +723,6 @@
 <script src="./desk-tools.js?v=amnyam-desk-v1" defer></script>
 <script src="./intel-lab.js?v=amnyam-intel-v2" defer></script>
 <script src="./field-kit.js?v=amnyam-field-kit-v1" defer></script>
+<script src="./usernames.js?v=amnyam-usernames-v1" defer></script>
 </body>
 </html>
