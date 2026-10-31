@@ -124,6 +124,12 @@
     <button class="btn secondary" id="appearanceMediaClear" type="button">Убрать свой фон</button>
     <small id="appearanceMediaHint">Изображение до 512 КБ хранится только в этом браузере и не отправляется на сервер.</small>
   </div>
+  <div class="sound-advanced-controls" aria-label="Расширенные настройки звука">
+    <b>Звуковой сигнал AMNYAM</b>
+    <label class="f"><span>Характер сигнала</span><select class="select" id="soundPattern"><option value="signature">Фирменный · 5 нот</option><option value="soft">Мягкий · 3 ноты</option><option value="double">Двойной · 2 ноты</option></select></label>
+    <label class="f"><span>Громкость <output id="soundVolumeLabel">100%</output></span><input class="input" id="soundVolume" type="range" min="0" max="100" step="5" value="100"></label>
+    <small>Настройки влияют только на звуковые сигналы в открытой вкладке. Push и системные уведомления не используются.</small>
+  </div>
   <div class="overview-widget-controls">
     <b>Вид главной страницы</b>
     <label><input type="checkbox" id="overviewShowHero" checked> Заглавный блок</label>
