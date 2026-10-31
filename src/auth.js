@@ -10,6 +10,8 @@ const DEFAULT_PROFILE = {
   savedFilters: [],
   preferences: {
     alertSound: false,
+    sniperNewSound: false,
+    sniperDealSound: false,
     appearance: { background: "cosmic", mascot: "omnom", motion: "normal", glass: true },
     seasonTheme: "default"
   }
@@ -123,6 +125,8 @@ export function sanitiseProfile(value) {
     savedFilters: [],
     preferences: {
       alertSound: false,
+      sniperNewSound: false,
+      sniperDealSound: false,
       appearance: { ...DEFAULT_PROFILE.preferences.appearance },
       seasonTheme: "default"
     }
@@ -167,6 +171,8 @@ export function sanitiseProfile(value) {
   const appearance = preferences.appearance && typeof preferences.appearance === "object" ? preferences.appearance : {};
   profile.preferences = {
     alertSound: preferences.alertSound === true,
+    sniperNewSound: preferences.sniperNewSound === true,
+    sniperDealSound: preferences.sniperDealSound === true,
     appearance: {
       background: ["cosmic", "liquid", "nebula", "minimal"].includes(appearance.background) ? appearance.background : "cosmic",
       mascot: appearance.mascot === "none" ? "none" : "omnom",
