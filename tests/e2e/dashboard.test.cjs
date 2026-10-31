@@ -752,6 +752,22 @@ test("appearance settings switch themes, mascot and motion and persist locally",
   assert.ok(await page.locator("body.glass-off").count());
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("amnyam.appearance.v1")));
   assert.deepEqual(saved, { background: "liquid", mascot: "none", motion: "off", glass: false });
+
+  await page.selectOption("#soundPattern", "soft");
+  await page.locator("#soundVolume").fill("35");
+  assert.equal(await page.locator("#soundVolumeLabel").textContent(), "35%");
+  assert.equal(await page.evaluate(() => localStorage.getItem("amnyam.sound.pattern.v1")), "soft");
+  assert.equal(await page.evaluate(() => localStorage.getItem("amnyam.sound.volume.v1")), "35");
+
+  const gif = Buffer.from("R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==", "base64");
+  await page.locator("#appearanceMediaFile").setInputFiles({
+    name: "wallpaper.gif", mimeType: "image/gif", buffer: gif
+  });
+  assert.match(await page.locator("#customWallpaper").getAttribute("src"), /^data:image\/gif;base64,/);
+  assert.match(await page.locator("#appearanceMediaHint").textContent(), /Собственный фон включён/);
+  await page.click("#appearanceMediaClear");
+  assert.equal(await page.locator("#customWallpaper").getAttribute("src"), null);
+
   await page.click("#resetAppearance");
   assert.equal(await page.locator("body").getAttribute("data-bg"), "cosmic");
   assert.equal(await page.locator("body").getAttribute("data-mascot"), "omnom");
