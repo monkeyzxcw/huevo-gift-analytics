@@ -155,6 +155,86 @@ test("collector source health does not invent successful status when metadata is
   await browser.close();
 });
 
+test("below-market signals prefer exact catalogue and rarity sale profiles over broad title medians", async () => {
+  const lots = [];
+  for (let i = 0; i < 5; i++) {
+    lots.push({
+      lot_id: "rare-" + i, title: "Один подарок", serial: "#" + (i + 1), rarity: "Редкий",
+      price: [8000, 8100, 8200, 8300, 9000][i], status: "На продаже", active: true,
+      gift_catalog: { catalog_id: "501", rarity: "Редкий" },
+      lot_url: "https://huevo.su/market/lot/rare-" + i
+    });
+    lots.push({
+      lot_id: "common-" + i, title: "Один подарок", serial: "#" + (i + 10), rarity: "Обычный",
+      price: [16000, 16100, 16200, 16300, 19000][i], status: "На продаже", active: true,
+      gift_catalog: { catalog_id: "502", rarity: "Обычный" },
+      lot_url: "https://huevo.su/market/lot/common-" + i
+    });
+  }
+  const data = dataV2({
+    lots,
+    sales: {
+      generated_at: NOW,
+      summary: { count: 105, unknown: 0, median: 20000, min: 5000, max: 50000, enough_data: true },
+      by_title: [{ title: "Один подарок", count: 100, median: 50000, p25: 40000, p75: 60000, min: 1000, max: 90000 }],
+      by_title_rarity: [
+        { title: "Один подарок", rarity: "редкий", count: 5, median: 10000, p25: 9500, p75: 10500, match_scope: "title_rarity" },
+        { title: "Один подарок", rarity: "обычный", count: 5, median: 20000, p25: 19000, p75: 21000, match_scope: "title_rarity" }
+      ],
+      by_catalog_rarity: [
+        { title: "Один подарок", catalog_id: "501", rarity: "редкий", count: 5, median: 10000, p25: 9500, p75: 10500, match_scope: "catalog_rarity" },
+        { title: "Один подарок", catalog_id: "502", rarity: "обычный", count: 5, median: 20000, p25: 19000, p75: 21000, match_scope: "catalog_rarity" }
+      ]
+    }
+  });
+  const { browser, page, problems } = await open(serve(data));
+  await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="deals"]');
+  const cards = page.locator("#dealsList .deal-card-rich");
+  assert.ok(await cards.count() > 0);
+  const rare = cards.filter({ hasText: "Редкий" }).first();
+  const common = cards.filter({ hasText: "Обычный" }).first();
+  const rareText = await rare.textContent();
+  const commonText = await common.textContent();
+  assert.match(rareText, /МЕДИАНА ПРОДАЖ · КАТАЛОГ И РЕДКОСТЬ/);
+  assert.match(rareText, /10[\s\u00a0]?000/);
+  assert.match(commonText, /МЕДИАНА ПРОДАЖ · КАТАЛОГ И РЕДКОСТЬ/);
+  assert.match(commonText, /20[\s\u00a0]?000/);
+  assert.doesNotMatch(rareText, /50[\s\u00a0]?000/);
+  assert.doesNotMatch(commonText, /50[\s\u00a0]?000/);
+  assert.deepEqual(problems, []);
+  await browser.close();
+});
+
+test("title-only sale benchmarks are clearly marked as broad and low-confidence", async () => {
+  const lots = Array.from({ length: 5 }, (_, i) => ({
+    lot_id: "broad-" + i, title: "Подарок без связанной сделки", serial: "#" + (i + 1),
+    rarity: "Редкий", price: [8000, 8100, 8200, 8300, 9000][i], status: "На продаже", active: true,
+    gift_catalog: { catalog_id: "unobserved-catalog", rarity: "Редкий" },
+    lot_url: "https://huevo.su/market/lot/broad-" + i
+  }));
+  const data = dataV2({
+    lots,
+    sales: {
+      generated_at: NOW,
+      summary: { count: 10, unknown: 0, median: 10000, min: 8000, max: 12000, enough_data: true },
+      by_title: [{ title: "Подарок без связанной сделки", count: 10, median: 10000, p25: 9500, p75: 10500, min: 8000, max: 12000, match_scope: "title" }],
+      by_title_rarity: [],
+      by_catalog_rarity: []
+    }
+  });
+  const { browser, page, problems } = await open(serve(data));
+  await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="deals"]');
+  const first = page.locator("#dealsList .deal-card-rich").first();
+  assert.match(await first.textContent(), /МЕДИАНА ПРОДАЖ · ТОЛЬКО НАЗВАНИЕ/);
+  assert.match(await first.textContent(), /сделки пока не связаны с точным каталогом и редкостью/i);
+  assert.match(await page.textContent("#belowBestMeta"), /названию без подтверждённой редкости/i);
+  assert.match(await page.textContent("#belowBestMeta"), /низкая уверенность/i);
+  assert.deepEqual(problems, []);
+  await browser.close();
+});
+
 test("search, filters, sort, pagination and reset work", async () => {
   const { browser, page, problems } = await open(serve(dataV2()));
   await page.waitForSelector("#content:not(.hide)");
