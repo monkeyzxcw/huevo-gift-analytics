@@ -758,7 +758,10 @@ test("appearance settings switch themes, mascot and motion and persist locally",
 
   assert.equal(await page.locator("#soundVolume").inputValue(), "100", "legacy users retain the original full volume");
   await page.selectOption("#soundPattern", "soft");
-  await page.locator("#soundVolume").fill("35");
+  await page.locator("#soundVolume").evaluate(node => {
+    node.value = "35";
+    node.dispatchEvent(new Event("input", { bubbles: true }));
+  });
   assert.equal(await page.locator("#soundVolumeLabel").textContent(), "35%");
   assert.equal(await page.evaluate(() => localStorage.getItem("amnyam.sound.pattern.v1")), "soft");
   assert.equal(await page.evaluate(() => localStorage.getItem("amnyam.sound.volume.v1")), "35");
@@ -767,6 +770,7 @@ test("appearance settings switch themes, mascot and motion and persist locally",
   await page.locator("#appearanceMediaFile").setInputFiles({
     name: "wallpaper.gif", mimeType: "image/gif", buffer: gif
   });
+  await page.waitForFunction(() => document.querySelector("#customWallpaper").src.startsWith("data:image/gif;base64,"), { timeout: 5000 });
   assert.match(await page.locator("#customWallpaper").getAttribute("src"), /^data:image\/gif;base64,/);
   assert.match(await page.locator("#appearanceMediaHint").textContent(), /Собственный фон включён/);
   await page.click("#appearanceMediaClear");
