@@ -8,7 +8,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://huevo.su; style-src 'self'; img-src 'self' https://huevo.su https://huevo.departament.site data:; connect-src 'self' https://huevo.su https://*.huevo.su; base-uri 'none'; form-action 'none'">
 <title>AMNYAM MODE — Huevo Gift Intelligence</title>
 <link rel="preload" as="image" href="./assets/amnyam-battlefield.webp" fetchpriority="high">
-<link rel="stylesheet" href="./styles.css?v=amnyam-dota2-hud-v3">
+<link rel="stylesheet" href="./styles.css?v=amnyam-dota2-hud-v4">
 </head>
 <body>
 <a class="skip" href="#catalog">К каталогу</a>
@@ -37,6 +37,11 @@
   </div>
 </header>
 
+<nav class="market-type-switch" id="marketTypeNav" role="tablist" aria-label="Тип рынка">
+  <button type="button" role="tab" aria-selected="true" data-market-type="gifts"><span>01</span><b>ПОДАРКИ</b><small>GIFT MARKET</small></button>
+  <button type="button" role="tab" aria-selected="false" data-market-type="usernames"><span>02</span><b>ЮЗЕРНЕЙМЫ</b><small>USERNAME MARKET</small></button>
+</nav>
+<div id="giftsWorkspace">
 <nav class="main-nav" id="mainNav" role="tablist" aria-label="Основные разделы AMNYAM MODE">
   <button role="tab" aria-selected="true" data-view="overview" data-main="overview" type="button"><span>01</span> Обзор</button>
   <button role="tab" aria-selected="false" data-view="market" data-main="market" type="button"><span>02</span> Маркет <small id="navMarketCount">—</small></button>
@@ -548,6 +553,106 @@
   <p class="muted foot">Детали и тираж показываются только при наличии подтверждённых полей источника. Необработанные карточки остаются видимыми в каталоге.</p>
 </section>
 </div>
+</div>
+
+<section id="usernameWorkspace" class="username-workspace hide" aria-label="Рабочее пространство юзернеймов">
+  <header class="username-hero">
+    <div class="username-hero-copy">
+      <span class="section-index">/ HUEVO USERNAME MARKET</span>
+      <h2>ОХОТА ЗА <em>ИМЕНАМИ</em></h2>
+      <p>Отдельный рынок юзернеймов: ищи короткие имена, сравнивай цены объявлений, следи за целями и историей своих загрузок.</p>
+      <div class="username-hero-actions">
+        <a class="btn" href="https://huevo.su/market" target="_blank" rel="noopener noreferrer">ОТКРЫТЬ HUEVO MARKET ↗</a>
+        <button class="btn secondary" type="button" data-username-go="data">ИМПОРТИРОВАТЬ ДАННЫЕ</button>
+      </div>
+    </div>
+    <div class="username-hero-seal" aria-hidden="true"><b>@</b><span>HANDLE<br>INTELLIGENCE</span></div>
+  </header>
+
+  <nav class="username-tabs" id="usernameTabs" role="tablist" aria-label="Разделы рынка юзернеймов">
+    <button type="button" role="tab" aria-selected="true" data-username-view="overview"><span>01</span> ОБЗОР</button>
+    <button type="button" role="tab" aria-selected="false" data-username-view="market"><span>02</span> МАРКЕТ <small id="usernameNavCount">0</small></button>
+    <button type="button" role="tab" aria-selected="false" data-username-view="sniper"><span>03</span> СНАЙПЕР</button>
+    <button type="button" role="tab" aria-selected="false" data-username-view="deals"><span>04</span> НИЖЕ РЫНКА <small id="usernameDealsCount">0</small></button>
+    <button type="button" role="tab" aria-selected="false" data-username-view="analytics"><span>05</span> АНАЛИТИКА</button>
+    <button type="button" role="tab" aria-selected="false" data-username-view="favorites"><span>06</span> ИЗБРАННОЕ <small id="usernameFavoritesCount">0</small></button>
+    <button type="button" role="tab" aria-selected="false" data-username-view="data"><span>07</span> ДАННЫЕ</button>
+    <button type="button" role="tab" aria-selected="false" data-username-view="settings"><span>08</span> НАСТРОЙКИ</button>
+  </nav>
+
+  <section class="username-view" data-username-section="overview">
+    <div class="username-section-heading"><div><span class="section-index">/ MARKET BRIEFING</span><h3>Сводка юзернеймов</h3><p>Показатели считаются только по импортированным объявлениям. Пока данных нет — значения не подменяются нулями или выдуманными ценами.</p></div><span class="view-stat" id="usernameDataFreshness">НЕТ ИМПОРТА</span></div>
+    <div class="username-kpis" id="usernameKpis"></div>
+    <div class="username-overview-grid">
+      <article class="panel"><div class="panel-head"><div><span class="section-index">/ BEST OPPORTUNITIES</span><h3>Лучшие совпадения</h3></div><button class="btn secondary" type="button" data-username-go="deals">ВСЕ СИГНАЛЫ ↗</button></div><div id="usernameOverviewDeals" class="username-preview-list"></div></article>
+      <article class="panel"><div class="panel-head"><div><span class="section-index">/ WATCHLIST</span><h3>Ценовые цели</h3></div><button class="btn secondary" type="button" data-username-go="favorites">ОТКРЫТЬ ↗</button></div><div id="usernameOverviewTargets" class="username-preview-list"></div></article>
+    </div>
+  </section>
+
+  <section class="username-view hide" data-username-section="market">
+    <div class="username-section-heading"><div><span class="section-index">/ LIVE LISTINGS</span><h3>Маркет юзернеймов</h3><p>Локальная база загружается из JSON/CSV выгрузки. Для покупки и проверки статуса переходи в оригинальный Huevo Market.</p></div><a class="btn secondary" href="https://huevo.su/market" target="_blank" rel="noopener noreferrer">HUEVO MARKET ↗</a></div>
+    <form class="username-filters" id="usernameFilters">
+      <label class="f grow"><span>Поиск юзернейма</span><input class="input" id="usernameSearch" type="search" placeholder="Например, alpha или @name" autocomplete="off"></label>
+      <label class="f"><span>Длина</span><select class="select" id="usernameLength"><option value="">Любая</option><option value="3">3 символа</option><option value="4">4 символа</option><option value="5">5 символов</option><option value="6+">6 и больше</option></select></label>
+      <label class="f"><span>Тип</span><select class="select" id="usernameKind"><option value="">Любой</option><option value="letters">Только буквы</option><option value="digits">Только цифры</option><option value="mixed">Буквы и цифры</option><option value="underscore">С подчёркиванием</option></select></label>
+      <label class="f num"><span>Цена от</span><input class="input" id="usernameMinPrice" type="number" min="0" step="1" inputmode="numeric" placeholder="0"></label>
+      <label class="f num"><span>Цена до</span><input class="input" id="usernameMaxPrice" type="number" min="0" step="1" inputmode="numeric" placeholder="∞"></label>
+      <label class="f"><span>Сортировка</span><select class="select" id="usernameSort"><option value="price_asc">Дешевле сначала</option><option value="price_desc">Дороже сначала</option><option value="length_asc">Короче сначала</option><option value="length_desc">Длиннее сначала</option><option value="name_asc">Имя А → Я</option><option value="newest">Сначала новые</option></select></label>
+      <button class="btn secondary" id="usernameResetFilters" type="button">СБРОСИТЬ</button>
+    </form>
+    <div class="username-market-toolbar"><span id="usernameMarketCount" class="view-stat">0 объявлений</span><small>Цена объявления ≠ подтверждённая цена продажи.</small></div>
+    <div class="table-wrap username-table-wrap"><table class="username-table"><caption class="sr">Импортированные объявления username market</caption><thead><tr><th>Юзернейм</th><th>Длина</th><th>Цена объявления</th><th>Изменение в импортах</th><th>Статус</th><th>Действия</th></tr></thead><tbody id="usernameRows"><tr><td colspan="6" class="empty">Импортируй данные в разделе «Данные».</td></tr></tbody></table></div>
+  </section>
+
+  <section class="username-view hide" data-username-section="sniper">
+    <div class="username-section-heading"><div><span class="section-index">/ NEW & CHANGED HANDLES</span><h3>Снайпер юзернеймов</h3><p>Сравнение последней импортированной выгрузки с предыдущей. Новые и подешевевшие позиции отмечаются отдельно.</p></div><span class="view-stat" id="usernameSniperCount">0 событий</span></div>
+    <div id="usernameEvents" class="username-events"></div>
+  </section>
+
+  <section class="username-view hide" data-username-section="deals">
+    <div class="username-section-heading"><div><span class="section-index">/ COMPARABLE ASKING PRICES</span><h3>Возможности ниже ориентира</h3><p>Ориентир — медиана объявлений с тем же количеством символов и типом строки, минимум 5 аналогов. Это не медиана завершённых сделок.</p></div><span class="view-stat" id="usernameDealsMeta">НЕТ ВЫБОРКИ</span></div>
+    <div id="usernameDealsList" class="username-deal-grid"></div>
+  </section>
+
+  <section class="username-view hide" data-username-section="analytics">
+    <div class="username-section-heading"><div><span class="section-index">/ HANDLE INTELLIGENCE</span><h3>Аналитика юзернеймов</h3><p>Распределение длины, классы символов, минимум/медиана/максимум и динамика между твоими импортами.</p></div><span class="view-stat" id="usernameAnalyticsStamp">ОЖИДАЕТ ДАННЫЕ</span></div>
+    <div class="username-overview-grid"><article class="panel"><div class="panel-head"><h3>Цены по длине</h3><small class="muted">Медиана объявлений</small></div><div id="usernameLengthChart" class="username-bars"></div></article><article class="panel"><div class="panel-head"><h3>Состав выгрузки</h3><small class="muted">Типы юзернеймов</small></div><div id="usernameKindChart" class="username-bars"></div></article></div>
+    <article class="panel"><div class="panel-head"><h3>История импортов</h3><small class="muted">Изменения между загруженными срезами</small></div><div id="usernameHistoryChart" class="username-history-chart"></div><div id="usernameHistoryNote" class="muted foot">История появится после повторных импортов.</div></article>
+  </section>
+
+  <section class="username-view hide" data-username-section="favorites">
+    <div class="username-section-heading"><div><span class="section-index">/ PERSONAL WATCHLIST</span><h3>Избранное и ценовые цели</h3><p>Добавляй имена в наблюдение, ставь целевую цену. Уведомление — только звук в открытой вкладке AMNYAM.</p></div><span class="view-stat" id="usernameWatchCount">0 в наблюдении</span></div>
+    <div id="usernameFavoritesList" class="username-watch-list"></div>
+  </section>
+
+  <section class="username-view hide" data-username-section="data">
+    <div class="username-section-heading"><div><span class="section-index">/ DATA IMPORT STATION</span><h3>Импорт username-рынка</h3><p>Загрузи JSON или CSV из своей авторизованной выгрузки. Данные останутся в этом браузере и будут разделены по huEVO-профилю, если он доступен.</p></div><span class="view-stat" id="usernameImportStatus">LOCAL DATA</span></div>
+    <div class="username-import-grid">
+      <article class="panel username-import-card"><span class="section-index">/ 01 · IMPORT</span><h3>Загрузить объявления</h3><p class="muted">JSON: массив или объект с полем usernames/items. CSV: столбцы username, price, lot_id, status, url. Максимум 5 000 строк, валидные цены — положительные целые числа.</p><label class="btn username-file-label" for="usernameImportFile">ВЫБРАТЬ JSON / CSV</label><input id="usernameImportFile" type="file" accept=".json,.csv,application/json,text/csv" hidden><button class="btn secondary" id="usernameExportCsv" type="button">ЭКСПОРТ ТЕКУЩЕЙ БАЗЫ CSV</button><button class="btn secondary" id="usernameDownloadTemplate" type="button">СКАЧАТЬ ШАБЛОН JSON</button><small id="usernameImportFeedback" class="username-feedback" role="status" aria-live="polite">Ничего не загружено.</small></article>
+      <article class="panel username-import-card"><span class="section-index">/ 02 · SOURCE</span><h3>Оригинальный Huevo Market</h3><p>Открой отдельный рынок юзернеймов и выполни вход в Huevo вручную, если он потребуется. AMNYAM не запрашивает и не копирует cookies, пароли или коды входа.</p><a class="btn" href="https://huevo.su/market" target="_blank" rel="noopener noreferrer">ОТКРЫТЬ HUEVO MARKET ↗</a><p class="muted foot">Автоматическая выгрузка из авторизованного окна Huevo пока не подключена к локальному HuevoDualScan. До её интеграции импортируй фактическую выгрузку вручную.</p></article>
+    </div>
+    <article class="panel"><div class="panel-head"><h3>Формат импорта</h3><small class="muted">Пустой шаблон — без вымышленных объявлений и цен</small></div><pre class="username-json-example">{
+  "schema_version": 1,
+  "generated_at": null,
+  "usernames": []
+}</pre><p class="muted foot">Шаблон пустой. Добавь в массив usernames реальные строки из выгрузки Huevo Market.</p></article>
+  </section>
+
+  <section class="username-view hide" data-username-section="settings">
+    <div class="username-section-heading"><div><span class="section-index">/ ALERTS & PRIVACY</span><h3>Настройки юзернеймов</h3><p>Локальное хранение, звуковые сигналы и безопасное управление импортированной базой.</p></div></div>
+    <div class="username-settings-grid">
+      <article class="panel"><h3>Звуковые уведомления</h3><label class="username-sound-toggle"><input type="checkbox" id="usernameSoundEnabled"> Включить звук при достижении целевой цены</label><button class="btn secondary" type="button" id="usernameTestSound">ПРОВЕРИТЬ ЗВУК</button><p class="muted foot" id="usernameSoundHint">Звук проигрывается только в открытой вкладке после разрешённого браузером взаимодействия. Push и системные уведомления не используются.</p></article>
+      <article class="panel"><h3>Локальная база</h3><p class="muted" id="usernameStorageInfo">Данные доступны только в этом браузере.</p><button class="btn secondary" type="button" id="usernameClearData">УДАЛИТЬ ИМПОРТИРОВАННУЮ БАЗУ</button><p class="muted foot">Избранное и цели хранятся отдельно для текущего профиля браузера. Экспортируй CSV перед удалением, если нужна копия.</p></article>
+    </div>
+  </section>
+</section>
+
+<dialog id="usernameTargetDialog" class="username-target-dialog" aria-labelledby="usernameTargetTitle">
+  <div class="dlg-head"><div><span class="section-index">/ PRICE ALERT</span><h3 id="usernameTargetTitle">Целевая цена</h3></div><button type="button" class="btn secondary" id="usernameTargetClose">✕</button></div>
+  <form id="usernameTargetForm"><input type="hidden" id="usernameTargetKey"><label class="f"><span>Целевая цена в ◉</span><input class="input" id="usernameTargetPrice" type="number" min="1" max="1000000000000000" step="1" required></label><div class="username-target-actions"><button type="submit" class="btn">СОХРАНИТЬ ЦЕЛЬ</button><button type="button" class="btn secondary" id="usernameTargetRemove">УБРАТЬ ЦЕЛЬ</button></div></form>
+</dialog>
+
+
 
 
 <dialog id="commandPalette" class="command-palette" aria-labelledby="commandPaletteTitle">
@@ -611,5 +716,6 @@
 <script src="./desk-tools.js?v=amnyam-desk-v1" defer></script>
 <script src="./intel-lab.js?v=amnyam-intel-v2" defer></script>
 <script src="./field-kit.js?v=amnyam-field-kit-v1" defer></script>
+<script src="./usernames.js?v=amnyam-usernames-v1" defer></script>
 </body>
 </html>
