@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://huevo.su; style-src 'self'; img-src 'self' https://huevo.su https://huevo.departament.site data:; connect-src 'self' https://huevo.su https://*.huevo.su; base-uri 'none'; form-action 'none'">
 <title>AMNYAM MODE — Huevo Gift Intelligence</title>
-<link rel="stylesheet" href="./styles.css?v=amnyam-workspace-v20">
+<link rel="stylesheet" href="./styles.css?v=amnyam-desk-v1">
 </head>
 <body>
 <a class="skip" href="#catalog">К каталогу</a>
@@ -136,6 +136,28 @@
     <label><input type="checkbox" id="overviewShowDayPicks" checked> 3 лота дня</label>
     <label><input type="checkbox" id="overviewShowCharts" checked> Графики обзора</label>
   </div>
+  <section class="desk-tools-panel" aria-labelledby="deskToolsTitle">
+    <div class="section-heading"><div><span class="section-index">/ PERSONAL WORKSPACE</span><h3 id="deskToolsTitle">AMNYAM Desk — рабочие инструменты</h3><p>Локальные настройки и быстрые действия. Они не меняют сборщик, серверные данные или настройки других пользователей.</p></div><span class="view-stat">DESK v1</span></div>
+    <div class="desk-tools-grid">
+      <article class="desk-tool-card"><b>Комфорт</b>
+        <label><span>Плотность интерфейса</span><select class="select" id="deskDensity"><option value="normal">Стандартная</option><option value="compact">Компактная</option></select></label>
+        <label><span>Высокий контраст</span><input type="checkbox" id="deskContrast"></label><label><span>Крупный текст</span><input type="checkbox" id="deskLargeText"></label><label><span>Режим фокуса</span><input type="checkbox" id="deskFocus"></label><label><span>Уменьшить движение</span><input type="checkbox" id="deskMotion"></label><label><span>Декоративный фон и свечение</span><input type="checkbox" id="deskDecor" checked></label>
+      </article>
+      <article class="desk-tool-card"><b>Быстрые действия</b><p>Сессия: <strong id="deskSessionTimer">00:00:00</strong></p>
+        <div class="desk-tool-actions"><button class="btn secondary" id="deskSessionReset" type="button">Сбросить таймер</button><button class="btn secondary" id="deskCopyUrl" type="button">Копировать адрес</button><button class="btn secondary" id="deskTop" type="button">Наверх ↑</button><button class="btn secondary" id="deskCopyTable" type="button">Копировать таблицу TSV</button><button class="btn secondary" id="deskShortcutsOpen" type="button">Горячие клавиши (?)</button></div><p class="muted">Ctrl+Shift+1…8 — разделы · Ctrl+Shift+F — поиск · Esc — очистить поиск вне полей ввода.</p>
+      </article>
+      <article class="desk-tool-card"><b>Резервная копия рабочего места</b><p class="muted">Экспортируются только настройки AMNYAM Desk, недавние лоты, заметки и чек-лист — без паролей, cookies, токенов или аккаунтных секретов.</p>
+        <div class="desk-tool-actions"><button class="btn secondary" id="deskExport" type="button">Экспорт JSON</button><label class="btn secondary" for="deskImportFile">Импорт JSON</label><input id="deskImportFile" type="file" accept="application/json,.json" hidden><button class="btn secondary" id="deskReset" type="button">Сбросить настройки</button></div>
+      </article>
+      <article class="desk-tool-card"><b>Недавно открытые лоты</b><div id="deskRecentList"><p class="muted">Открывай лоты, чтобы они появились здесь.</p></div>
+        <div class="desk-note-editor" id="deskNoteEditor" hidden><b id="deskNoteTitle">Заметка к лоту</b><textarea id="deskNoteText" maxlength="1000" placeholder="Например: сравнить с продажами, проверить редкость…"></textarea><button class="btn secondary" id="deskNoteSave" type="button">Сохранить заметку</button><small>Заметки хранятся только в этом браузере.</small></div>
+      </article>
+      <article class="desk-tool-card"><b>Чек-лист сессии</b><p class="muted">Локальные отметки перед анализом рынка.</p><div class="desk-checklist"><label><input type="checkbox" data-desk-check="collector"> Сборщик запущен</label><label><input type="checkbox" data-desk-check="freshness"> Свежесть данных проверена</label><label><input type="checkbox" data-desk-check="sound"> Звук проверен</label><label><input type="checkbox" data-desk-check="targets"> Целевые цены настроены</label></div></article>
+      <article class="desk-tool-card"><b>Состояние рабочего места</b><p class="desk-status" id="deskStatus" role="status" aria-live="polite">Стандартный вид</p><p class="muted">Все настройки применяются сразу и сохраняются в текущем браузере.</p></article>
+    </div>
+  </section>
+  <dialog id="deskShortcuts" aria-labelledby="deskShortcutsTitle"><div class="dlg-head"><h3 id="deskShortcutsTitle">Горячие клавиши AMNYAM</h3><button class="btn secondary" id="deskShortcutsClose" type="button">Закрыть</button></div><p><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>1…8</kbd> — переход между основными разделами.</p><p><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>F</kbd> — быстрый поиск.</p><p><kbd>?</kbd> — открыть эту справку, если фокус не в поле ввода.</p><p><kbd>Esc</kbd> — очистить глобальный поиск, когда фокус не в поле ввода.</p></dialog>
+
   <button class="btn secondary" id="resetAppearance" type="button">Сбросить оформление</button>
 </section>
 <div id="loading" class="panel state"><div class="spinner" aria-hidden="true"></div><p>Загружаю data.json…</p></div>
@@ -552,5 +574,6 @@
 <div class="premium-splash" id="premiumSplash" aria-hidden="true"><div class="splash-mark">H<span>•</span></div><div class="splash-title">AMNYAM <b>MODE</b></div><div class="splash-subtitle">GIFT MARKET INTELLIGENCE</div><div class="splash-loader"><i></i></div></div>
 <script src="./app.js?v=amnyam-workspace-v23" defer></script>
 <script src="./sniper.js?v=amnyam-sniper-rules-v3" defer></script>
+<script src="./desk-tools.js?v=amnyam-desk-v1" defer></script>
 </body>
 </html>
