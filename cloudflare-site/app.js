@@ -2714,11 +2714,22 @@
     state.portfolio = readPortfolio();
     try {
       alertSoundEnabled = localStorage.getItem(ALERT_SOUND_KEY) === "on";
+      const rawVolume = localStorage.getItem("amnyam.sound.volume.v1");
+      const savedVolume = rawVolume === null ? 100 : Number(rawVolume);
+      soundVolume = Number.isInteger(savedVolume) && savedVolume >= 0 && savedVolume <= 100 ? savedVolume : 100;
+      const savedPattern = localStorage.getItem("amnyam.sound.pattern.v1");
+      soundPattern = ["signature", "soft", "double"].includes(savedPattern) ? savedPattern : "signature";
       sniperSoundPrefs = {
         new: localStorage.getItem("amnyam.sniperSound.new.v1") === "on",
         deal: localStorage.getItem("amnyam.sniperSound.deal.v1") === "on"
       };
-    } catch (_) { alertSoundEnabled = false; sniperSoundPrefs = { new: false, deal: false }; }
+    } catch (_) {
+      alertSoundEnabled = false;
+      soundVolume = 100;
+      soundPattern = "signature";
+      sniperSoundPrefs = { new: false, deal: false };
+    }
+    updateAdvancedSoundControls();
     window.dispatchEvent(new CustomEvent("amnyam:sniper-sounds", { detail: { ...sniperSoundPrefs, master: alertSoundEnabled } }));
     appearance = readAppearance();
     applyAppearance();
