@@ -1634,6 +1634,42 @@
       saleChart.append(h("div", { class: "empty", text: "В локальной базе пока нет достаточного числа подтверждённых продаж этого подарка. Будут показаны данные, когда накопится минимум 3 записи." }));
     }
     body.append(h("p", {}, [h("a", { class: "btn", href: safeUrl(l.lot_url, l.lot_id), target: "_blank", rel: "noopener noreferrer", text: "Открыть лот на Huevo ↗" })]));
+    // Split the long detail sheet into four focused panes, moving existing
+    // nodes so all original controls and event handlers remain intact.
+    const detailGroups = {
+      overview: h("div", { class: "detail-pane", "data-detail-pane": "overview" }),
+      catalog: h("div", { class: "detail-pane", "data-detail-pane": "catalog" }),
+      history: h("div", { class: "detail-pane", "data-detail-pane": "history" }),
+      actions: h("div", { class: "detail-pane", "data-detail-pane": "actions" })
+    };
+    let activeGroup = "overview";
+    Array.from(body.childNodes).forEach(node => {
+      if (node.nodeType === 1 && node.tagName === "H4") {
+        const heading = node.textContent.toLocaleLowerCase("ru");
+        if (heading.includes("история")) activeGroup = "history";
+        else if (heading.includes("характеристики") || heading.includes("экземпляр и тираж")) activeGroup = "catalog";
+      }
+      if (node.nodeType === 1 && (node.classList.contains("detail-watch") || node.classList.contains("target-error"))) activeGroup = "actions";
+      if (node.nodeType === 1 && node.tagName === "P" && node.textContent.includes("Открыть лот на Huevo")) activeGroup = "actions";
+      detailGroups[activeGroup].append(node);
+    });
+    clear(body);
+    const detailTabs = $("detailWorkspaceTabs");
+    detailTabs.querySelectorAll("[data-detail-tab]").forEach(button => {
+      button.setAttribute("aria-selected", String(button.dataset.detailTab === "overview"));
+      button.onclick = () => {
+        detailTabs.querySelectorAll("[data-detail-tab]").forEach(tab => {
+          tab.setAttribute("aria-selected", String(tab === button));
+        });
+        Object.entries(detailGroups).forEach(([key, pane]) => {
+          pane.classList.toggle("hide", key !== button.dataset.detailTab);
+        });
+      };
+    });
+    detailGroups.catalog.classList.add("hide");
+    detailGroups.history.classList.add("hide");
+    detailGroups.actions.classList.add("hide");
+    body.append(detailGroups.overview, detailGroups.catalog, detailGroups.history, detailGroups.actions);
     const dlg = $("detail");
     if (typeof dlg.showModal === "function") dlg.showModal(); else dlg.setAttribute("open", "");
   }
@@ -1642,14 +1678,14 @@
     const groups = {
       overview:"overview", market:"market", sniper:"sniper",
       deals:"opportunities", cheap:"opportunities",
-      analytics:"analytics", data:"data",
+      analytics:"analytics", events:"analytics", data:"data", sales:"data",
       favorites:"portfolio", portfolio:"portfolio",
       appearance:"settings", support:"settings", help:"settings"
     };
     return groups[view] || "overview";
   }
   function switchView(view, focusSearch) {
-    const allowed = new Set(["overview","market","sniper","deals","cheap","analytics","data","favorites","portfolio","support","appearance","help"]);
+    const allowed = new Set(["overview","market","sniper","deals","cheap","analytics","events","data","sales","favorites","portfolio","support","appearance","help"]);
     state.activeView = allowed.has(view) ? view : "overview";
     const mainView = mainViewFor(state.activeView);
     document.querySelectorAll("[data-view-section]").forEach(section => {
@@ -1825,6 +1861,15 @@
     return row;
   }
 
+  function dealScore(lot) {
+    if (!lot || !isNum(lot.discount_pct) || lot.discount_pct <= 0 || lot.suspicious) return 0;
+    const discount = Math.max(0, Math.min(80, Number(lot.discount_pct))) / 80;
+    const sample = Math.max(0, Number(lot.sample_size) || 0);
+    const evidence = Math.min(1, sample / 20);
+    const basis = lot.basis === "sales" ? 1 : 0.62;
+    return Math.round(Math.max(0, Math.min(100, discount * 55 + evidence * 27 + basis * 18)));
+  }
+
   function renderDealCard(lot,label,dayPick){
     const id=String(lot.lot_id),saved=isNum(lot.reference_price)?Math.max(0,lot.reference_price-lot.price):null;
     const histValues=(Array.isArray(lot._history)?lot._history:[]).filter(p=>isNum(p.price)).map(p=>p.price);
@@ -1858,9 +1903,11 @@
       h("span",{class:"deal-metric ask"},[h("small",{text:"ЦЕНА ЛОТА"}),h("b",{text:price(lot.price)})]),
       h("span",{class:"deal-metric"},[h("small",{text:salesReferenceLabel(lot)}),h("b",{text:isNum(lot.reference_price)?price(lot.reference_price):"Нет ориентира"})]),
       h("span",{class:"deal-metric saving"},[h("small",{text:"РАЗНИЦА"}),h("b",{text:isNum(saved)?price(saved)+" ниже":"Не рассчитана"})]),
+      h("span",{class:"deal-metric"},[h("small",{text:"ОЦЕНКА СИГНАЛА"}),h("b",{text:dealScore(lot)+"/100"})]),
       h("span",{class:"deal-metric"},[h("small",{text:lot.basis==="sales"?"СОВЕРШЁННЫЕ ПРОДАЖИ · "+salesReferenceDescription(lot).toUpperCase():"АКТИВНЫЕ ОБЪЯВЛЕНИЯ · ТО ЖЕ НАЗВАНИЕ И РЕДКОСТЬ"}),h("b",{text:isNum(lot.sample_size)&&lot.sample_size>0?fmt(lot.sample_size)+" записей":"Мало данных"})])
     );
     if(histLow!==null)metrics.append(h("span",{class:"deal-metric history-low"},[h("small",{text:"МИНИМУМ В ИСТОРИИ"}),h("b",{text:price(histLow)})]));
+    metrics.append(h("p",{class:"deal-score-note",text:"Оценка учитывает размер дисконта, объём выборки и источник ориентира. Это приоритет проверки, а не прогноз прибыли."}));
     const mini=sparkline(lot._history);
     if(mini)metrics.append(h("div",{class:"deal-sparkline"},[mini,h("small",{text:"История цены"})]));
     row.children[1].append(metrics);
