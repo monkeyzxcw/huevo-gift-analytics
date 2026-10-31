@@ -49,7 +49,7 @@
     return { median: reference, p25: quantile(core, 0.25), p75: quantile(core, 0.75), count: core.length, basis: "asks" };
   }
   const state = {
-    data: null, lots: [], targets: {}, events: [], seen: new Set(), lastIds: null,
+    data: null, lots: [], deals: [], targets: {}, events: [], seen: new Set(), lastIds: null,
     lastPrices: new Map(), lastDeals: new Set(), profileKey: "guest", eventSound: { new: false, deal: false, master: false },
     filter: { type: "all", search: "", min: "", max: "", discount: "" }, profileLoaded: false
   };
@@ -181,7 +181,8 @@
     state.data = detail.data || {};
     state.lots = nextLots;
     state.targets = detail.targets && typeof detail.targets === "object" ? detail.targets : {};
-    const currentDeals = buildDeals(nextLots);
+    state.deals = Array.isArray(detail.deals) ? detail.deals : buildDeals(nextLots);
+    const currentDeals = state.deals;
     const dealKeys = new Set(currentDeals.map((lot) => String(lot.lot_id) + "|" + lot.basis + "|" + Math.round(lot.reference_price)));
     if (state.lastIds === null || changedProfile) {
       const since = asDate(state.data.changes && state.data.changes.since);
@@ -455,7 +456,7 @@
     const recentNew = state.events.filter((event) => event.type === "new" && (asDate(event.event_at)?.getTime() || 0) >= last24h).length;
     $("sniperNewCount").textContent = fmt(recentNew);
     $("sniperPriceCount").textContent = fmt(state.events.filter((event) => event.type === "price").length);
-    $("sniperDealCount").textContent = fmt(buildDeals(state.lots).length);
+    $("sniperDealCount").textContent = fmt(state.deals.length);
     const reached = Object.entries(state.targets).filter(([id, target]) => {
       const lot = state.lots.find((item) => String(item.lot_id) === id);
       return lot && lot.active !== false && Number.isFinite(lot.price) && lot.price <= Number(target);
