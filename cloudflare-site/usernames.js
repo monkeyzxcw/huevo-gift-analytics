@@ -291,7 +291,7 @@
       if (key === "text") node.textContent = value;
       else if (key === "class") node.className = value;
       else if (key === "dataset") Object.entries(value).forEach(([k, v]) => node.dataset[k] = v);
-      else if (value != null) node.setAttribute(key, String(value));
+      else if (key !== "style" && value != null) node.setAttribute(key, String(value));
     });
     (Array.isArray(children) ? children : children == null ? [] : [children]).forEach(child => {
       if (child == null) return;
@@ -554,7 +554,7 @@
       groups.forEach(group => {
         const row = el("div", { class: "username-bar-row" }, [
           el("span", { text: group.label }),
-          el("div", { class: "username-bar-track" }, el("i", { style: "width:" + Math.max(2, group.count / max * 100) + "%" })),
+          el("div", { class: "username-bar-track" }, el("i", { class: "username-bar-w-" + Math.max(5, Math.min(100, Math.round(group.count / max * 20) * 5)) })),
           el("b", { text: group.count + (group.median != null ? " · " + price(group.median) : "") })
         ]);
         node.append(row);
@@ -578,7 +578,7 @@
       const maxCount = Math.max(1, ...snapshots.map(item => item.count));
       snapshots.forEach(snapshot => {
         const column = el("div", { class: "username-history-column" }, [
-          el("i", { style: "height:" + Math.max(3, snapshot.count / maxCount * 100) + "%" }),
+          el("i", { class: "username-bar-h-" + Math.max(5, Math.min(100, Math.round(snapshot.count / maxCount * 20) * 5)) }),
           el("b", { text: snapshot.median == null ? "—" : price(snapshot.median) }),
           el("small", { text: safeDate(snapshot.at)?.toLocaleDateString("ru-RU") || "—" })
         ]);
