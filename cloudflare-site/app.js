@@ -444,8 +444,14 @@
   const ALERT_SOUND_KEY = "amnyam.alertSound.v1";
   let alertSoundEnabled = false;
   let alertAudioContext = null;
+  let soundVolume = 100;
+  let soundPattern = "signature";
   let sniperSoundPrefs = { new: false, deal: false };
   try {
+    const savedVolume = Number(localStorage.getItem("amnyam.sound.volume.v1"));
+    if (Number.isInteger(savedVolume) && savedVolume >= 0 && savedVolume <= 100) soundVolume = savedVolume;
+    const savedPattern = localStorage.getItem("amnyam.sound.pattern.v1");
+    if (["signature", "soft", "double"].includes(savedPattern)) soundPattern = savedPattern;
     alertSoundEnabled = localStorage.getItem(ALERT_SOUND_KEY) === "on";
     sniperSoundPrefs = {
       new: localStorage.getItem("amnyam.sniperSound.new.v1") === "on",
@@ -453,7 +459,7 @@
     };
   } catch (_) {}
   window.AMNYAM_SOUND_SETTINGS = {
-    get: () => ({ ...sniperSoundPrefs, master: alertSoundEnabled }),
+    get: () => ({ ...sniperSoundPrefs, master: alertSoundEnabled, volume: soundVolume, pattern: soundPattern }),
     set: (kind, enabled) => {
       if (kind !== "new" && kind !== "deal") return false;
       sniperSoundPrefs[kind] = Boolean(enabled);
@@ -465,7 +471,9 @@
       window.dispatchEvent(new CustomEvent("amnyam:sniper-sounds", { detail: { ...sniperSoundPrefs, master: alertSoundEnabled } }));
       return true;
     },
-    masterEnabled: () => alertSoundEnabled
+    masterEnabled: () => alertSoundEnabled,
+    volume: () => soundVolume,
+    pattern: () => soundPattern
   };
   function updateAlertSoundControls() {
     const toggle = $("toggleAlertSound"), hint = $("alertSoundHint");
@@ -474,9 +482,31 @@
       toggle.setAttribute("aria-pressed", String(alertSoundEnabled));
     }
     if (hint) hint.textContent = alertSoundEnabled
-      ? "Фирменная пятинотная мелодия прозвучит при достижении цены-цели."
+      ? "Звуковой сигнал AMNYAM включён. " + soundVolume + "% · " + soundPatternLabel(soundPattern) + "."
       : "Звуковые сигналы отключены. Включи их и нажми тест, чтобы услышать сигнал AMNYAM.";
+    updateAdvancedSoundControls();
     window.dispatchEvent(new CustomEvent("amnyam:sniper-sounds", { detail: { ...sniperSoundPrefs, master: alertSoundEnabled } }));
+  }
+  function soundPatternLabel(pattern) {
+    return ({ signature: "фирменный, 5 нот", soft: "мягкий, 3 ноты", double: "двойной, 2 ноты" })[pattern] || "фирменный, 5 нот";
+  }
+  function updateAdvancedSoundControls() {
+    const volume = $("soundVolume"), volumeLabel = $("soundVolumeLabel"), pattern = $("soundPattern");
+    if (volume) volume.value = String(soundVolume);
+    if (volumeLabel) volumeLabel.textContent = soundVolume + "%";
+    if (pattern) pattern.value = soundPattern;
+  }
+  function persistAdvancedSoundSettings() {
+    if (accountState.user) {
+      if (!accountState.hydrating) queueProfileSave();
+    } else {
+      try {
+        localStorage.setItem("amnyam.sound.volume.v1", String(soundVolume));
+        localStorage.setItem("amnyam.sound.pattern.v1", soundPattern);
+      } catch (_) {}
+    }
+    updateAdvancedSoundControls();
+    updateAlertSoundControls();
   }
   function playAlertSound(force) {
     if (!force && !alertSoundEnabled) return;
@@ -493,15 +523,18 @@
         // AMNYAM signature: a bright five-note rising/falling arpeggio, rather
         // than the old generic two-beep alert. Triggered only by a user setting
         // or a target-price event.
-        const notes = [523.25, 659.25, 783.99, 1046.5, 783.99];
+        const notes = soundPattern === "soft" ? [659.25, 783.99, 1046.5]
+          : soundPattern === "double" ? [880, 660] : [523.25, 659.25, 783.99, 1046.5, 783.99];
+        const volume = Math.max(0, Math.min(100, soundVolume)) / 100;
         notes.forEach((frequency, index) => {
-          const start = context.currentTime + index * 0.145;
+          const start = context.currentTime + index * (soundPattern === "double" ? 0.22 : 0.145);
           const oscillator = context.createOscillator();
           const gain = context.createGain();
           oscillator.type = index === 4 ? "sine" : "triangle";
           oscillator.frequency.setValueAtTime(frequency, start);
           gain.gain.setValueAtTime(0.0001, start);
-          gain.gain.exponentialRampToValueAtTime(index === 3 ? 0.065 : 0.048, start + 0.018);
+          const peak = soundPattern === "soft" ? 0.04 : soundPattern === "double" ? 0.052 : (index === 3 ? 0.065 : 0.048);
+          gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, peak * volume), start + 0.018);
           gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.16);
           oscillator.connect(gain);
           gain.connect(context.destination);
@@ -528,6 +561,16 @@
       if (alertSoundEnabled) playAlertSound(true);
     });
     $("testAlertSound").addEventListener("click", () => playAlertSound(true));
+    const volume = $("soundVolume"), pattern = $("soundPattern");
+    if (volume) volume.addEventListener("input", () => {
+      soundVolume = Math.max(0, Math.min(100, Number(volume.value) || 0));
+      persistAdvancedSoundSettings();
+    });
+    if (pattern) pattern.addEventListener("change", () => {
+      soundPattern = ["signature", "soft", "double"].includes(pattern.value) ? pattern.value : "signature";
+      persistAdvancedSoundSettings();
+    });
+    updateAdvancedSoundControls();
   }
 
   function show(which) {
@@ -2600,6 +2643,8 @@
       sniperRuleProfiles: window.AMNYAM_RULE_PROFILES && window.AMNYAM_RULE_PROFILES.get ? window.AMNYAM_RULE_PROFILES.get() : [],
       preferences: {
         alertSound: Boolean(alertSoundEnabled),
+        soundVolume,
+        soundPattern,
         sniperNewSound: Boolean(sniperSoundPrefs.new),
         sniperDealSound: Boolean(sniperSoundPrefs.deal),
         appearance: { ...appearance },
@@ -2621,7 +2666,10 @@
     window.AMNYAM_PENDING_RULE_PROFILES = Array.isArray(p.sniperRuleProfiles) ? p.sniperRuleProfiles : [];
     const prefs = p.preferences && typeof p.preferences === "object" ? p.preferences : {};
     alertSoundEnabled = prefs.alertSound === true;
+    soundVolume = Number.isInteger(prefs.soundVolume) && prefs.soundVolume >= 0 && prefs.soundVolume <= 100 ? prefs.soundVolume : 100;
+    soundPattern = ["signature", "soft", "double"].includes(prefs.soundPattern) ? prefs.soundPattern : "signature";
     sniperSoundPrefs = { new: prefs.sniperNewSound === true, deal: prefs.sniperDealSound === true };
+    updateAdvancedSoundControls();
     const a = prefs.appearance && typeof prefs.appearance === "object" ? prefs.appearance : {};
     appearance = {
       background: ["cosmic","liquid","nebula","minimal"].includes(a.background) ? a.background : "cosmic",
