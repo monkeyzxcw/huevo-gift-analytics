@@ -377,6 +377,7 @@
     if (hint) hint.textContent = alertSoundEnabled
       ? "Фирменная пятинотная мелодия прозвучит при достижении цены-цели."
       : "Звуковые сигналы отключены. Включи их и нажми тест, чтобы услышать сигнал AMNYAM.";
+    window.dispatchEvent(new CustomEvent("amnyam:sniper-sounds", { detail: { ...sniperSoundPrefs, master: alertSoundEnabled } }));
   }
   function playAlertSound(force) {
     if (!force && !alertSoundEnabled) return;
