@@ -1657,3 +1657,27 @@ tbody tr:hover td{background:rgba(219,169,103,.08)}
  .hero,.day-pick-card,.cards .card,.btn{transition:none!important}
  .hero-live-pulse{animation:none!important}
 }
+
+
+/* AMNYAM FIELD KIT — compact, optional tools; never changes collector cadence */
+.fieldkit{margin:10px 0 14px;border:1px solid #49513a;border-radius:10px;background:linear-gradient(135deg,#171b13,#11140f);padding:0 12px}
+.fieldkit>summary{cursor:pointer;list-style:none;padding:11px 2px;color:var(--amnyam-acid,#e6b66f);font:800 10px ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.1em}
+.fieldkit>summary::-webkit-details-marker{display:none}
+.fieldkit>summary:after{content:"＋";float:right;color:var(--muted)}
+.fieldkit[open]>summary:after{content:"−"}
+.fieldkit-status{margin:0 0 10px;color:var(--muted);font-size:11px;line-height:1.5}
+.fieldkit-groups{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:0 0 10px}
+.fieldkit-group{min-width:0;border:1px solid #30382a;border-radius:8px;padding:9px;background:#10130f}
+.fieldkit-group>b{display:block;margin-bottom:8px;color:#b8c49f;font:750 9px ui-monospace,monospace;letter-spacing:.1em}
+.fieldkit-actions{display:flex;flex-wrap:wrap;gap:6px}
+.fieldkit-action{border:1px solid #3a4430;border-radius:6px;background:#1a2016;color:#e8eadf;padding:7px 9px;font-size:10px;font-weight:650;cursor:pointer}
+.fieldkit-action:hover{border-color:var(--amnyam-acid,#e6b66f);color:var(--amnyam-acid,#e6b66f)}
+.fieldkit-recent-label{display:inline-grid;gap:4px;margin:0 8px 10px 0;color:var(--muted);font-size:10px}
+.fieldkit-recent{min-width:190px;max-width:min(340px,80vw);padding:7px;font-size:11px}
+body.amnyam-compact #lotsMode td{padding-top:6px;padding-bottom:6px}
+body.amnyam-compact #lotsMode .thumb{width:27px;height:27px}
+body.amnyam-compact #lotsMode .lot{gap:7px}
+body.amnyam-focus [data-view-section]:not([data-view-section="market"]){display:none!important}
+body.amnyam-calm *,body.amnyam-calm *:before,body.amnyam-calm *:after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+@media(max-width:760px){.fieldkit-groups{grid-template-columns:1fr}.fieldkit-recent-label{display:grid;margin-right:0}.fieldkit-recent{max-width:100%;width:100%}}
+@media(prefers-reduced-motion:reduce){.fieldkit-action{transition:none!important}}
