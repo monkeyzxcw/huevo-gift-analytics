@@ -1390,21 +1390,25 @@
     const titleProfiles = Array.isArray(sales.by_title) ? sales.by_title : [];
 
     // Prefer a profile proven by the exact previously observed Huevo lot ID.
-    if (catalogId && rarity) {
-      const exactCatalog = catalogProfiles.find(item =>
-        String(item.catalog_id || "") === catalogId &&
-        normaliseSaleRarity(item.rarity) === rarity && valid(item));
-      if (exactCatalog) return exactCatalog;
-    }
-    // If the catalog relation is not available, exact title + rarity is still
-    // narrower than a title-wide benchmark.
-    if (title && rarity) {
-      const exactRarity = rarityProfiles.find(item =>
-        normaliseSaleTitle(item.title) === title &&
-        normaliseSaleRarity(item.rarity) === rarity && valid(item));
-      if (exactRarity) return exactRarity;
-    }
-    // Retain legacy / title-only sales, but the caller marks this as low confidence.
+    const exactCatalog = catalogId && rarity ? catalogProfiles.find(item =>
+      String(item.catalog_id || "") === catalogId &&
+      normaliseSaleRarity(item.rarity) === rarity && valid(item)) : null;
+    // Prefer the most specific profile that has enough completed trades to be useful.
+    if (exactCatalog && Number(exactCatalog.count) >= 5) return exactCatalog;
+
+    // If the catalog relation is unavailable or sparse, a title + rarity profile can
+    // safely pool several exact lot matches of that same rarity.
+    const exactRarity = title && rarity ? rarityProfiles.find(item =>
+      normaliseSaleTitle(item.title) === title &&
+      normaliseSaleRarity(item.rarity) === rarity && valid(item)) : null;
+    if (exactRarity && Number(exactRarity.count) >= 5) return exactRarity;
+
+    // A sparse exact profile is still preferable to mixing a different rarity.
+    if (exactCatalog) return exactCatalog;
+    if (exactRarity) return exactRarity;
+
+    // Retain legacy / title-only sales only when no narrower match exists;
+    // the caller marks this broad benchmark as low confidence.
     return titleProfiles.find(item => normaliseSaleTitle(item.title) === title && valid(item)) || null;
   }
 
