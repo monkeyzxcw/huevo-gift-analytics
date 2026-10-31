@@ -884,9 +884,14 @@
       String(lot.title || "").trim().toLocaleLowerCase("ru") === title &&
       String(lot.rarity || "").trim().toLocaleLowerCase("ru") === rarity &&
       isNum(lot.price) && lot.price > 0);
-    const sale = salesProfileForGift({ title: item.title, rarity: item.rarity || "" });
-    if (sale && sale.match_scope !== "title" && Number(sale.count) >= 3 && isNum(sale.median) && sale.median > 0) {
-      return { value: sale.median, basis: "подтверждённые продажи", sample: sale.count };
+    const saleRows = state.data && state.data.sales && Array.isArray(state.data.sales.by_title_rarity)
+      ? state.data.sales.by_title_rarity : [];
+    const exactSale = rarity ? saleRows.find(row =>
+      normaliseSaleTitle(row.title) === title &&
+      normaliseSaleRarity(row.rarity) === rarity &&
+      isNum(row.median) && row.median > 0) : null;
+    if (exactSale && Number(exactSale.count) >= 3) {
+      return { value: exactSale.median, basis: "подтверждённые продажи · точное название и редкость", sample: exactSale.count };
     }
     const offers = robustOfferReference(group.map(lot => lot.price));
     if (offers && !offers.ambiguous) return { value: offers.reference, basis: "активные объявления", sample: offers.sample_size };
@@ -898,9 +903,14 @@
     if (!list || !summary) return;
     clear(list); clear(summary);
     $("portfolioCount").textContent = fmt(state.portfolio.length) + " позиций";
+    const metricCard = (title, value, detail) => h("article", { class: "card" }, [
+      h("div", { class: "k", text: title }),
+      h("div", { class: "v", text: value }),
+      h("div", { class: "s", text: detail })
+    ]);
     if (!state.portfolio.length) {
       list.append(h("div", { class: "empty", text: "Портфель пока пуст. Добавь подарок, количество и цену покупки." }));
-      summary.append(card("Позиций", "0", "Добавь свои покупки"));
+      summary.append(metricCard("Позиций", "0", "Добавь свои покупки"));
       return;
     }
     let invested = 0, investedValued = 0, estimated = 0, valued = 0;
@@ -937,10 +947,10 @@
     });
     rows.forEach(row => list.append(row));
     summary.append(
-      card("Покупок", fmt(state.portfolio.length), "Разных позиций"),
-      card("Вложено", price(invested), "По сохранённой цене покупки"),
-      card("Оценка", valued ? price(estimated) : "Нет данных", fmt(valued) + " позиций с ориентиром"),
-      card("Результат", valued ? (estimated - investedValued >= 0 ? "+" : "") + price(estimated - investedValued) : "—", "Только по позициям с оценкой")
+      metricCard("Покупок", fmt(state.portfolio.length), "Разных позиций"),
+      metricCard("Вложено", price(invested), "По сохранённой цене покупки"),
+      metricCard("Оценка", valued ? price(estimated) : "Нет данных", fmt(valued) + " позиций с ориентиром"),
+      metricCard("Результат", valued ? (estimated - investedValued >= 0 ? "+" : "") + price(estimated - investedValued) : "—", "Только по позициям с оценкой")
     );
   }
 
