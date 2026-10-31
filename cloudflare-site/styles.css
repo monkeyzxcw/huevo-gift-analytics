@@ -966,3 +966,11 @@ button:disabled{cursor:not-allowed;filter:saturate(.55)}
 .history-range-toolbar .f{min-width:140px;flex:0 1 190px}
 .history-range-toolbar small{color:var(--muted);margin-left:auto;font-size:10px}
 .catalog-index-actions,.portfolio-actions{display:flex;justify-content:flex-end;margin:0 0 10px}
+
+.detail-image-gallery{display:grid;gap:7px;min-width:0}
+.detail-hero-image,.detail-hero-placeholder{width:112px;height:112px;object-fit:contain;border-radius:12px;background:#1b2119;border:1px solid var(--line);display:grid;place-items:center}
+.detail-hero-placeholder{font-size:42px}
+.detail-image-thumbs{display:flex;gap:5px;max-width:250px;overflow:auto;padding:2px}
+.detail-image-thumb{flex:0 0 38px;width:38px;height:38px;border:1px solid var(--line);border-radius:6px;background:#111610;padding:2px;cursor:pointer}
+.detail-image-thumb[aria-pressed=true]{border-color:var(--amnyam-acid);box-shadow:0 0 0 1px var(--amnyam-acid)}
+.detail-image-thumb img{display:block;width:100%;height:100%;object-fit:cover;border-radius:4px}
