@@ -100,7 +100,7 @@ test("three-second Live status endpoint reads only the Live row and skips schema
       statements.push(sql);
       return {
         async first() {
-          if (sql.includes("SELECT items_json, fingerprint FROM live_page_state")) {
+          if (sql.includes("SELECT items_json, fingerprint") && sql.includes("FROM live_page_state")) {
             return {
               items_json: JSON.stringify(liveItems),
               fingerprint: "live-fingerprint",
