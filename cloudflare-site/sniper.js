@@ -153,8 +153,12 @@
     get: () => cleanRuleProfiles(state.ruleProfiles),
     set: value => {
       state.ruleProfiles = cleanRuleProfiles(value);
-      storageWrite(RULES_KEY + "." + state.profileKey, state.ruleProfiles);
-      renderRuleProfiles();
+      if (state.profileLoaded) {
+        storageWrite(RULES_KEY + "." + state.profileKey, state.ruleProfiles);
+        renderRuleProfiles();
+      } else {
+        window.AMNYAM_PENDING_RULE_PROFILES = state.ruleProfiles;
+      }
     }
   };
   if (Array.isArray(window.AMNYAM_PENDING_RULE_PROFILES)) {
@@ -166,6 +170,11 @@
   function loadEvents(profileKey) {
     state.profileKey = profileKey || "guest";
     loadRuleProfiles();
+    if (Array.isArray(window.AMNYAM_PENDING_RULE_PROFILES)) {
+      state.ruleProfiles = cleanRuleProfiles(window.AMNYAM_PENDING_RULE_PROFILES);
+      saveRuleProfiles();
+      delete window.AMNYAM_PENDING_RULE_PROFILES;
+    }
     const rawEvents = storageRead(EVENTS_KEY + "." + state.profileKey, []);
     const rawSeen = storageRead(SEEN_KEY + "." + state.profileKey, []);
     state.events = Array.isArray(rawEvents) ? rawEvents.filter((event) => event && typeof event.type === "string").slice(0, MAX_EVENTS) : [];
