@@ -878,11 +878,11 @@
   }
 
   function portfolioReference(item) {
-    const title = String(item.title || "").trim().toLocaleLowerCase("ru");
-    const rarity = String(item.rarity || "").trim().toLocaleLowerCase("ru");
+    const title = normaliseSaleTitle(item.title);
+    const rarity = normaliseSaleRarity(item.rarity);
     const group = state.lots.filter(lot => lot.active !== false &&
-      String(lot.title || "").trim().toLocaleLowerCase("ru") === title &&
-      String(lot.rarity || "").trim().toLocaleLowerCase("ru") === rarity &&
+      normaliseSaleTitle(lot.title) === title &&
+      normaliseSaleRarity(lot.rarity) === rarity &&
       isNum(lot.price) && lot.price > 0);
     const saleRows = state.data && state.data.sales && Array.isArray(state.data.sales.by_title_rarity)
       ? state.data.sales.by_title_rarity : [];
@@ -1858,7 +1858,7 @@
   }
 
   function normaliseSaleRarity(value) {
-    return String(value || "").trim().toLocaleLowerCase("ru").replace(/\\s+/g, " ");
+    return String(value || "").trim().toLocaleLowerCase("ru").replace(/\s+/g, " ");
   }
 
   function salesReferenceDescription(lot) {
