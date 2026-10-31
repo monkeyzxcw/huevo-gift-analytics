@@ -2433,6 +2433,9 @@
 
 
   // ---------- huEVO identity + cross-device profile sync ----------
+  window.addEventListener("amnyam:sniper-rules", () => {
+    if (accountState.user && !accountState.hydrating) queueProfileSave();
+  });
   function profilePayload() {
     return {
       favorites: state.favorites.slice(0, 5000),
@@ -2461,8 +2464,7 @@
     state.alertedTargets = Array.isArray(p.alertedTargets) ? [...new Set(p.alertedTargets.map(String).filter(id => /^\d{1,20}$/.test(id)))].slice(0, 5000) : [];
     state.savedFilters = Array.isArray(p.savedFilters) ? p.savedFilters.filter(item => item && typeof item.name === "string" && item.name.trim() && item.filters && typeof item.filters === "object").slice(0, 25) : [];
     state.portfolio = Array.isArray(p.portfolio) ? p.portfolio.filter(item => item && typeof item.title === "string" && item.title.trim() && Number.isSafeInteger(item.quantity) && item.quantity > 0 && Number.isSafeInteger(item.purchase_price) && item.purchase_price > 0).slice(0, 100) : [];
-    if (window.AMNYAM_RULE_PROFILES && window.AMNYAM_RULE_PROFILES.set) window.AMNYAM_RULE_PROFILES.set(Array.isArray(p.sniperRuleProfiles) ? p.sniperRuleProfiles : []);
-    else window.AMNYAM_PENDING_RULE_PROFILES = Array.isArray(p.sniperRuleProfiles) ? p.sniperRuleProfiles : [];
+    window.AMNYAM_PENDING_RULE_PROFILES = Array.isArray(p.sniperRuleProfiles) ? p.sniperRuleProfiles : [];
     const prefs = p.preferences && typeof p.preferences === "object" ? p.preferences : {};
     alertSoundEnabled = prefs.alertSound === true;
     sniperSoundPrefs = { new: prefs.sniperNewSound === true, deal: prefs.sniperDealSound === true };
@@ -2488,7 +2490,6 @@
     state.alertedTargets = readAlertedTargets();
     state.savedFilters = readSavedFilters();
     state.portfolio = readPortfolio();
-    if (window.AMNYAM_RULE_PROFILES && window.AMNYAM_RULE_PROFILES.set) window.AMNYAM_RULE_PROFILES.set([]);
     try {
       alertSoundEnabled = localStorage.getItem(ALERT_SOUND_KEY) === "on";
       sniperSoundPrefs = {
