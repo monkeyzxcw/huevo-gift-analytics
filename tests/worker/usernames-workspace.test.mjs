@@ -81,3 +81,11 @@ test("username analytics uses CSP-safe CSS bars and JavaScript syntax is checked
   assert.match(css, /\.username-bar-h-100\s*\{height:100%\}/);
   assert.doesNotMatch(css.slice(css.indexOf("/* Separate Huevo market workspaces"), css.length), /<style/i);
 });
+
+test("username market validates inverted price ranges and parses grouped thousands", async () => {
+  const script = await read("cloudflare-site/usernames.js");
+  assert.match(script, /if \\(minValue != null && maxValue != null && minValue > maxValue\\)/);
+  assert.match(script, /Минимальная цена не может быть выше максимальной/);
+  assert.match(script, /\\d\\{1,3\\}\\(\\?:,\\d\\{3\\}\\)\\+/);
+  assert.match(script, /normal = normal\\.replace\\(\\/,/);
+});
