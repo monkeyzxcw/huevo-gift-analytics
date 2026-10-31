@@ -95,11 +95,12 @@ test("all market tabs stay available without huEVO login and profile dialog expl
       await tab.click();
       assert.equal(await tab.getAttribute("aria-selected"), "true", view);
     }
-    for (const view of ["cheap", "support"]) {
-      const tab = page.locator('#workspaceSubnav [data-view="' + view + '"]');
-      await tab.click();
-      assert.equal(await tab.getAttribute("aria-selected"), "true", view);
-    }
+    await page.click('#mainNav [data-view="deals"]');
+    await page.click('#workspaceSubnav [data-view="cheap"]');
+    assert.equal(await page.locator('#workspaceSubnav [data-view="cheap"]').getAttribute("aria-selected"), "true", "cheap");
+    await page.click('#mainNav [data-view="appearance"]');
+    await page.click('#workspaceSubnav [data-view="support"]');
+    assert.equal(await page.locator('#workspaceSubnav [data-view="support"]').getAttribute("aria-selected"), "true", "support");
     await page.click("#accountButton");
     await page.waitForSelector("#accountDialog[open]");
     assert.equal(await page.isVisible("#accountGuest"), true);
