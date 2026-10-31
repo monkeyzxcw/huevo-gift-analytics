@@ -1265,7 +1265,8 @@ test("Sniper shows a live new-lot event and calculates scenarios from confirmed 
       generated_at: NOW,
       summary: { count: 20, unknown: 0, median: 1000, min: 800, max: 1200, enough_data: true },
       by_title: [{ title: "Звезда", count: 20, median: 1000, p25: 900, p75: 1100,
-        history: [{ date: "2026-10-29", median: 980 }, { date: "2026-10-30", median: 1000 }] }]
+        history: [{ date: "2026-10-29", median: 980 }, { date: "2026-10-30", median: 1000 }] }],
+      by_title_rarity: [{ title: "Звезда", rarity: "Редкий", count: 20, median: 1000, p25: 900, p75: 1100 }]
     }
   });
   let liveCalls = 0;
