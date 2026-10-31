@@ -321,6 +321,7 @@
         // rebuilding cards, charts, rows, the active tab, or the search controls.
         state.data = n.raw;
         renderState();
+        renderSourceHealth();
         // Price targets must be evaluated on every successful poll, even when the
         // visible snapshot signature is unchanged and the background tab is throttled.
         checkTargetAlerts();
@@ -734,6 +735,92 @@
     const list = clear($("topList"));
     if (!top.length) list.append(h("li", { class: "empty", text: "Нет лотов с ценой." }));
     top.forEach((l) => list.append(lotItem(l, price(l.price), "#" + l.lot_id + (l.rarity ? " · " + l.rarity : ""))));
+  }
+
+  // ---------- collector source health: expose real per-source progress, never infer success ----------
+  function renderSourceHealth() {
+    const data = state.data || {};
+    const collector = data.collector && typeof data.collector === "object" ? data.collector : {};
+    const live = data.live && typeof data.live === "object" ? data.live : {};
+    const salesState = collector.sales_history || data.sales_history_state || {};
+    const indexState = collector.gift_catalog_index || {};
+    const detailState = collector.gift_catalog_details || {};
+    const instanceState = collector.gift_instances || {};
+    const salesRows = Array.isArray(data.sales_history) ? data.sales_history : [];
+    const catalogIndex = Array.isArray(data.gift_catalog_index) ? data.gift_catalog_index : [];
+    const catalogDetails = Array.isArray(data.gift_catalogs) ? data.gift_catalogs : [];
+
+    const statusText = (value) => ({
+      ok: "Успешно",
+      blocked: "Пауза Huevo",
+      error: "Ошибка",
+      pending: "В очереди",
+      saved: "Данные сохранены",
+      fresh: "Обновляется",
+      stale: "Нет свежего сигнала",
+      unknown: "Нет метаданных"
+    }[String(value || "unknown").toLowerCase()] || "Неизвестный статус");
+    const dateText = (value) => {
+      if (!value) return "Время проверки не записано";
+      const date = new Date(value);
+      return Number.isFinite(date.getTime()) ? "Проверено: " + when(date.toISOString()) : "Время проверки не распознано";
+    };
+    const card = (name, status, value, detail, checkedAt) => {
+      const key = ["ok", "blocked", "error", "pending", "saved", "fresh", "stale"].includes(status) ? status : "unknown";
+      return h("article", { class: "source-health-card" }, [
+        h("div", { class: "source-health-head" }, [
+          h("b", { text: name }),
+          h("span", { class: "source-health-status " + key, text: statusText(key) })
+        ]),
+        h("strong", { class: "source-health-value", text: value }),
+        h("p", { class: "source-health-detail", text: detail }),
+        h("small", { class: "source-health-time", text: dateText(checkedAt) })
+      ]);
+    };
+
+    const marketCount = Number.isFinite(Number(collector.lots)) ? Number(collector.lots) : state.lots.length;
+    const marketStatus = collector.status || (data.generated_at ? "saved" : "unknown");
+    const liveStatus = live.fresh ? "fresh" : (live.enabled ? "stale" : "unknown");
+    const salesCount = Number.isFinite(Number(salesState.total)) ? Number(salesState.total)
+      : (Number.isFinite(Number(salesState.total_records)) ? Number(salesState.total_records) : salesRows.length);
+    const indexCount = Number.isFinite(Number(indexState.cards)) ? Number(indexState.cards) : catalogIndex.length;
+    const detailsCount = Number.isFinite(Number(detailState.known)) ? Number(detailState.known) : catalogDetails.length;
+    const cards = [
+      card("Полный рынок", marketStatus, fmt(marketCount) + " лотов",
+        (collector.pages ? fmt(collector.pages) + " страниц в последнем проходе" : "Число страниц последнего прохода не записано") +
+        (collector.message ? " · " + collector.message : ""), collector.checked_at || data.generated_at),
+      card("Live · первая страница", liveStatus, fmt(Number(live.item_count) || 0) + " лотов",
+        live.last_poll_at ? "Последний сигнал: " + when(live.last_poll_at) : "Локальный опрос первой страницы ещё не поступал",
+        live.last_poll_at),
+      card("История завершённых продаж", salesState.status || (salesCount ? "saved" : "unknown"),
+        fmt(salesCount) + " записей",
+        (salesState.pages ? fmt(salesState.pages) + " страниц обработано в последнем цикле" : "Страницы истории ещё не подтверждены") +
+        (salesState.total_pages ? " · всего страниц: " + fmt(salesState.total_pages) : "") +
+        (salesState.new_records ? " · новых: " + fmt(salesState.new_records) : (salesState.updated ? " · новых: " + fmt(salesState.updated) : "")),
+        salesState.checked_at),
+      card("Независимый индекс /gifts", indexState.status || (indexCount ? "saved" : "unknown"),
+        fmt(indexCount) + " карточек",
+        "Канонический список подарков, собирается независимо от активных объявлений",
+        indexState.checked_at || data.gift_catalog_index_checked_at),
+      card("Подробности каталога", detailState.status || (detailsCount ? "saved" : "unknown"),
+        fmt(Number(detailState.updated) || 0) + " обновлено",
+        fmt(detailsCount) + " полных карточек · из " + fmt(Number(detailState.index_total) || indexCount) + " в индексе · попыток: " + fmt(Number(detailState.attempted) || 0),
+        detailState.checked_at),
+      card("Экземпляры и история владельцев", instanceState.status || "unknown",
+        fmt(Number(instanceState.updated) || 0) + " обновлено",
+        fmt(Number(instanceState.events_added) || 0) + " новых событий истории · попыток: " +
+        fmt(Number(instanceState.attempted) || 0) + " · пакетов: " + fmt(Number(instanceState.batches) || 0),
+        instanceState.checked_at)
+    ];
+
+    const grid = clear($("sourceHealthGrid"));
+    grid.append(...cards);
+    const checked = [collector.checked_at, salesState.checked_at, indexState.checked_at,
+      detailState.checked_at, instanceState.checked_at, live.last_poll_at]
+      .filter(Boolean).map(value => new Date(value).getTime()).filter(Number.isFinite);
+    $("sourceHealthUpdated").textContent = checked.length
+      ? "Последняя активность · " + when(new Date(Math.max(...checked)).toISOString())
+      : "Ожидаются первые метаданные сборщика";
   }
 
   // ---------- sales (only when the file really contains confirmed data) ----------
@@ -2222,7 +2309,7 @@
     checkTargetAlerts();
     renderCommandCenter();
     renderDeals();renderDayPicks();renderCheapest();renderFavorites();
-    renderCards(); renderCharts(); renderChanges(); renderTop(); renderSales(); fillFacets();
+    renderCards(); renderCharts(); renderChanges(); renderTop(); renderSales(); renderSourceHealth(); fillFacets();
     renderSavedFilters();setSortMenuOptions();applyFilters();
     switchView(state.activeView);
     publishMarketData();
