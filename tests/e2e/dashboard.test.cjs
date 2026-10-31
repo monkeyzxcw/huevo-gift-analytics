@@ -485,7 +485,7 @@ test("page has no inline handlers/styles and fits a phone screen", async () => {
 test("AMNYAM navigation renders all views and author support shows five levels", async () => {
   const { browser, page, problems } = await open(serve(dataV2()), { width: 1280, height: 900 });
   await page.waitForSelector("#content:not(.hide)");
-  for (const view of ["overview", "market", "deals", "cheap", "analytics", "favorites", "support"]) {
+  for (const view of ["overview", "market", "sniper", "deals", "cheap", "analytics", "favorites", "support"]) {
     await page.click('#mainNav [data-view="' + view + '"]');
     assert.equal(await page.getAttribute('#mainNav [data-view="' + view + '"]', "aria-selected"), "true", view + " tab selected");
     assert.equal(await page.locator('[data-view-section="' + view + '"]:not(.view-hidden)').count() > 0, true, view + " view visible");
@@ -952,9 +952,11 @@ test("main navigation supports ArrowLeft, ArrowRight, Home and End with roving f
     assert.equal(await tab("market").getAttribute("aria-selected"), "true");
     assert.equal(await tab("market").evaluate(node => document.activeElement === node), true);
     await page.keyboard.press("ArrowRight");
+    assert.equal(await tab("sniper").getAttribute("aria-selected"), "true");
+    await page.keyboard.press("ArrowRight");
     assert.equal(await tab("deals").getAttribute("aria-selected"), "true");
     await page.keyboard.press("ArrowLeft");
-    assert.equal(await tab("market").getAttribute("aria-selected"), "true");
+    assert.equal(await tab("sniper").getAttribute("aria-selected"), "true");
     await page.keyboard.press("End");
     assert.equal(await tab("help").getAttribute("aria-selected"), "true");
     await page.keyboard.press("Home");
