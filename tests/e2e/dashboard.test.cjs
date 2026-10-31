@@ -98,9 +98,13 @@ test("full v2 data: cards, charts, changes, top, table render with no errors", a
   await page.waitForSelector("#content:not(.hide)");
   const heroArtwork = await page.locator("#hero").evaluate((el) => getComputedStyle(el).backgroundImage);
   assert.ok(heroArtwork.includes("amnyam-battlefield.svg"), "fantasy battlefield artwork is attached to the real hero section");
-  const artworkResponse = await page.request.get("http://site.test/assets/amnyam-battlefield.svg");
-  assert.equal(artworkResponse.status(), 200, "hero artwork is served from the static asset directory");
-  assert.ok(artworkResponse.headers()["content-type"].includes("image/svg+xml"));
+  const artworkResponse = await page.evaluate(async () => {
+    const response = await fetch("/assets/amnyam-battlefield.svg");
+    return { status: response.status, contentType: response.headers.get("content-type"), body: await response.text() };
+  });
+  assert.equal(artworkResponse.status, 200, "hero artwork is served from the static asset directory");
+  assert.ok(artworkResponse.contentType.includes("image/svg+xml"));
+  assert.ok(artworkResponse.body.startsWith("<svg"), "hero artwork is a valid SVG document");
   assert.match(await page.textContent("#cards"), /Активные лоты/);
   assert.equal(await page.locator("#cards .card").count(), 6);
   assert.ok(await page.locator("#chartBins svg rect").count() >= 3, "price distribution bars");
