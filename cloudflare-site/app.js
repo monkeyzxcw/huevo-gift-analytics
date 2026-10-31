@@ -865,6 +865,45 @@
     renderRows();
     updateViewCounts();
   }
+  function exportMarketCsv() {
+    const rows = Array.isArray(state.view) ? state.view : [];
+    if (!rows.length) {
+      $("exportCsvStatus").textContent = "Нет строк для экспорта";
+      return;
+    }
+    const columns = [
+      ["ID лота", lot => lot.lot_id],
+      ["Подарок", lot => lot.title],
+      ["Серийный номер", lot => lot.serial],
+      ["Цена", lot => lot.price],
+      ["Редкость", lot => lot.rarity],
+      ["Статус", lot => lot.status],
+      ["Похожие лоты", lot => lot._lotCount],
+      ["Изменение к минимуму, %", lot => lot._delta],
+      ["Впервые замечен", lot => lot.first_seen],
+      ["Последнее наблюдение", lot => lot.last_seen],
+      ["Ссылка", lot => lot.lot_url]
+    ];
+    const cell = value => {
+      let text = value == null ? "" : String(value);
+      if (/^[\\s]*[=+@\\-\\t\\r]/.test(text)) text = "'" + text;
+      return '"' + text.replace(/"/g, '""') + '"';
+    };
+    const csv = [columns.map(column => cell(column[0])).join(";")]
+      .concat(rows.map(lot => columns.map(column => cell(column[1](lot))).join(";")))
+      .join("\r\n");
+    const blob = new Blob(["\\ufeff", csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "amnyam-market-" + new Date().toISOString().slice(0, 10) + ".csv";
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+    $("exportCsvStatus").textContent = "Экспортировано строк: " + fmt(rows.length);
+  }
+
   function updateCompareButton(){const b=$("compareSelected");b.textContent="Сравнить ("+state.compareIds.length+"/4)";b.disabled=state.compareIds.length<2;}
   function renderRows(){
     if(state.catalogMode==="gifts"){renderGroupRows();return;}
@@ -2290,6 +2329,7 @@
     const token=button.dataset.searchToken||"",input=$("search");input.value=(input.value.trim()+" "+token).trim();$("globalSearch").value=input.value;state.page=0;switchView("market",true);applyFilters();
   }));
   $("dealSort").addEventListener("change",renderDeals);
+  $("exportCsv").addEventListener("click",exportMarketCsv);
   $("saveBelowBestTarget").addEventListener("click",()=>{const id=state._belowBestId;if(id)saveTarget(id,$("belowBestTarget").value);});
   $("belowBestMinus10").addEventListener("click",()=>{const id=state._belowBestId,lot=state.lots.find(item=>String(item.lot_id)===String(id));if(lot&&isNum(lot.price)&&lot.price>0){$("belowBestTarget").value=String(Math.max(1,Math.floor(lot.price*.9)));saveTarget(id,$("belowBestTarget").value);}});
   $("supportAmounts").addEventListener("click",event=>{const b=event.target.closest("[data-amount]");if(b&&!b.disabled)makeSupportPayment(b.dataset.amount);});
