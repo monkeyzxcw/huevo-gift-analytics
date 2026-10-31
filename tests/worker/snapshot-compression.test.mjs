@@ -13,12 +13,12 @@ function createD1Mock() {
         bind(...values) { params = values; return this; },
         async run() {
           if (sql.includes("INSERT INTO full_snapshot")) {
-            snapshotRow = { data_json: params[0] };
+            snapshotRow = { data_json: params[0], generated_at: params[1], updated_at: params[2] };
           }
           return {};
         },
         async first() {
-          if (sql.includes("SELECT data_json FROM full_snapshot")) return snapshotRow;
+          if (sql.includes("SELECT data_json") && sql.includes("FROM full_snapshot")) return snapshotRow;
           return null;
         },
         async all() {
