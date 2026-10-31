@@ -1117,6 +1117,9 @@
       : (Number.isFinite(Number(salesState.total_records)) ? Number(salesState.total_records) : salesRows.length);
     const indexCount = Number.isFinite(Number(indexState.cards)) ? Number(indexState.cards) : catalogIndex.length;
     const detailsCount = Number.isFinite(Number(detailState.known)) ? Number(detailState.known) : catalogDetails.length;
+    const detailsIndexTotal = Number(detailState.index_total) || indexCount;
+    const detailsCoverage = detailsIndexTotal > 0
+      ? Math.min(100, Math.round(detailsCount / detailsIndexTotal * 100)) : null;
     const cards = [
       card("Полный рынок", marketStatus, fmt(marketCount) + " лотов",
         (collector.pages ? fmt(collector.pages) + " страниц в последнем проходе" : "Число страниц последнего прохода не записано") +
@@ -1136,7 +1139,9 @@
         indexState.checked_at || data.gift_catalog_index_checked_at),
       card("Подробности каталога", detailState.status || (detailsCount ? "saved" : "unknown"),
         fmt(Number(detailState.updated) || 0) + " обновлено",
-        fmt(detailsCount) + " полных карточек · из " + fmt(Number(detailState.index_total) || indexCount) + " в индексе · попыток: " + fmt(Number(detailState.attempted) || 0),
+        fmt(detailsCount) + " полных карточек · из " + fmt(detailsIndexTotal) + " в индексе" +
+        (detailsCoverage == null ? "" : " · покрытие " + detailsCoverage + "%") +
+        " · попыток: " + fmt(Number(detailState.attempted) || 0),
         detailState.checked_at),
       card("Экземпляры и история владельцев", instanceState.status || "unknown",
         fmt(Number(instanceState.updated) || 0) + " обновлено",
