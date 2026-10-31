@@ -135,12 +135,14 @@ jobs:
               try:
                   root_status, root_headers, root_body = request_bytes("/", "text/html")
                   art_status, art_headers, art_body = request_bytes("/assets/amnyam-battlefield.webp", "image/webp")
+                  field_kit_status, field_kit_headers, field_kit_body = request_bytes("/field-kit.js", "text/javascript")
                   health = get_json("/api/health")
                   live = get_json("/api/live/status")
                   snapshot = get_json("/data.json")
                   checks = {
                       "dashboard_html_ready": root_status == 200 and b"AMNYAM" in root_body,
                       "hero_art_ready": art_status == 200 and "image/webp" in art_headers.get("Content-Type", ""),
+                      "field_kit_ready": field_kit_status == 200 and b"20 \\xd0\\xb8\\xd0\\xbd\\xd1\\x81\\xd1\\x82\\xd1\\x80\\xd1\\x83\\xd0\\xbc\\xd0\\xb5\\xd0\\xbd\\xd1\\x82\\xd0\\xbe\\xd0\\xb2" in field_kit_body,
                       "health_ok": health.get("ok") is True,
                       "d1_configured": health.get("storage_configured") is True,
                       "schema_ready": health.get("schema_ready") is True,
