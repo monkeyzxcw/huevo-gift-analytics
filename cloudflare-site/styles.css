@@ -800,3 +800,88 @@ button:disabled{cursor:not-allowed;filter:saturate(.55)}
 .market-export{display:flex;align-items:center;gap:8px;margin-left:auto}
 .market-export small{font-size:10px;color:var(--muted)}
 @media(max-width:700px){.market-export{width:100%;margin-left:0;justify-content:space-between}}
+
+
+/* Daily picks: explicit image / detail / action tracks prevent title collisions. */
+.day-pick-card{
+  grid-template-columns:58px minmax(0,1fr)!important;
+  align-items:start!important;
+  gap:10px!important;
+  min-width:0;
+  padding:14px!important;
+  border:1px solid #35452a!important;
+  border-radius:9px!important;
+  background:linear-gradient(135deg,#141b0f,#0d100b 76%)!important;
+  box-shadow:inset 0 1px rgba(255,255,255,.025);
+}
+.day-pick-card>.day-pick-label{
+  grid-column:1/-1;
+  grid-row:1;
+  min-width:0;
+  margin:0 0 2px;
+  padding-bottom:10px;
+}
+.day-pick-card>.thumb{
+  grid-column:1;
+  grid-row:2;
+  width:58px!important;
+  height:58px!important;
+  max-width:100%;
+  aspect-ratio:1;
+  object-fit:cover;
+  border-radius:8px;
+  border-color:#465a32;
+  box-shadow:0 5px 16px rgba(0,0,0,.24);
+}
+.day-pick-card>.day-pick-content{
+  grid-column:2;
+  grid-row:2;
+  min-width:0;
+  width:100%;
+}
+.day-pick-card>.day-pick-content .t{
+  font-size:13px;
+  line-height:1.35;
+  overflow-wrap:anywhere;
+}
+.day-pick-card>.day-pick-content .m{font-size:10px;line-height:1.45;overflow-wrap:anywhere}
+.day-pick-card>.day-pick-actions{
+  grid-column:1/-1;
+  grid-row:3;
+  min-width:0;
+  margin-top:9px;
+  padding-top:10px;
+  border-top:1px solid #2f3b27;
+  text-align:left;
+}
+.day-pick-card .deal-actions{
+  min-width:0;
+  display:flex;
+  flex-direction:row;
+  justify-content:flex-start;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:7px;
+}
+.day-pick-card .deal-actions .btn{min-height:32px;padding:7px 9px}
+.day-pick-card .deal-metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.day-pick-card .deal-metric{min-width:0;min-height:50px;padding:7px}
+.day-pick-card .deal-target-row{min-width:0}
+.day-pick-card .deal-target-row .deal-target-input{
+  flex:1 1 100%;
+  width:100%!important;
+  max-width:none!important;
+}
+.day-pick-card .deal-target-row .target-save,
+.day-pick-card .deal-target-row .target-quick{flex:1 1 auto}
+@media(max-width:650px){
+  .day-pick-card{grid-template-columns:54px minmax(0,1fr)!important;padding:12px!important}
+  .day-pick-card>.thumb{width:54px!important;height:54px!important}
+  .day-pick-card .deal-actions{flex-direction:row;align-items:center;justify-content:flex-start}
+}
+@media(max-width:380px){
+  .day-pick-card .deal-metrics{grid-template-columns:1fr}
+}
+@media(prefers-reduced-motion:reduce){
+  body::before{animation:none!important}
+}
