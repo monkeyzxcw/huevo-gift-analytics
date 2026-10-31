@@ -3,7 +3,10 @@ import { verifyHuevoLaunch } from "./huevo_launch.js";
 
 const HUEVO_HOSTS = new Set(["huevo.su", "huevo.departament.site"]);
 const MAX_LIVE_BODY_BYTES = 256_000;
-const MAX_SNAPSHOT_BODY_BYTES = 1_500_000;
+const MAX_SNAPSHOT_BODY_BYTES = 12_000_000;
+const MAX_COMPRESSED_SNAPSHOT_BODY_BYTES = 1_400_000;
+const MAX_STORED_SNAPSHOT_BYTES = 1_850_000;
+const COMPRESSED_SNAPSHOT_PREFIX = "gzip64:";
 const LIVE_FRESH_SECONDS = 15;
 const LIVE_MERGE_SECONDS = 60 * 60;
 const DEFAULT_RETENTION_HOURS = 72;
@@ -117,8 +120,76 @@ function sanitizeLiveItems(value) {
   return items;
 }
 
+async function decompressGzip(bytes, maxBytes) {
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+  const reader = stream.getReader();
+  const chunks = [];
+  let total = 0;
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      throw new Error("decompressed body too large");
+    }
+    chunks.push(value);
+  }
+  const output = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    output.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return output;
+}
+
+function bytesToBase64(bytes) {
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    const slice = bytes.subarray(offset, Math.min(offset + 0x8000, bytes.length));
+    for (let i = 0; i < slice.length; i++) binary += String.fromCharCode(slice[i]);
+  }
+  return btoa(binary);
+}
+
+function base64ToBytes(value) {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
 async function readJsonBody(request, limit) {
+  const encoding = String(request.headers.get("Content-Encoding") || "").trim().toLowerCase();
   const declared = Number(request.headers.get("Content-Length") || 0);
+
+  if (encoding === "gzip") {
+    if (declared > MAX_COMPRESSED_SNAPSHOT_BODY_BYTES) {
+      return { error: "compressed request body too large", status: 413 };
+    }
+    let compressedBytes;
+    let decodedBytes;
+    try {
+      compressedBytes = new Uint8Array(await request.arrayBuffer());
+      if (compressedBytes.byteLength > MAX_COMPRESSED_SNAPSHOT_BODY_BYTES) {
+        return { error: "compressed request body too large", status: 413 };
+      }
+      decodedBytes = await decompressGzip(compressedBytes, limit);
+    } catch (error) {
+      const tooLarge = String(error && error.message || "").includes("too large");
+      return { error: tooLarge ? "decompressed request body too large" : "invalid gzip request body", status: tooLarge ? 413 : 400 };
+    }
+    try {
+      return { value: JSON.parse(new TextDecoder().decode(decodedBytes)), compressedBytes };
+    } catch (_) {
+      return { error: "expected valid JSON", status: 400 };
+    }
+  }
+
+  if (encoding && encoding !== "identity") {
+    return { error: "unsupported content encoding", status: 415 };
+  }
   if (declared > limit) return { error: "request body too large", status: 413 };
   const raw = await request.text();
   if (new TextEncoder().encode(raw).byteLength > limit) return { error: "request body too large", status: 413 };
@@ -127,6 +198,14 @@ async function readJsonBody(request, limit) {
   } catch (_) {
     return { error: "expected valid JSON", status: 400 };
   }
+}
+
+async function parseStoredSnapshot(value) {
+  const stored = String(value || "");
+  if (!stored.startsWith(COMPRESSED_SNAPSHOT_PREFIX)) return JSON.parse(stored);
+  const compressed = base64ToBytes(stored.slice(COMPRESSED_SNAPSHOT_PREFIX.length));
+  const decoded = await decompressGzip(compressed, MAX_SNAPSHOT_BODY_BYTES);
+  return JSON.parse(new TextDecoder().decode(decoded));
 }
 
 async function ensureSupportSchema(env) {
@@ -312,7 +391,7 @@ async function loadPublishedSnapshot(request, env) {
   if (env.DB) {
     try {
       const row = await env.DB.prepare("SELECT data_json FROM full_snapshot WHERE id = 1").first();
-      if (row && row.data_json) data = JSON.parse(row.data_json);
+      if (row && row.data_json) data = await parseStoredSnapshot(row.data_json);
     } catch (_) {
       // Before D1 migrations are applied, gracefully use the deployed static baseline.
     }
@@ -456,16 +535,33 @@ async function storeFullSnapshot(request, env, ctx) {
     return jsonResponse(request, env, { ok: false, error: "snapshot needs a generated_at timestamp and non-empty lots array" }, 400);
   }
   const writtenAt = new Date().toISOString();
+  let storedValue;
   try {
+    if (parsed.compressedBytes) {
+      storedValue = COMPRESSED_SNAPSHOT_PREFIX + bytesToBase64(parsed.compressedBytes);
+    } else {
+      storedValue = JSON.stringify(data);
+    }
+    const storedBytes = new TextEncoder().encode(storedValue).byteLength;
+    if (storedBytes > MAX_STORED_SNAPSHOT_BYTES) {
+      return jsonResponse(request, env, {
+        ok: false,
+        error: "snapshot is larger than the safe D1 row limit after compression",
+        stored_bytes: storedBytes,
+        max_stored_bytes: MAX_STORED_SNAPSHOT_BYTES,
+      }, 413);
+    }
     await env.DB.prepare(
       "INSERT INTO full_snapshot (id, data_json, generated_at, updated_at) VALUES (1, ?, ?, ?) " +
       "ON CONFLICT(id) DO UPDATE SET data_json=excluded.data_json, generated_at=excluded.generated_at, updated_at=excluded.updated_at"
-    ).bind(JSON.stringify(data), data.generated_at, writtenAt).run();
+    ).bind(storedValue, data.generated_at, writtenAt).run();
   } catch (_) {
     return jsonResponse(request, env, { ok: false, error: "could not store snapshot; check D1 migrations" }, 503);
   }
   return jsonResponse(request, env, {
     ok: true, stored_at: writtenAt, generated_at: data.generated_at, lots: data.lots.length,
+    compressed: storedValue.startsWith(COMPRESSED_SNAPSHOT_PREFIX),
+    stored_bytes: new TextEncoder().encode(storedValue).byteLength,
     collector_status: data.collector && data.collector.status || "unknown",
   });
 }
