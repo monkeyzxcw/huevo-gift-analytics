@@ -968,3 +968,45 @@ test("main navigation supports ArrowLeft, ArrowRight, Home and End with roving f
   }
 });
 
+
+
+test("Sniper shows a live new-lot event and calculates scenarios from confirmed sale data", async () => {
+  let latest = dataV2({
+    sales: {
+      generated_at: NOW,
+      summary: { count: 20, unknown: 0, median: 1000, min: 800, max: 1200, enough_data: true },
+      by_title: [{ title: "Звезда", count: 20, median: 1000, p25: 900, p75: 1100,
+        history: [{ date: "2026-10-29", median: 980 }, { date: "2026-10-30", median: 1000 }] }]
+    }
+  });
+  const { browser, page, problems } = await open((route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify(latest)
+  }));
+  try {
+    await page.waitForSelector("#content:not(.hide)");
+    await page.click('#mainNav [data-view="sniper"]');
+    assert.equal(await page.locator("#sniperPanel:not(.view-hidden)").count(), 1);
+    assert.match(await page.textContent("#sniperCalcResult"), /Осторожный|цену покупки/i);
+    await page.fill("#sniperBuyPrice", "800");
+    await page.waitForFunction(() => document.querySelector("#sniperCalcResult").textContent.includes("900"));
+    assert.match(await page.textContent("#sniperCalcResult"), /Подтверждённые продажи/);
+    assert.match(await page.textContent("#sniperCalcResult"), /Оптимистичный/);
+    assert.match(await page.textContent("#sniperRarityResult"), /характеристик|нескольких сопоставимых/i);
+
+    latest = JSON.parse(JSON.stringify(latest));
+    latest.lots.push({
+      lot_id: "900001", title: "Звезда", rarity: "Редкий", price: 650, status: "На продаже",
+      first_seen: new Date().toISOString(), last_seen: new Date().toISOString(), active: true,
+      lot_url: "https://huevo.su/market/lot/900001", history: []
+    });
+    await page.waitForFunction(() => document.querySelector("#sniperFeed").textContent.includes("900001"), { timeout: 12000 });
+    assert.match(await page.textContent("#sniperFeed"), /НОВЫЙ ЛОТ/);
+    await page.selectOption("#sniperType", "new");
+    assert.equal(await page.locator("#sniperFeed .sniper-event").count(), 1);
+    await page.fill("#sniperSearch", "not-found");
+    assert.match(await page.textContent("#sniperFeed"), /Нет событий под выбранные фильтры/);
+    assert.deepEqual(problems, []);
+  } finally {
+    await browser.close();
+  }
+});
