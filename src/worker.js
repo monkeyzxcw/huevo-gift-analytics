@@ -697,17 +697,25 @@ async function callHuevoApps(env, method, path, body) {
     "Accept": "application/json",
   };
   if (body !== undefined) headers["Content-Type"] = "application/json";
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
   try {
     const response = await fetch(HUEVO_APPS_API + path, {
       method,
       headers,
+      signal: controller.signal,
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     let data = {};
     try { data = await response.json(); } catch (_) {}
     return { status: response.status, body: data };
   } catch (_) {
+    if (controller.signal.aborted) {
+      return { status: 502, body: { error: { code: "huevo_api_timeout" } } };
+    }
     return { status: 502, body: { error: { code: "huevo_api_unavailable" } } };
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
