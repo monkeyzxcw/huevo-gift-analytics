@@ -713,8 +713,8 @@ test("sale benchmarks beat inflated asking prices and split offer clusters are s
   await second.browser.close();
 });
 
-test("daily-pick gift art stays beside the title at desktop and mobile widths", async () => {
-  for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
+test("daily-pick cards keep gift art, title, metrics and actions in separate responsive tracks", async () => {
+  for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }, { width: 360, height: 780 }]) {
     const { browser, page, problems } = await open(serve(dataV2()), viewport);
     await page.waitForSelector("#content:not(.hide)");
     await page.click('#mainNav [data-view="overview"]');
@@ -724,8 +724,11 @@ test("daily-pick gift art stays beside the title at desktop and mobile widths", 
       const card = cards.nth(i);
       const image = await card.locator(".thumb").boundingBox();
       const title = await card.locator(".t").boundingBox();
-      assert.ok(image && title, "each card has image and title boxes");
-      assert.ok(image.x + image.width <= title.x + 1, "gift art must not overlap or cover the title");
+      const actions = await card.locator(".day-pick-actions").boundingBox();
+      assert.ok(image && title && actions, "each card has image, title and action rows");
+      assert.ok(image.width >= 50 && image.height >= 50, "gift image remains large enough to identify");
+      assert.ok(image.x + image.width + 5 <= title.x + 1, "gift art must sit beside, not overlap, the title");
+      assert.ok(actions.y >= title.y + title.height - 1, "actions must remain below the title and metrics");
       assert.ok(await card.evaluate(el => el.scrollWidth <= el.clientWidth + 1), "card has no internal horizontal overflow");
     }
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
