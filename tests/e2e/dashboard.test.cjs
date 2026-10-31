@@ -1110,7 +1110,7 @@ test("support payment status failures do not invite duplicate intents and can be
   await browser.close();
 });
 
-test("main navigation supports ArrowLeft, ArrowRight, Home and End with roving focus", async () => {
+test("workspace navigation supports roving focus and contextual sub-tabs", async () => {
   const { browser, page, problems } = await open(serve(dataV2()));
   try {
     await page.waitForSelector("#content:not(.hide)");
@@ -1126,18 +1126,19 @@ test("main navigation supports ArrowLeft, ArrowRight, Home and End with roving f
     await page.keyboard.press("ArrowLeft");
     assert.equal(await tab("sniper").getAttribute("aria-selected"), "true");
     await page.keyboard.press("End");
-    assert.equal(await tab("help").getAttribute("aria-selected"), "true");
+    assert.equal(await tab("appearance").getAttribute("aria-selected"), "true");
     await page.keyboard.press("Home");
     assert.equal(await tab("overview").getAttribute("aria-selected"), "true");
     assert.equal(await tab("overview").evaluate(node => document.activeElement === node), true);
-    await tab("help").click();
+    await tab("appearance").click();
+    await page.click('#workspaceSubnav [data-view="help"]');
     assert.equal(await page.locator("#helpPanel:not(.view-hidden)").count(), 1);
+    assert.equal(await page.locator('#workspaceSubnav [data-view="help"]').getAttribute("aria-selected"), "true");
     assert.deepEqual(problems, []);
   } finally {
     await browser.close();
   }
 });
-
 
 
 test("Sniper shows a live new-lot event and calculates scenarios from confirmed sale data", async () => {
