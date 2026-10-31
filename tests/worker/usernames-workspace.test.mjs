@@ -30,7 +30,7 @@ test("username workspace imports JSON and CSV locally without scraping Huevo or 
   assert.match(script, /parseCsv/);
   assert.match(script, /parseImport/);
   assert.match(script, /localStorage/);
-  assert.match(script, /AMNYAM\.MARKET/);
+  assert.match(script, /AMNYAM_MARKET/);
   assert.match(script, /BASE_KEY/);
   assert.doesNotMatch(script, /\bfetch\s*\(|XMLHttpRequest|WebSocket/i, "username module must not attempt unapproved Huevo scraping");
   assert.doesNotMatch(script, /document\.cookie|localStorage\.getItem\(["'](?:huevo|cookie|session)/i);
