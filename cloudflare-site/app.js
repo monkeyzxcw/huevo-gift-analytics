@@ -324,7 +324,6 @@
         // Price targets must be evaluated on every successful poll, even when the
         // visible snapshot signature is unchanged and the background tab is throttled.
         checkTargetAlerts();
-        publishMarketData();
       }
     } catch (_) {
       // Preserve the last valid snapshot and back off network requests on intermittent failures.
@@ -1591,14 +1590,14 @@
     if(errorNode){errorNode.textContent="";errorNode.classList.remove("visible");}
     if(value===null){delete state.targets[id];state.alertedTargets=state.alertedTargets.filter(v=>v!==id);}
     else{state.targets[id]=value;if(!state.favorites.includes(id))state.favorites=[...state.favorites,id].slice(-5000);}
-    writeTargets();writeAlertedTargets();writeFavorites();checkTargetAlerts();renderFavorites();renderRows();renderDeals();renderDayPicks();updateViewCounts();return true;
+    writeTargets();writeAlertedTargets();writeFavorites();checkTargetAlerts();renderFavorites();renderRows();renderDeals();renderDayPicks();updateViewCounts();publishMarketData();return true;
   }
 
   function toggleFavorite(lotId){
     const id=String(lotId);
     if(state.favorites.includes(id)){state.favorites=state.favorites.filter(v=>v!==id);delete state.targets[id];state.alertedTargets=state.alertedTargets.filter(v=>v!==id);writeTargets();writeAlertedTargets();}
     else state.favorites=[...state.favorites,id].slice(-5000);
-    writeFavorites();renderFavorites();updateViewCounts();renderRows();renderDeals();renderDayPicks();
+    writeFavorites();renderFavorites();updateViewCounts();renderRows();renderDeals();renderDayPicks();publishMarketData();
   }
 
   function renderSavedFilters(){
