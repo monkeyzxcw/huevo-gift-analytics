@@ -1370,3 +1370,46 @@ test("CSV export contains the filtered market data and neutralises spreadsheet f
     await browser.close();
   }
 });
+
+
+test("AMNYAM Desk tools persist safely and work in the settings view", async () => {
+  const { browser, page, problems } = await open(serve(dataV2()));
+  await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="appearance"]');
+  assert.equal(await page.locator("#deskToolsTitle").count(), 1, "desk tools should be available from Appearance");
+  await page.selectOption("#deskDensity", "compact");
+  assert.ok(await page.locator("body").evaluate(el => el.classList.contains("desk-compact")));
+  await page.check("#deskContrast");
+  assert.ok(await page.locator("body").evaluate(el => el.classList.contains("desk-high-contrast")));
+  await page.check("#deskMotion");
+  assert.ok(await page.locator("body").evaluate(el => el.classList.contains("desk-reduce-motion")));
+  await page.click("#deskShortcutsOpen");
+  assert.equal(await page.locator("#deskShortcuts[open]").count(), 1);
+  await page.click("#deskShortcutsClose");
+
+  await page.evaluate(() => {
+    const a = document.createElement("a");
+    a.href = "https://huevo.su/market/lot/987654";
+    a.target = "_blank"; a.rel = "noopener noreferrer"; a.textContent = "Тестовый лот для заметки";
+    document.body.append(a); a.click(); a.remove();
+  });
+  await page.waitForFunction(() => document.querySelector("#deskRecentList a")?.textContent.includes("Тестовый лот"));
+  await page.locator("#deskRecentList button").first().click();
+  await page.fill("#deskNoteText", "Проверить историю продаж");
+  await page.click("#deskNoteSave");
+  assert.match(await page.textContent("#deskStatus"), /Заметка сохранена локально/);
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem("amnyam.desk.notes.v1") || "{}")["987654"]), "Проверить историю продаж");
+
+  const downloadPromise = page.waitForEvent("download");
+  await page.click("#deskExport");
+  const download = await downloadPromise;
+  assert.equal(download.suggestedFilename(), "amnyam-desk-backup.json");
+  const savedPath = await download.path();
+  const backup = JSON.parse(require("node:fs").readFileSync(savedPath, "utf8"));
+  assert.equal(backup.schema, "amnyam-desk-backup-v1");
+  assert.equal(backup.prefs.density, "compact");
+  assert.equal(backup.notes["987654"], "Проверить историю продаж");
+  assert.doesNotMatch(JSON.stringify(backup), /cookie|password|bearer|token/i, "desk backup must not contain credentials or secrets");
+  assert.deepEqual(problems, []);
+  await browser.close();
+});
