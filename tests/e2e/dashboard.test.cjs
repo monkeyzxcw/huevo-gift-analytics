@@ -7,7 +7,7 @@ const { chromium } = require("playwright");
 
 const SITE = path.resolve(__dirname, "../../cloudflare-site");
 const CSP = fs.readFileSync(path.join(SITE, "_headers"), "utf8").match(/Content-Security-Policy: (.+)/)[1].trim();
-const TYPES = { ".html": "text/html", ".css": "text/css", ".js": "application/javascript" };
+const TYPES = { ".html": "text/html", ".css": "text/css", ".js": "application/javascript", ".svg": "image/svg+xml" };
 const XSS = '<img src=x onerror="window.__xss=1">';
 const NOW = new Date().toISOString();
 const OPEN_BROWSERS = new Set();
@@ -96,6 +96,11 @@ const serve = (body, status = 200) => (route) => route.fulfill({ status, content
 test("full v2 data: cards, charts, changes, top, table render with no errors", async () => {
   const { browser, page, problems } = await open(serve(dataV2()));
   await page.waitForSelector("#content:not(.hide)");
+  const heroArtwork = await page.locator("#hero").evaluate((el) => getComputedStyle(el).backgroundImage);
+  assert.match(heroArtwork, /amnyam-battlefield\\.svg/, "fantasy battlefield artwork is attached to the real hero section");
+  const artworkResponse = await page.request.get("http://site.test/assets/amnyam-battlefield.svg");
+  assert.equal(artworkResponse.status(), 200, "hero artwork is served from the static asset directory");
+  assert.match(artworkResponse.headers()["content-type"], /image\\/svg\\+xml/);
   assert.match(await page.textContent("#cards"), /Активные лоты/);
   assert.equal(await page.locator("#cards .card").count(), 6);
   assert.ok(await page.locator("#chartBins svg rect").count() >= 3, "price distribution bars");
