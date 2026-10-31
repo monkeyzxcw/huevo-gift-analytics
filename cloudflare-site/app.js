@@ -133,6 +133,11 @@
     changeKind:"new",liveFingerprint:null,compareIds:[],activeView:"overview",favorites:readFavorites(),
     targets:readTargets(),alertedTargets:readAlertedTargets(),savedFilters:readSavedFilters()
   };
+  function publishMarketData() {
+    const detail = { data: state.data, lots: state.lots, targets: { ...state.targets } };
+    window.AMNYAM_MARKET = detail;
+    window.dispatchEvent(new CustomEvent("amnyam:market", { detail }));
+  }
   let livePollRunning = false;
   let lastHiddenPollAt = 0;
   let snapshotLoadRunning = false;
@@ -316,6 +321,7 @@
         // Price targets must be evaluated on every successful poll, even when the
         // visible snapshot signature is unchanged and the background tab is throttled.
         checkTargetAlerts();
+        publishMarketData();
       }
     } catch (_) {
       // Preserve the last valid snapshot and back off network requests on intermittent failures.
@@ -336,7 +342,29 @@
   const ALERT_SOUND_KEY = "amnyam.alertSound.v1";
   let alertSoundEnabled = false;
   let alertAudioContext = null;
-  try { alertSoundEnabled = localStorage.getItem(ALERT_SOUND_KEY) === "on"; } catch (_) {}
+  let sniperSoundPrefs = { new: false, deal: false };
+  try {
+    alertSoundEnabled = localStorage.getItem(ALERT_SOUND_KEY) === "on";
+    sniperSoundPrefs = {
+      new: localStorage.getItem("amnyam.sniperSound.new.v1") === "on",
+      deal: localStorage.getItem("amnyam.sniperSound.deal.v1") === "on"
+    };
+  } catch (_) {}
+  window.AMNYAM_SOUND_SETTINGS = {
+    get: () => ({ ...sniperSoundPrefs, master: alertSoundEnabled }),
+    set: (kind, enabled) => {
+      if (kind !== "new" && kind !== "deal") return false;
+      sniperSoundPrefs[kind] = Boolean(enabled);
+      if (accountState.user) {
+        if (!accountState.hydrating) queueProfileSave();
+      } else {
+        try { localStorage.setItem("amnyam.sniperSound." + kind + ".v1", enabled ? "on" : "off"); } catch (_) {}
+      }
+      window.dispatchEvent(new CustomEvent("amnyam:sniper-sounds", { detail: { ...sniperSoundPrefs, master: alertSoundEnabled } }));
+      return true;
+    },
+    masterEnabled: () => alertSoundEnabled
+  };
   function updateAlertSoundControls() {
     const toggle = $("toggleAlertSound"), hint = $("alertSoundHint");
     if (toggle) {
@@ -1169,7 +1197,7 @@
   }
 
   function switchView(view, focusSearch) {
-    const allowed = new Set(["overview", "market", "deals", "cheap", "analytics", "favorites", "support", "appearance", "help"]);
+    const allowed = new Set(["overview", "market", "sniper", "deals", "cheap", "analytics", "favorites", "support", "appearance", "help"]);
     state.activeView = allowed.has(view) ? view : "overview";
     document.querySelectorAll("[data-view-section]").forEach((section) => {
       section.classList.toggle("view-hidden", section.getAttribute("data-view-section") !== state.activeView);
@@ -1846,6 +1874,8 @@
       savedFilters: state.savedFilters.slice(0, 25),
       preferences: {
         alertSound: Boolean(alertSoundEnabled),
+        sniperNewSound: Boolean(sniperSoundPrefs.new),
+        sniperDealSound: Boolean(sniperSoundPrefs.deal),
         appearance: { ...appearance },
         seasonTheme: document.body.dataset.season || "default"
       }
@@ -1862,6 +1892,7 @@
     state.savedFilters = Array.isArray(p.savedFilters) ? p.savedFilters.filter(item => item && typeof item.name === "string" && item.name.trim() && item.filters && typeof item.filters === "object").slice(0, 25) : [];
     const prefs = p.preferences && typeof p.preferences === "object" ? p.preferences : {};
     alertSoundEnabled = prefs.alertSound === true;
+    sniperSoundPrefs = { new: prefs.sniperNewSound === true, deal: prefs.sniperDealSound === true };
     const a = prefs.appearance && typeof prefs.appearance === "object" ? prefs.appearance : {};
     appearance = {
       background: ["cosmic","liquid","nebula","minimal"].includes(a.background) ? a.background : "cosmic",
@@ -1881,7 +1912,14 @@
     state.targets = readTargets();
     state.alertedTargets = readAlertedTargets();
     state.savedFilters = readSavedFilters();
-    try { alertSoundEnabled = localStorage.getItem(ALERT_SOUND_KEY) === "on"; } catch (_) { alertSoundEnabled = false; }
+    try {
+      alertSoundEnabled = localStorage.getItem(ALERT_SOUND_KEY) === "on";
+      sniperSoundPrefs = {
+        new: localStorage.getItem("amnyam.sniperSound.new.v1") === "on",
+        deal: localStorage.getItem("amnyam.sniperSound.deal.v1") === "on"
+      };
+    } catch (_) { alertSoundEnabled = false; sniperSoundPrefs = { new: false, deal: false }; }
+    window.dispatchEvent(new CustomEvent("amnyam:sniper-sounds", { detail: { ...sniperSoundPrefs, master: alertSoundEnabled } }));
     appearance = readAppearance();
     applyAppearance();
     let theme = "default";
@@ -2128,6 +2166,7 @@
       setMascotMood("sad", "Каталог пока пуст… Жду новые лоты");
       dismissPremiumSplash();
       switchView(state.activeView);
+      publishMarketData();
       return;
     }
     show("content");
@@ -2137,6 +2176,7 @@
     renderCards(); renderCharts(); renderChanges(); renderTop(); renderSales(); fillFacets();
     renderSavedFilters();setSortMenuOptions();applyFilters();
     switchView(state.activeView);
+    publishMarketData();
   }
 
   const APPEARANCE_KEY = "amnyam.appearance.v1";
@@ -2219,7 +2259,7 @@
     }
     if (!typing && window.__amnyamGoPending && Date.now() - window.__amnyamGoPending < 750) {
       const key = event.key.toLowerCase();
-      const views = { h: "overview", m: "market", d: "deals", c: "cheap", a: "analytics", f: "favorites", i: "help" };
+      const views = { h: "overview", m: "market", s: "sniper", d: "deals", c: "cheap", a: "analytics", f: "favorites", i: "help" };
       if (views[key]) { event.preventDefault(); switchView(views[key], true); }
       window.__amnyamGoPending = 0;
     }
