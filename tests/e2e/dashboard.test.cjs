@@ -1460,3 +1460,85 @@ test("AMNYAM Intelligence Lab filters market lots and exports safe analytics", a
   assert.deepEqual(problems, []);
   await browser.close();
 });
+
+
+
+test("username workspace imports real rows, calculates peer signals and keeps gift workspace separate", async () => {
+  const { browser, page, problems } = await open(serve(dataV2()));
+  try {
+    await page.waitForSelector("#content:not(.hide)");
+    const usernamesTab = page.locator('#marketTypeNav [data-market-type="usernames"]');
+    await usernamesTab.click();
+    assert.equal(await usernamesTab.getAttribute("aria-selected"), "true");
+    assert.equal(await page.locator("#giftsWorkspace.hide").count(), 1);
+    assert.equal(await page.locator("#usernameWorkspace:not(.hide)").count(), 1);
+    assert.equal(await page.locator("#usernameTabs [data-username-view]").count(), 8);
+    assert.equal(await page.locator("#usernameRows tr").count(), 1, "empty state is one table row");
+    assert.match(await page.textContent("#usernameRows"), /База юзернеймов пока пуста/);
+
+    const listings = [
+      ["alfaee", 50], ["bravoo", 100], ["charly", 110],
+      ["deltaa", 120], ["echooo", 130], ["foxttt", 140], ["gammmy", 150]
+    ].map(([username, price], index) => ({
+      username, lot_id: "handle-" + (index + 1), price, status: "active",
+      url: "https://huevo.su/market/lot/handle-" + (index + 1)
+    }));
+    const payload = { schema_version: 1, generated_at: NOW, usernames: listings };
+    await page.locator("#usernameImportFile").setInputFiles({
+      name: "usernames-export.json", mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(payload))
+    });
+    await page.waitForFunction(() => document.querySelector("#usernameImportFeedback")?.textContent.includes("Импортировано 7 из 7 строк"));
+    assert.equal(await page.locator("#usernameRows tr").count(), 7);
+    assert.match(await page.textContent("#usernameKpis"), /7/);
+    assert.equal(await page.locator("#usernameRows a[href^='https://huevo.su/']").count(), 0, "market rows use button actions, never arbitrary embedded links");
+
+    await page.fill("#usernameSearch", "alfa");
+    assert.equal(await page.locator("#usernameRows tr").count(), 1);
+    assert.match(await page.textContent("#usernameRows"), /@alfaee/);
+    await page.fill("#usernameSearch", "");
+    await page.selectOption("#usernameLength", "6");
+    assert.equal(await page.locator("#usernameRows tr").count(), 7);
+    await page.selectOption("#usernameKind", "digits");
+    assert.equal(await page.locator("#usernameRows tr").count(), 1);
+    assert.match(await page.textContent("#usernameRows"), /По выбранным фильтрам/);
+    await page.selectOption("#usernameKind", "");
+    await page.selectOption("#usernameLength", "");
+
+    await page.click('#usernameTabs [data-username-view="deals"]');
+    assert.ok(await page.locator("#usernameDealsList .username-deal-card").count() > 0);
+    const dealText = await page.locator("#usernameDealsList").textContent();
+    assert.match(dealText, /@alfaee/);
+    assert.match(dealText, /−60/);
+    assert.match(await page.textContent("#usernameDealsMeta"), /СИГНАЛОВ/);
+
+    await page.click('#usernameTabs [data-username-view="sniper"]');
+    assert.equal(await page.locator("#usernameEvents .username-event").count(), 7);
+    assert.match(await page.textContent("#usernameEvents"), /НОВЫЙ ЮЗЕРНЕЙМ/);
+
+    await page.click('#usernameTabs [data-username-view="market"]');
+    await page.locator("#usernameRows tr").first().locator(".username-icon-btn").first().click();
+    await page.click('#usernameTabs [data-username-view="favorites"]');
+    assert.match(await page.textContent("#usernameFavoritesList"), /@alfaee/);
+    await page.locator("#usernameFavoritesList button").filter({ hasText: "ЗАДАТЬ ЦЕЛЬ" }).click();
+    await page.fill("#usernameTargetPrice", "60");
+    await page.click("#usernameTargetForm button[type=submit]");
+    assert.match(await page.textContent("#usernameFavoritesList"), /ЦЕЛЬ ДОСТИГНУТА/);
+
+    await page.click('#usernameTabs [data-username-view="analytics"]');
+    assert.ok(await page.locator("#usernameLengthChart .username-bar-row").count() > 0);
+    assert.ok(await page.locator("#usernameKindChart .username-bar-row").count() > 0);
+
+    await page.click('#marketTypeNav [data-market-type="gifts"]');
+    assert.equal(await page.locator("#usernameWorkspace.hide").count(), 1);
+    assert.equal(await page.locator("#giftsWorkspace.hide").count(), 0);
+    assert.equal(await page.locator("#content:not(.hide)").count(), 1);
+    assert.equal(await page.locator("#mainNav [data-view]").count(), 8, "all gift sections remain in the gift workspace");
+
+    await page.click('#marketTypeNav [data-market-type="usernames"]');
+    assert.equal(await page.locator("#usernameRows tr").count(), 7, "username data survives workspace switching");
+    assert.deepEqual(problems, []);
+  } finally {
+    await browser.close();
+  }
+});
