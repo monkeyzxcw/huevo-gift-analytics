@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://huevo.su; style-src 'self'; img-src 'self' https://huevo.su https://huevo.departament.site data:; connect-src 'self' https://huevo.su https://*.huevo.su; base-uri 'none'; form-action 'none'">
 <title>AMNYAM MODE — Huevo Gift Intelligence</title>
-<link rel="stylesheet" href="./styles.css?v=amnyam-sound-only-v18">
+<link rel="stylesheet" href="./styles.css?v=amnyam-sound-only-v19">
 </head>
 <body>
 <a class="skip" href="#catalog">К каталогу</a>
@@ -146,6 +146,14 @@
 <section class="panel hide" id="salesPanel" data-view-section="analytics" aria-labelledby="salesTitle">
   <div class="panel-head"><h3 id="salesTitle">История продаж</h3><span class="muted" id="salesNote"></span></div>
   <div id="salesBody"></div>
+</section>
+
+<section class="panel source-health-panel" id="sourceHealthPanel" data-view-section="analytics" aria-labelledby="sourceHealthTitle">
+  <div class="panel-head">
+    <div><h3 id="sourceHealthTitle">Состояние источников</h3><p class="muted">Отдельно показываем результаты каждого этапа сбора. «Нет метаданных» означает, что сборщик ещё не сообщил результат — это не считается успешным сбором.</p></div>
+    <span class="view-stat" id="sourceHealthUpdated">Ожидаем метаданные…</span>
+  </div>
+  <div class="source-health-grid" id="sourceHealthGrid" aria-live="polite"></div>
 </section>
 
 
@@ -447,7 +455,7 @@
 </main>
 <div id="ambientLayer" aria-hidden="true"></div><div id="cursorGlow" aria-hidden="true"></div>
 <div class="premium-splash" id="premiumSplash" aria-hidden="true"><div class="splash-mark">H<span>•</span></div><div class="splash-title">AMNYAM <b>MODE</b></div><div class="splash-subtitle">GIFT MARKET INTELLIGENCE</div><div class="splash-loader"><i></i></div></div>
-<script src="./app.js?v=amnyam-sniper-v18" defer></script>
+<script src="./app.js?v=amnyam-source-health-v19" defer></script>
 <script src="./sniper.js?v=amnyam-sniper-v1" defer></script>
 </body>
 </html>

@@ -115,6 +115,46 @@ test("full v2 data: cards, charts, changes, top, table render with no errors", a
   await browser.close();
 });
 
+test("collector source health distinguishes completed, paused and missing sources", async () => {
+  const data = dataV2({
+    live: { enabled: true, fresh: true, item_count: 30, last_poll_at: NOW },
+    collector: {
+      status: "ok", message: "Full scan completed", checked_at: NOW, pages: 22, lots: 474,
+      sales_history: { status: "ok", pages: 4, updated: 12, total: 120, total_pages: 652, checked_at: NOW },
+      gift_catalog_index: { status: "ok", cards: 123, checked_at: NOW },
+      gift_catalog_details: { status: "ok", attempted: 4, updated: 4, known: 89, index_total: 123, checked_at: NOW },
+      gift_instances: { status: "pending", attempted: 8, updated: 3, events_added: 1, batches: 2, checked_at: NOW }
+    },
+    sales_history_state: { status: "ok", total_records: 120, total_pages: 652, checked_at: NOW },
+    gift_catalog_index: Array.from({ length: 123 }, (_, i) => ({ catalog_id: String(i + 1) })),
+    gift_catalogs: Array.from({ length: 89 }, (_, i) => ({ catalog_id: String(i + 1) }))
+  });
+  const { browser, page, problems } = await open(serve(data));
+  await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="analytics"]');
+  assert.equal(await page.locator("#sourceHealthGrid .source-health-card").count(), 6);
+  const panel = await page.textContent("#sourceHealthGrid");
+  assert.match(panel, /Полный рынок[\s\S]*474 лотов/);
+  assert.match(panel, /Live · первая страница[\s\S]*30 лотов/);
+  assert.match(panel, /История завершённых продаж[\s\S]*120 записей[\s\S]*652/);
+  assert.match(panel, /Независимый индекс \/gifts[\s\S]*123 карточек/);
+  assert.match(panel, /Подробности каталога[\s\S]*4 обновлено[\s\S]*89 полных карточек/);
+  assert.match(panel, /Экземпляры и история владельцев[\s\S]*В очереди[\s\S]*1 новых событий/);
+  assert.deepEqual(problems, []);
+  await browser.close();
+});
+
+test("collector source health does not invent successful status when metadata is missing", async () => {
+  const { browser, page, problems } = await open(serve(dataV2()));
+  await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="analytics"]');
+  const panel = page.locator("#sourceHealthGrid");
+  assert.equal(await panel.locator(".source-health-card").count(), 6);
+  assert.equal(await panel.locator(".source-health-status:has-text('Нет метаданных')").count(), 5);
+  assert.deepEqual(problems, []);
+  await browser.close();
+});
+
 test("search, filters, sort, pagination and reset work", async () => {
   const { browser, page, problems } = await open(serve(dataV2()));
   await page.waitForSelector("#content:not(.hide)");
