@@ -1310,6 +1310,7 @@ test("Sniper shows a live new-lot event and calculates scenarios from confirmed 
     assert.equal(await page.locator("#sniperPanel:not(.view-hidden)").count(), 1);
     await page.waitForFunction(() => Array.from(document.querySelectorAll("#sniperGiftSelect option")).some(option => option.textContent === "Звезда"));
     await page.selectOption("#sniperGiftSelect", { label: "Звезда" });
+    await page.selectOption("#sniperGiftRarity", { label: "Редкий" });
     await page.fill("#sniperBuyPrice", "800");
     await page.waitForSelector("#sniperCalcResult .sniper-scenario", { timeout: 5000 });
     assert.equal(await page.locator("#sniperCalcResult .sniper-scenario").count(), 3);
