@@ -7,7 +7,8 @@
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://huevo.su; style-src 'self'; img-src 'self' https://huevo.su https://huevo.departament.site data:; connect-src 'self' https://huevo.su https://*.huevo.su; base-uri 'none'; form-action 'none'">
 <title>AMNYAM MODE — Huevo Gift Intelligence</title>
-<link rel="stylesheet" href="./styles.css?v=amnyam-battlefield-v1">
+<link rel="preload" as="image" href="./assets/amnyam-battlefield.webp" fetchpriority="high">
+<link rel="stylesheet" href="./styles.css?v=amnyam-dota2-hud-v2">
 </head>
 <body>
 <a class="skip" href="#catalog">К каталогу</a>
@@ -72,9 +73,23 @@
 <div class="command-strip"><span class="command-mark">AMNYAM / WORKER EDITION</span><span>MARKET INTELLIGENCE <i></i> LIVE 3S · FULL SCAN 5M</span><label class="season-control"><span>ТЕМА</span><select id="seasonTheme" aria-label="Праздничная тема"><option value="default">AMNYAM</option><option value="newyear">Новый год</option><option value="halloween">Хэллоуин</option><option value="spring">Весна</option><option value="summer">Лето</option></select></label><label class="command-search"><b>⌕</b><input id="globalSearch" type="search" list="globalSearchSuggestions" placeholder="Поиск по подаркам, лотам и продажам…" autocomplete="off" aria-label="Быстрый поиск по приложению"><datalist id="globalSearchSuggestions"></datalist><kbd>ENTER</kbd></label></div>
 
 <section class="hero" id="hero" data-view-section="overview" data-overview-widget="hero" aria-labelledby="heroTitle">
-  <div><div class="eyebrow">AMNYAM / ПОЛЕВОЙ СКАНЕР</div><h2 id="heroTitle">Поймай лот.<br><em>Не переплати.</em></h2>
-  <p>Цены маркета, история и выгодные входы. Работаем быстро: <b>собираем данные, сравниваем рынок, принимаем решение.</b></p></div>
-  <dl class="freshness" id="freshness"><div><dt>Последний успешный сбор</dt><dd id="lastOk">—</dd></div><div><dt>Live-сигнал</dt><dd id="lastTry">—</dd></div></dl>
+  <div class="hero-copy">
+    <div class="hero-kicker"><span class="hero-rune">✦</span> AMNYAM BATTLEFIELD <i></i> HUEVO MARKET</div>
+    <h2 id="heroTitle">ЗАБИРАЙ ЛУЧШЕЕ.<br><em>НЕ ОСТАВЛЯЙ ШАНСОВ.</em></h2>
+    <p>Рынок подарков — твоя арена. Сравнивай цены, выслеживай выгодные лоты и опережай остальных.</p>
+    <div class="hero-actions">
+      <button class="btn hero-primary" type="button" data-go-view="deals"><span>✦</span> ОТКРЫТЬ ВЫГОДНЫЕ ЛОТЫ</button>
+      <button class="btn secondary hero-secondary" type="button" data-go-view="market">ВЕСЬ МАРКЕТ <span>↗</span></button>
+    </div>
+  </div>
+  <aside class="hero-status" aria-label="Состояние сканирования">
+    <div class="hero-status-title"><span class="hero-status-gem">◆</span><span><b>СКАНЕР АРЕНЫ</b><small>ПОДКЛЮЧЕНИЕ К HUEVO</small></span><i class="hero-live-pulse"></i></div>
+    <dl class="freshness" id="freshness">
+      <div><dt>ПОСЛЕДНИЙ СБОР</dt><dd id="lastOk">—</dd></div>
+      <div><dt>LIVE-СИГНАЛ</dt><dd id="lastTry">—</dd></div>
+    </dl>
+    <div class="hero-status-foot"><span>LIVE</span> ОБНОВЛЕНИЕ ~3 СЕК <i></i> ПОЛНЫЙ ОБХОД ~5 МИН</div>
+  </aside>
 </section>
 
 <section class="contact-strip view-hidden" id="contactPanel" data-view-section="support" aria-labelledby="contactTitle">
@@ -98,7 +113,7 @@
 
 
 <section class="command-center" data-view-section="overview" aria-labelledby="commandCenterTitle">
-  <div class="cc-heading"><div><div class="eyebrow">MARKET CONTROL / 01</div><h2 id="commandCenterTitle">Панель рынка</h2><p>Коротко о рынке, сигналах и твоих целях — без ручного поиска по разделам.</p></div><button class="cc-command-trigger" id="openCommandPalette" type="button"><span>⌘</span> Команды <kbd>Ctrl K</kbd></button></div>
+  <div class="cc-heading"><div><div class="eyebrow">BATTLE COMMAND / 01</div><h2 id="commandCenterTitle">БОЕВОЙ ШТАБ РЫНКА</h2><p>Сводка арены, выгодные сигналы и твой инвентарь — всё важное в одном месте.</p></div><button class="cc-command-trigger" id="openCommandPalette" type="button"><span>⌘</span> Команды <kbd>Ctrl K</kbd></button></div>
   <div class="cc-metrics" aria-live="polite">
     <article class="cc-metric"><span>АКТИВНЫЕ ЛОТЫ</span><strong id="pulseLots">—</strong><small>в текущем снимке</small><i class="cc-metric-icon">▦</i></article>
     <article class="cc-metric"><span>МЕДИАНА РЫНКА</span><strong id="pulseMedian">—</strong><small>цена типичного лота</small><i class="cc-metric-icon">⌁</i></article>
@@ -121,7 +136,7 @@
     <label class="appearance-control"><span>Движение</span><select class="select" id="appearanceMotion"><option value="normal">Плавные анимации</option><option value="subtle">Минимальные анимации</option><option value="off">Без анимаций</option></select><small>Можно отключить все декоративные движения.</small></label>
     <label class="appearance-control appearance-toggle"><span><b>Стеклянные карточки</b><small>Полупрозрачные поверхности и мягкие блики.</small></span><input id="appearanceGlass" type="checkbox" checked></label>
   </div>
-  <div class="appearance-preview"><div class="preview-orb"></div><div><b>AMNYAM / BATTLEFIELD MODE</b><small>Тёмный металл · магические руны · тёплый янтарь</small></div><span class="preview-chip">LIVE THEME</span></div>
+  <div class="appearance-preview"><div class="preview-orb"></div><div><b>AMNYAM / DOTA HUD MODE</b><small>Тёмный металл · магические руны · тёплый янтарь</small></div><span class="preview-chip">LIVE THEME</span></div>
   <div class="appearance-media-control">
     <label class="f"><span>Свой фон или GIF</span><input class="input" id="appearanceMediaFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
     <button class="btn secondary" id="appearanceMediaClear" type="button">Убрать свой фон</button>
