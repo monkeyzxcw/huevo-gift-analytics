@@ -2828,7 +2828,7 @@
       node.classList.add("is-active");
       if (hint) hint.textContent = "Собственный фон включён. Файл хранится только в этом браузере.";
     } else {
-      node.style.backgroundImage = "";
+      node.removeAttribute("src");
       node.classList.remove("is-active");
       if (hint) hint.textContent = "Изображение до 512 КБ хранится только в этом браузере и не отправляется на сервер.";
     }
