@@ -51,7 +51,7 @@
   const state = {
     data: null, lots: [], targets: {}, events: [], seen: new Set(), lastIds: null,
     lastPrices: new Map(), lastDeals: new Set(), profileKey: "guest", eventSound: { new: false, deal: false, master: false },
-    filter: { type: "all", search: "", min: "", max: "", discount: "" }
+    filter: { type: "all", search: "", min: "", max: "", discount: "" }, profileLoaded: false
   };
   const EVENTS_KEY = "amnyam.sniper.events.v1";
   const SEEN_KEY = "amnyam.sniper.seen.v1";
@@ -159,8 +159,12 @@
     const nextLots = detail.lots;
     const nextIds = new Set(nextLots.map((lot) => String(lot.lot_id)));
     const nextPrices = new Map(nextLots.filter((lot) => Number.isFinite(lot.price)).map((lot) => [String(lot.lot_id), lot.price]));
-    const changedProfile = detail.profileKey && detail.profileKey !== state.profileKey;
-    if (changedProfile) loadEvents(detail.profileKey);
+    const nextProfileKey = detail.profileKey || "guest";
+    const changedProfile = state.profileLoaded && nextProfileKey !== state.profileKey;
+    if (!state.profileLoaded || changedProfile) {
+      loadEvents(nextProfileKey);
+      state.profileLoaded = true;
+    }
     state.data = detail.data || {};
     state.lots = nextLots;
     state.targets = detail.targets && typeof detail.targets === "object" ? detail.targets : {};
@@ -358,7 +362,10 @@
   function attributeEntries(lot) {
     const instance = lot.gift_instance && typeof lot.gift_instance === "object" ? lot.gift_instance : {};
     const details = lot.gift_details && typeof lot.gift_details === "object" ? lot.gift_details : {};
-    const raw = instance.attributes || instance.characteristics || details.attributes || details.characteristics || details.properties;
+    const catalog = lot.gift_catalog && typeof lot.gift_catalog === "object" ? lot.gift_catalog : {};
+    const raw = instance.attributes || instance.characteristics ||
+      details.attributes || details.characteristics || details.properties ||
+      catalog.attributes || catalog.characteristics || catalog.properties;
     if (Array.isArray(raw)) {
       return raw.map((entry) => {
         if (!entry || typeof entry !== "object") return null;
