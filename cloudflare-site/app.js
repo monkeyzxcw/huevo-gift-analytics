@@ -2043,6 +2043,7 @@
       }
     }
     signals.sort((a,b) => (a.suspicious === b.suspicious ? 0 : a.suspicious ? 1 : -1) ||
+      dealScore(b) - dealScore(a) ||
       (a.basis === b.basis ? 0 : a.basis === "sales" ? -1 : 1) ||
       b.discount_pct-a.discount_pct || a.price-b.price ||
       String(a.title).localeCompare(String(b.title), "ru"));
@@ -2143,8 +2144,9 @@
 
   function renderDeals(){
     const signals=buildDealSignals(),best=signals.find(lot=>!lot.suspicious)||null;
-    let deals=signals.slice(),sortBy=$("dealSort").value||"discount";
-    if(sortBy==="price")deals.sort((a,b)=>a.price-b.price||b.discount_pct-a.discount_pct);
+    let deals=signals.slice(),sortBy=$("dealSort").value||"score";
+    if(sortBy==="score")deals.sort((a,b)=>dealScore(b)-dealScore(a)||b.discount_pct-a.discount_pct);
+    else if(sortBy==="price")deals.sort((a,b)=>a.price-b.price||b.discount_pct-a.discount_pct);
     else if(sortBy==="savings")deals.sort((a,b)=>(b.reference_price-b.price)-(a.reference_price-a.price)||b.discount_pct-a.discount_pct);
     else if(sortBy==="sample")deals.sort((a,b)=>b.sample_size-a.sample_size||b.discount_pct-a.discount_pct);
     else if(sortBy==="historical")deals.sort((a,b)=>{
