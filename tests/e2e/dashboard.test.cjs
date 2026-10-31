@@ -609,6 +609,86 @@ test("page has no inline handlers/styles and fits a phone screen", async () => {
 });
 
 
+test("new catalogue, market events, date range, portfolio and Sniper rule profiles work", async () => {
+  const data = dataV2({
+    gift_catalog_index: [
+      { catalog_id: "131", title: "Звезда", rarity: "Редкий", supply: 500, image_url: "https://huevo.su/static/gift.webp" },
+      { catalog_id: "132", title: "Лунный кот", rarity: "Обычный", supply: 120, image_url: "https://huevo.su/static/gift.webp" }
+    ],
+    sales: {
+      generated_at: NOW,
+      summary: { count: 5, unknown: 0, median: 450, min: 400, max: 500, enough_data: true },
+      by_title: [{ title: "Звезда", count: 5, median: 450, p25: 420, p75: 480, history: [] }],
+      by_title_rarity: [{ title: "Звезда", rarity: "Редкий", count: 5, median: 450, p25: 420, p75: 480 }]
+    }
+  });
+  const { browser, page, problems } = await open(serve(data));
+  try {
+    await page.waitForSelector("#content:not(.hide)");
+
+    await page.click('#mainNav [data-view="market"]');
+    await page.click('#marketWorkspaceTabs [data-market-tab="catalog"]');
+    assert.equal(await page.locator("#giftCatalogGrid .catalog-index-card").count(), 2);
+    assert.match(await page.textContent("#giftCatalogGrid"), /Лунный кот/);
+    await page.fill("#giftCatalogSearch", "Звезда");
+    assert.equal(await page.locator("#giftCatalogGrid .catalog-index-card").count(), 1);
+    assert.match(await page.textContent("#giftCatalogGrid"), /Каталог #131/);
+    const catalogDownload = page.waitForEvent("download");
+    await page.click("#exportGiftCatalogCsv");
+    assert.match((await catalogDownload).suggestedFilename(), /amnyam-gift-catalog/);
+
+    await page.fill("#globalSearch", "Звезда");
+    assert.ok(await page.locator("#globalSearchSuggestions option").count() > 0);
+
+    await page.click('#mainNav [data-view="analytics"]');
+    await page.click('#workspaceSubnav [data-view="events"]');
+    assert.match(await page.textContent("#marketEventsList"), /Новинка/);
+    const eventsDownload = page.waitForEvent("download");
+    await page.click("#exportEventsCsv");
+    assert.match((await eventsDownload).suggestedFilename(), /amnyam-market-events/);
+
+    await page.click('#workspaceSubnav [data-view="analytics"]');
+    const end = new Date();
+    const start = new Date(Date.now() - 2 * 86400000);
+    const isoDate = value => value.toISOString().slice(0, 10);
+    await page.fill("#historyFrom", isoDate(start));
+    await page.fill("#historyTo", isoDate(end));
+    await page.click("#historyApply");
+    assert.match(await page.textContent("#historyRangeNote"), /Выбрано снимков:/);
+
+    await page.click('#mainNav [data-view="favorites"]');
+    await page.click('#workspaceSubnav [data-view="portfolio"]');
+    await page.fill("#portfolioGift", "Звезда");
+    await page.fill("#portfolioRarity", "Редкий");
+    await page.fill("#portfolioQuantity", "2");
+    await page.fill("#portfolioCost", "300");
+    await page.click('#portfolioForm button[type="submit"]');
+    assert.equal(await page.locator("#portfolioList .portfolio-row").count(), 1);
+    assert.match(await page.textContent("#portfolioList"), /подтверждённые продажи/);
+    assert.match(await page.textContent("#portfolioList"), /900/);
+    const portfolioDownload = page.waitForEvent("download");
+    await page.click("#exportPortfolioCsv");
+    assert.match((await portfolioDownload).suggestedFilename(), /amnyam-portfolio/);
+
+    await page.click('#mainNav [data-view="sniper"]');
+    await page.selectOption("#sniperType", "deal");
+    await page.fill("#sniperSearch", "Звезда");
+    await page.fill("#sniperMinDiscount", "20");
+    await page.fill("#sniperRuleName", "Редкие сделки");
+    await page.click("#sniperRuleSave");
+    assert.match(await page.textContent("#sniperRuleStatus"), /сохранён/);
+    assert.equal(await page.locator("#sniperRuleProfiles option").count(), 2);
+    await page.selectOption("#sniperRuleProfiles", { label: "Редкие сделки" });
+    await page.click("#sniperRuleApply");
+    assert.equal(await page.inputValue("#sniperSearch"), "Звезда");
+    await page.click("#sniperRuleDelete");
+    assert.match(await page.textContent("#sniperRuleStatus"), /удалён/);
+    assert.deepEqual(problems, []);
+  } finally {
+    await browser.close();
+  }
+});
+
 test("AMNYAM navigation renders all views and author support shows five levels", async () => {
   const { browser, page, problems } = await open(serve(dataV2()), { width: 1280, height: 900 });
   await page.waitForSelector("#content:not(.hide)");
