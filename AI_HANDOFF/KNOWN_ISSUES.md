@@ -53,3 +53,34 @@
 - Keyboard-only audit for all dialogs and command palette (main tablist navigation is fixed).
 - Visual regression / CSS deduplication and mobile checks with reduced motion.
 - Live Huevo DOM validation in both manual Chrome profiles; never substitute cookie exports.
+
+## Engineering update — 2026-11-01
+
+Recent merged PRs after the previous handoff:
+
+- PR #58: huEVO provider requests now have an 8-second abort timeout; regression test verifies timeout errors do not create false pending-payment records.
+- PR #59: ingest security contracts cover missing/wrong Bearer token, disabled ingest configuration, malformed JSON, unsupported content encoding, and oversized snapshots. Both CI jobs passed.
+- PR #60: frontend contracts lock the ~3-second Live lane, 5-minute full-snapshot lane, same-page polling, safe DOM/CSP, and sound-only/no-Push notification behavior. Added the release acceptance checklist. CI passed.
+- PR #61: documented D1 SQL export and Time Travel recovery; tests assert explicit D1 binding, ordered migrations, and migration-before-deploy. CI passed.
+- PR #62: fixed shared frontend polling backoff. A failure in `/api/live/status` previously could suppress the separate `/data.json` refresh and vice versa. Each lane now has independent failure counters, backoff deadlines, and visibility-resume resets. CI passed.
+- PR #63: added post-deploy smoke checks for `/api/health`, `/api/live/status`, and `/data.json`, including D1/schema readiness, ingest secret presence, and a non-empty snapshot. Live freshness is reported but does not fail a deploy when the local collector is simply offline. CI passed.
+
+### Local collector artifact
+
+- HuevoDualScan v12 was generated as a separate Windows ZIP artifact, not committed to the repository.
+- SHA-256: `8f9cd153ef6c29e386c29acfe27ace91e6f0afe7041ad80ce5c0de677b5d23d9`.
+- Verification: `python -Werror -m py_compile HuevoDualScan_app.py` passed; offline parser/history/auth suite: 41/41 passed.
+- v12 fixes an inconsistency where the Live worker's private challenge-marker list missed explicit HTTP 418/429 pages. It now uses the same shared challenge detector as the full scan and enrichment queue; the shared detector recognizes HTTP 418/429 variants. The manual-login screen is still distinguished from a rate-limit/challenge.
+- The visible UI title was corrected from stale v8 text to v12; the Windows Credential Manager entry remains compatible with v5.
+- No live Huevo login or current DOM check was performed from this environment. Manual login in both visible Chrome windows remains required; do not use exported cookies.
+
+### Production verification status
+
+- PR #63's CI passed and it is merged. The deployment workflow now includes a post-deploy smoke step, but a successful production smoke result has **not yet been observed in this handoff**. Check the latest GitHub Actions run for “AMNYAM Cloudflare deploy” and confirm the smoke step passes before claiming production is healthy.
+- Cloudflare's separate Git-integration Preview bot has continued to report failed Preview builds on PRs. Its comments link to authenticated Cloudflare dashboard build logs; the exact failure reason was not available in this session. Do not guess that cause or confuse a failed Preview build with the GitHub Actions deploy workflow.
+- Production endpoint checks from this assistant environment have been inaccessible. Treat current production runtime and fresh collector data as unverified until the post-deploy smoke step and a live HuevoDualScan run are confirmed.
+
+### New operational documentation
+
+- `docs/RELEASE_QA.md`: release acceptance, dual-window collector checks, manual login and sound-only constraints.
+- `docs/D1_BACKUP_RESTORE.md`: D1 SQL export, Time Travel restore safeguards and post-restore verification.
