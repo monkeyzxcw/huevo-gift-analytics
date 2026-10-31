@@ -1413,3 +1413,39 @@ test("AMNYAM Desk tools persist safely and work in the settings view", async () 
   assert.deepEqual(problems, []);
   await browser.close();
 });
+
+
+test("AMNYAM Intelligence Lab filters market lots and exports safe analytics", async () => {
+  const { browser, page, problems } = await open(serve(dataV2()));
+  await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="analytics"]');
+  await page.waitForFunction(() => document.querySelector("#intelCount")?.textContent.includes("из"));
+  assert.equal(await page.locator("#intelTitle").textContent(), "AMNYAM Intelligence Lab");
+  assert.ok(await page.locator("#intelKpis .intel-kpi").count() >= 8, "market KPI cards should render");
+  assert.ok(await page.locator("#intelRows tr").count() > 0, "analytics table should render market rows");
+
+  await page.fill("#intelQuery", "Подарок 1");
+  await page.waitForTimeout(100);
+  const filteredCount = await page.locator("#intelRows tr").count();
+  assert.ok(filteredCount > 0, "text filter should retain matching rows");
+  await page.selectOption("#intelSignal", "drop");
+  await page.waitForTimeout(100);
+  assert.match(await page.textContent("#intelCount"), /из/);
+  await page.selectOption("#intelSignal", "all");
+  await page.fill("#intelQuery", "");
+
+  page.once("dialog", dialog => dialog.accept("QA скринер"));
+  await page.click("#intelSaveFilter");
+  assert.ok(await page.locator("#intelSaved").textContent().then(x => x.includes("QA скринер")));
+  const downloadPromise = page.waitForEvent("download");
+  await page.click("#intelExportJson");
+  const download = await downloadPromise;
+  assert.equal(download.suggestedFilename(), "amnyam-market-intel.json");
+  const payload = JSON.parse(require("node:fs").readFileSync(await download.path(), "utf8"));
+  assert.equal(payload.schema, "amnyam-intel-v2");
+  assert.ok(Array.isArray(payload.rows));
+  assert.doesNotMatch(JSON.stringify(payload), /cookie|password|bearer|token/i);
+  assert.equal(await page.locator('[data-desk-check="collector"]').count(), 0, "shared workspace must not expose collector-start checklist");
+  assert.deepEqual(problems, []);
+  await browser.close();
+});
