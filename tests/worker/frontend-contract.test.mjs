@@ -39,3 +39,20 @@ test("frontend polling remains same-page fetch based instead of hard page reload
   assert.match(app, /async function pollFullSnapshot\s*\(/);
   assert.doesNotMatch(app, /(?:window\.)?location\.reload\s*\(/, "polling must not reload the entire dashboard");
 });
+
+
+test("Market Intelligence Lab is shared user-facing analytics, not collector control", async () => {
+  const html = await read("cloudflare-site/index.html");
+  const app = await read("cloudflare-site/app.js");
+  const intel = await read("cloudflare-site/intel-lab.js");
+  assert.match(html, /id="intelLab" data-view-section="analytics"/);
+  assert.match(html, /intel-lab\.js\?v=amnyam-intel-v2/);
+  assert.match(intel, /amnyam:market/);
+  assert.match(intel, /intelExportCsv/);
+  assert.match(intel, /intelExportJson/);
+  assert.match(intel, /intelSaveFilter/);
+  assert.match(html, /Проверил актуальность цен/);
+  assert.doesNotMatch(html, /data-desk-check="collector"|Сборщик запущен/);
+  assert.doesNotMatch(app, /PRIVATE FULL SCAN DETAIL/);
+  assert.match(app, /function renderSourceHealth\(\)[\s\S]*Shared users see data freshness and coverage only/);
+});

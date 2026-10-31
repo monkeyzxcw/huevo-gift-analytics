@@ -115,45 +115,43 @@ test("full v2 data: cards, charts, changes, top, table render with no errors", a
   await browser.close();
 });
 
-test("collector source health distinguishes completed, paused and missing sources", async () => {
+test("shared data status shows market freshness without exposing collector internals", async () => {
   const data = dataV2({
     live: { enabled: true, fresh: true, item_count: 30, last_poll_at: NOW },
     collector: {
-      status: "ok", message: "Full scan completed", checked_at: NOW, pages: 22, pages_total: 30, lots: 474,
+      status: "ok", message: "PRIVATE FULL SCAN DETAIL", checked_at: NOW, pages: 22, pages_total: 30, lots: 474,
       sales_history: { status: "ok", pages: 4, updated: 12, total: 120, total_pages: 652, checked_at: NOW },
       gift_catalog_index: { status: "ok", cards: 123, checked_at: NOW },
       gift_catalog_details: { status: "ok", attempted: 4, updated: 4, known: 89, index_total: 123, checked_at: NOW },
       gift_instances: { status: "pending", attempted: 8, updated: 3, events_added: 1, batches: 2, checked_at: NOW }
     },
-    sales_history_state: { status: "ok", total_records: 120, total_pages: 652, checked_at: NOW },
+    sales: { summary: { count: 120, median: 140, note: "История доступна" } },
     gift_catalog_index: Array.from({ length: 123 }, (_, i) => ({ catalog_id: String(i + 1) })),
     gift_catalogs: Array.from({ length: 89 }, (_, i) => ({ catalog_id: String(i + 1) }))
   });
   const { browser, page, problems } = await open(serve(data));
   await page.waitForSelector("#content:not(.hide)");
   await page.click('#mainNav [data-view="analytics"]');
-  assert.equal(await page.locator("#sourceHealthGrid .source-health-card").count(), 6);
+  assert.equal(await page.locator("#sourceHealthGrid .source-health-card").count(), 5);
   const panel = await page.textContent("#sourceHealthGrid");
-  assert.match(panel, /Полный рынок[\s\S]*474 лотов/);
-  assert.match(panel, /Live · первая страница[\s\S]*30 лотов/);
-  assert.match(panel, /История завершённых продаж[\s\S]*120 записей[\s\S]*652/);
-  assert.match(panel, /Независимый индекс \/gifts[\s\S]*123 карточек/);
-  assert.match(panel, /Подробности каталога[\s\S]*4 обновлено[\s\S]*89 полных карточек/);
-  assert.match(panel, /Экземпляры и история владельцев[\s\S]*В очереди[\s\S]*1 новых событий/);
-  assert.equal(await page.locator("#sourceHealthGrid progress").count(), 3, "progress is shown only for sources with real totals");
-  const progress = await page.locator("#sourceHealthGrid progress").evaluateAll(nodes => nodes.map(node => Number(node.value)));
-  assert.deepEqual(progress, [73, 1, 72], "market scan, sales pages and catalogue detail coverage");
+  assert.match(panel, /Каталог рынка/);
+  assert.match(panel, /Live · первая страница/); assert.match(panel, /30 лотов/);
+  assert.match(panel, /История продаж/); assert.match(panel, /120 записей/);
+  assert.match(panel, /Каталог подарков/); assert.match(panel, /123 карточек/);
+  assert.doesNotMatch(panel, /PRIVATE FULL SCAN DETAIL|Экземпляры и история владельцев|попыток:|страниц обработано/);
+  assert.equal(await page.locator("#sourceHealthGrid progress").count(), 0);
   assert.deepEqual(problems, []);
   await browser.close();
 });
 
-test("collector source health does not invent successful status when metadata is missing", async () => {
+test("shared data status stays useful when metadata is missing and hides collector stages", async () => {
   const { browser, page, problems } = await open(serve(dataV2()));
   await page.waitForSelector("#content:not(.hide)");
   await page.click('#mainNav [data-view="analytics"]');
   const panel = page.locator("#sourceHealthGrid");
-  assert.equal(await panel.locator(".source-health-card").count(), 6);
-  assert.equal(await panel.locator(".source-health-status:has-text('Нет метаданных')").count(), 5);
+  assert.equal(await panel.locator(".source-health-card").count(), 5);
+  assert.equal(await panel.locator(".source-health-status:has-text('Ожидаем данные')").count(), 3);
+  assert.equal(await panel.locator("text=Экземпляры и история владельцев").count(), 0);
   assert.deepEqual(problems, []);
   await browser.close();
 });
@@ -257,7 +255,7 @@ test("search, filters, sort, pagination and reset work", async () => {
   assert.equal((await page.textContent("#rows tr:first-child td:nth-child(3) .count-pill")).trim(), "9");
   await page.selectOption("#sortBy", "price:1");
   await page.click(".sort[data-key=price]");           // already ascending -> descending
-  assert.equal(await page.getAttribute("th:nth-child(2)", "aria-sort"), "descending");
+  assert.equal(await page.getAttribute("#lotsMode th:nth-child(2)", "aria-sort"), "descending");
   assert.match(await page.textContent("#rows tr:first-child td.price"), /1\s?290/);
   await page.click("#next");
   assert.match(await page.textContent("#pageInfo"), /Страница 2 из 3/);
@@ -581,17 +579,17 @@ test("load failure shows an error with a working retry", async () => {
   await browser.close();
 });
 
-test("blocked collector and stale data are announced while the last good snapshot stays visible", async () => {
+test("stale market snapshot is announced without exposing collector errors", async () => {
   const old = new Date(Date.now() - 40 * 3600e3).toISOString();
-  const { browser, page } = await open(serve(dataV2({ generated_at: old, collector: { status: "blocked", message: "HTTP 418", checked_at: NOW, blocked_until: new Date(Date.now() + 6 * 3600e3).toISOString() } })));
+  const { browser, page } = await open(serve(dataV2({ generated_at: old, collector: { status: "blocked", message: "PRIVATE HTTP 418", checked_at: NOW, blocked_until: new Date(Date.now() + 6 * 3600e3).toISOString() } })));
   await page.waitForSelector("#content:not(.hide)");
   const note = await page.textContent("#notice");
-  assert.match(note, /больше 24 ч/); assert.match(note, /HTTP 418/); assert.match(note, /Пауза до/);
-  assert.match(await page.textContent("#stateText"), /на паузе/);
+  assert.match(note, /более 24 часов/);
+  assert.doesNotMatch(note, /PRIVATE HTTP 418|Пауза до/);
+  assert.doesNotMatch(await page.textContent("#stateText"), /на паузе/);
   assert.equal(await page.locator("#rows tr").count(), 50);
   await browser.close();
 });
-
 test("sales section appears only with confirmed data", async () => {
   const sales = { summary: { count: 12, unknown: 1, min: 100, max: 900, median: 300, enough_data: true, note: "Прошлые сделки, а не объявления" } };
   const { browser, page } = await open(serve(dataV2({ sales })));
@@ -1410,6 +1408,46 @@ test("AMNYAM Desk tools persist safely and work in the settings view", async () 
   assert.equal(backup.prefs.density, "compact");
   assert.equal(backup.notes["987654"], "Проверить историю продаж");
   assert.doesNotMatch(JSON.stringify(backup), /cookie|password|bearer|token/i, "desk backup must not contain credentials or secrets");
+  assert.deepEqual(problems, []);
+  await browser.close();
+});
+
+
+test("AMNYAM Intelligence Lab filters market lots and exports safe analytics", async () => {
+  const { browser, page, problems } = await open(serve(dataV2()));
+  await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="analytics"]');
+  await page.waitForFunction(() => document.querySelector("#intelCount")?.textContent.includes("из"));
+  assert.equal(await page.locator("#intelTitle").textContent(), "AMNYAM Intelligence Lab");
+  assert.ok(await page.locator("#intelKpis .intel-kpi").count() >= 8, "market KPI cards should render");
+  assert.ok(await page.locator("#intelRows tr").count() > 0, "analytics table should render market rows");
+
+  await page.fill("#intelQuery", "Подарок 1");
+  await page.waitForTimeout(100);
+  const filteredCount = await page.locator("#intelRows tr").count();
+  assert.ok(filteredCount > 0, "text filter should retain matching rows");
+  await page.selectOption("#intelSignal", "drop");
+  await page.waitForTimeout(100);
+  assert.match(await page.textContent("#intelCount"), /из/);
+  await page.selectOption("#intelSignal", "all");
+  await page.fill("#intelQuery", "");
+
+  await page.evaluate(() => {
+    const saved = { guest: { filters: { q: "", rarity: "", min: "", max: "", signal: "all", sort: "discount" },
+      saved: [{ name: "QA скринер", filters: { q: "Подарок", rarity: "", min: "", max: "", signal: "all", sort: "discount" } }] } };
+    localStorage.setItem("amnyam.intel.v2", JSON.stringify(saved));
+    document.querySelector("#intelQuery").dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  assert.ok(await page.locator("#intelSaved").textContent().then(x => x.includes("QA скринер")));
+  const downloadPromise = page.waitForEvent("download");
+  await page.click("#intelExportJson");
+  const download = await downloadPromise;
+  assert.equal(download.suggestedFilename(), "amnyam-market-intel.json");
+  const payload = JSON.parse(require("node:fs").readFileSync(await download.path(), "utf8"));
+  assert.equal(payload.schema, "amnyam-intel-v2");
+  assert.ok(Array.isArray(payload.rows));
+  assert.doesNotMatch(JSON.stringify(payload), /cookie|password|bearer|token/i);
+  assert.equal(await page.locator('[data-desk-check="collector"]').count(), 0, "shared workspace must not expose collector-start checklist");
   assert.deepEqual(problems, []);
   await browser.close();
 });
