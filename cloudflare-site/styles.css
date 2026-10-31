@@ -1046,3 +1046,33 @@ body.desk-reduce-motion *, body.desk-reduce-motion *::before, body.desk-reduce-m
 .intel-layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(230px,1fr);gap:14px}.intel-table-wrap{max-width:100%;overflow:auto;border:1px solid var(--line);border-radius:12px}.intel-table{width:100%;border-collapse:collapse;min-width:820px}.intel-table th,.intel-table td{padding:10px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}.intel-table th{position:sticky;top:0;background:var(--panel2);z-index:1}.intel-table td small{color:var(--muted)}.intel-table td:first-child{min-width:150px}
 .intel-side{display:grid;align-content:start;gap:12px}.intel-side-card{padding:13px;border:1px solid var(--line);border-radius:12px;background:var(--panel2)}.intel-side-card h3{margin:0 0 10px;font-size:14px}.intel-rarity-row,.intel-saved-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}.intel-rarity-row span{color:var(--muted);font-size:11px}.intel-saved-row button:first-child{flex:1;justify-content:flex-start;overflow-wrap:anywhere}.intel-actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.intel-status{min-height:1.5em;color:var(--muted);font-size:12px}
 @media(max-width:1050px){.intel-controls{grid-template-columns:repeat(3,minmax(0,1fr))}.intel-layout{grid-template-columns:1fr}}@media(max-width:650px){.intel-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.intel-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.intel-controls label:first-child{grid-column:1/-1}}
+
+/* AMNYAM Motion Art Direction — decorative layer only; no layout or polling changes */
+:root{--art-cyan:#65f4e2;--art-violet:#a58bff;--art-pink:#ff83c8;--art-glow:0 0 34px rgba(101,244,226,.13)}
+body{background-color:#080b12;background-image:radial-gradient(ellipse at 12% 5%,rgba(64,105,151,.19),transparent 34%),radial-gradient(ellipse at 88% 18%,rgba(117,70,173,.16),transparent 31%),linear-gradient(145deg,#080b12 0%,#0d1020 48%,#090d14 100%)}
+body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;opacity:.22;background-image:linear-gradient(rgba(150,180,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(150,180,255,.035) 1px,transparent 1px);background-size:42px 42px;mask-image:linear-gradient(to bottom,black,transparent 85%)}
+.top{position:relative}.brand .logo{box-shadow:0 0 24px rgba(101,244,226,.22),inset 0 0 18px rgba(255,255,255,.12);border-color:rgba(101,244,226,.45)}
+.brand h1{letter-spacing:.09em;text-shadow:0 0 26px rgba(101,244,226,.2)}
+.mascot-dock{position:relative;isolation:isolate;border:1px solid rgba(101,244,226,.22);background:linear-gradient(135deg,rgba(28,43,58,.82),rgba(27,20,48,.72));box-shadow:0 12px 42px rgba(0,0,0,.25),var(--art-glow);backdrop-filter:blur(16px);border-radius:18px;padding:9px 14px}
+.mascot-dock:after{content:"";position:absolute;inset:-1px;border-radius:inherit;padding:1px;background:linear-gradient(120deg,rgba(101,244,226,.55),transparent 42%,rgba(165,139,255,.5));mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;pointer-events:none}
+.mascot-svg{filter:drop-shadow(0 5px 12px rgba(142,234,98,.32));animation:amnyam-float 3.4s ease-in-out infinite,amnyam-tilt 7s ease-in-out infinite}
+.mascot-dock[data-mood="happy"] .mascot-svg{animation:amnyam-bounce .65s ease-in-out 2}
+@keyframes amnyam-float{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-7px) rotate(3deg)}}
+@keyframes amnyam-tilt{0%,88%,100%{rotate:0deg}92%{rotate:-9deg}96%{rotate:8deg}}
+@keyframes amnyam-bounce{0%,100%{transform:translateY(0) scale(1)}40%{transform:translateY(-12px) scale(1.06)}70%{transform:translateY(2px) scale(.98)}}
+.hero{position:relative;isolation:isolate;overflow:hidden;border:1px solid rgba(101,244,226,.2);background:radial-gradient(ellipse at 84% 12%,rgba(101,244,226,.16),transparent 33%),radial-gradient(ellipse at 93% 95%,rgba(165,139,255,.17),transparent 38%),linear-gradient(118deg,rgba(16,26,36,.98),rgba(17,17,34,.96) 58%,rgba(13,24,32,.98));box-shadow:0 24px 70px rgba(0,0,0,.24),inset 0 1px rgba(255,255,255,.06)}
+.hero:before{content:"";position:absolute;z-index:-1;width:260px;height:260px;right:8%;top:-105px;border-radius:50%;border:1px solid rgba(101,244,226,.17);box-shadow:0 0 0 24px rgba(101,244,226,.025),0 0 0 52px rgba(165,139,255,.025),inset 0 0 55px rgba(101,244,226,.08);animation:art-orbit 22s linear infinite}
+.hero:after{content:"✦   ·   ✧";position:absolute;right:7%;bottom:16%;font-size:clamp(30px,5vw,66px);letter-spacing:.28em;color:rgba(180,205,255,.24);text-shadow:0 0 28px rgba(101,244,226,.28);animation:art-twinkle 4s ease-in-out infinite}
+@keyframes art-orbit{to{transform:rotate(360deg)}}
+@keyframes art-twinkle{0%,100%{opacity:.38;transform:translateY(0)}50%{opacity:.9;transform:translateY(-8px)}}
+.panel,.command-center,.cc-opportunity,.cc-quick,.cc-metric,.appearance-preview,.desk-tool-card,.intel-side-card{backdrop-filter:blur(13px);box-shadow:0 12px 38px rgba(0,0,0,.16),inset 0 1px rgba(255,255,255,.035)}
+.cc-metric,.panel,.desk-tool-card{border-color:rgba(139,164,205,.16)}
+.btn:not(.secondary){box-shadow:0 6px 24px rgba(101,244,226,.12);transition:transform .2s ease,box-shadow .2s ease,filter .2s ease}
+.btn:not(.secondary):hover{transform:translateY(-2px);box-shadow:0 10px 30px rgba(101,244,226,.2);filter:brightness(1.08)}
+.main-nav button[aria-selected="true"]{box-shadow:inset 0 -2px var(--art-cyan),0 7px 24px rgba(101,244,226,.08)}
+.cc-metric-highlight{background:radial-gradient(ellipse at 100% 0,rgba(101,244,226,.13),transparent 62%),var(--panel)}
+.command-strip{border-color:rgba(101,244,226,.18)}
+.season-control select:focus,.command-search:focus-within{border-color:var(--art-cyan);box-shadow:0 0 0 3px rgba(101,244,226,.1)}
+/* Optional media uploaded by the user continues to use the existing local-only appearance setting. */
+@media(prefers-reduced-motion:reduce){.mascot-svg,.hero:before,.hero:after{animation:none!important}.btn,.btn:hover{transition:none!important;transform:none!important}}
+@media(max-width:700px){.hero:before{right:-115px;opacity:.7}.hero:after{right:5%;bottom:8%;font-size:28px}.mascot-dock{padding:6px 9px}.mascot-copy small{max-width:120px}}
