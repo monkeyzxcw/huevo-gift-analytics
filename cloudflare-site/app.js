@@ -1504,8 +1504,51 @@
     activeDetailLotId = String(l.lot_id);
     $("dTitle").textContent = l.title || ("Лот #" + l.lot_id);
     const body = clear($("dBody"));
-    const img = l.image_url && /^https:\/\//i.test(l.image_url) ? h("img", { class: "thumb", src: l.image_url, alt: "", referrerpolicy: "no-referrer" }) : h("span", { class: "thumb", text: "🎁", "aria-hidden": "true" });
-    body.append(h("div", { class: "dl-top" }, [img, h("div", {}, [h("div", { class: "price", text: price(l.price) }), h("div", { class: "muted", text: "Цена объявления, не цена сделки" })])]));
+    const imageCandidates = [];
+    const addImage = value => {
+      const url = typeof value === "string" ? value :
+        value && typeof value === "object" ? (value.image_url || value.url || value.src || value.preview_url) : "";
+      if (typeof url === "string" && /^https:\/\/(?:huevo\.su|huevo\.departament\.site)\//i.test(url) && !imageCandidates.includes(url)) {
+        imageCandidates.push(url);
+      }
+    };
+    const addImageGroup = value => {
+      if (!value) return;
+      if (Array.isArray(value)) value.forEach(addImage);
+      else if (typeof value === "object") {
+        addImage(value.image_url); addImage(value.image); addImage(value.preview_url); addImage(value.thumbnail);
+        if (Array.isArray(value.images)) value.images.forEach(addImage);
+        if (Array.isArray(value.gallery)) value.gallery.forEach(addImage);
+      }
+    };
+    addImage(l.image_url);
+    addImageGroup(l.gift_catalog);
+    addImageGroup(l.gift_details);
+    addImageGroup(l.gift_instance);
+    const gallery = h("div", { class: "detail-image-gallery" });
+    const heroImage = imageCandidates.length
+      ? h("img", { class: "detail-hero-image", src: imageCandidates[0], alt: l.title || "Подарок", referrerpolicy: "no-referrer" })
+      : h("span", { class: "detail-hero-placeholder", text: "🎁", "aria-hidden": "true" });
+    gallery.append(heroImage);
+    if (imageCandidates.length > 1) {
+      const thumbs = h("div", { class: "detail-image-thumbs" });
+      imageCandidates.slice(0, 8).forEach((url, index) => {
+        const button = h("button", { class: "detail-image-thumb", type: "button", "aria-label": "Изображение " + (index + 1), "aria-pressed": String(index === 0) }, [
+          h("img", { src: url, alt: "", loading: "lazy", referrerpolicy: "no-referrer" })
+        ]);
+        button.addEventListener("click", () => {
+          if (heroImage.tagName === "IMG") heroImage.src = url;
+          thumbs.querySelectorAll("button").forEach(item => item.setAttribute("aria-pressed", String(item === button)));
+        });
+        thumbs.append(button);
+      });
+      gallery.append(thumbs);
+    }
+    body.append(h("div", { class: "dl-top" }, [gallery, h("div", {}, [
+      h("div", { class: "price", text: price(l.price) }),
+      h("div", { class: "muted", text: "Цена объявления, не цена сделки" }),
+      h("small", { class: "muted", text: imageCandidates.length > 1 ? "Галерея · " + imageCandidates.length + " изображений источника" : "Изображение из карточки подарка" })
+    ])]));
     // comparable group: same title & rarity, only when big enough
     const groupLots = state.lots.filter((x) => x.title === l.title && x.rarity === l.rarity && isNum(x.price));
     const group = groupLots.map((x) => x.price).sort((a, b) => a - b);
