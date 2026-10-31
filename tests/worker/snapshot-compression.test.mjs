@@ -129,3 +129,72 @@ test("three-second Live status endpoint reads only the Live row and skips schema
   assert.match(statements[0], /FROM live_page_state/);
   assert.doesNotMatch(statements.join("\n"), /sqlite_master|CREATE TABLE/i);
 });
+
+test("snapshot ingest rejects missing and incorrect bearer credentials before reading the payload", async () => {
+  for (const headers of [
+    { "Content-Type": "application/json" },
+    { "Content-Type": "application/json", Authorization: "Bearer wrong-token" },
+  ]) {
+    const env = testEnv();
+    const response = await worker.fetch(new Request("https://amnyam.test/api/snapshot", {
+      method: "POST", headers, body: "{malformed"
+    }), env, {});
+    assert.equal(response.status, 401);
+    assert.equal(env.DB.snapshotRow, null);
+  }
+});
+
+test("snapshot ingest reports missing server token as unavailable, not unauthorized", async () => {
+  const env = testEnv();
+  delete env.LIVE_INGEST_TOKEN;
+  const response = await worker.fetch(new Request("https://amnyam.test/api/snapshot", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer test-ingest-token" },
+    body: JSON.stringify({ generated_at: new Date().toISOString(), lots: [{ lot_id: "x" }] }),
+  }), env, {});
+  assert.equal(response.status, 503);
+  assert.equal(env.DB.snapshotRow, null);
+});
+
+test("snapshot ingest rejects malformed JSON and unsupported content encodings without writing D1", async () => {
+  const malformed = await worker.fetch(new Request("https://amnyam.test/api/snapshot", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer test-ingest-token",
+      "Content-Type": "application/json",
+    },
+    body: "{not-json",
+  }), testEnv(), {});
+  assert.equal(malformed.status, 400);
+  assert.match((await malformed.json()).error, /valid JSON/);
+
+  const env = testEnv();
+  const unsupported = await worker.fetch(new Request("https://amnyam.test/api/snapshot", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer test-ingest-token",
+      "Content-Type": "application/json",
+      "Content-Encoding": "br",
+    },
+    body: "{}",
+  }), env, {});
+  assert.equal(unsupported.status, 415);
+  assert.equal(env.DB.snapshotRow, null);
+});
+
+test("snapshot ingest rejects declared oversized payload before attempting to store it", async () => {
+  const env = testEnv();
+  const response = await worker.fetch(new Request("https://amnyam.test/api/snapshot", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer test-ingest-token",
+      "Content-Type": "application/json",
+      "Content-Length": "12000001",
+    },
+    body: "{}",
+  }), env, {});
+  assert.equal(response.status, 413);
+  assert.match((await response.json()).error, /too large/);
+  assert.equal(env.DB.snapshotRow, null);
+});
+
