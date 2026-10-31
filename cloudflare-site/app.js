@@ -738,7 +738,18 @@
       box.append(h("div", { class: "hbar" }, [h("span", { text: c.name }), h("div", { class: "track" }, [fill]), h("span", { class: "n", text: fmt(c.count) + (isNum(c.median) ? " · мед. " + short(c.median) : "") })]));
     });
 
-    const snaps = (Array.isArray(state.data.snapshots) ? state.data.snapshots : []).filter((p) => p && p.observed_at);
+    const fromText = $("historyFrom") ? $("historyFrom").value : "";
+    const toText = $("historyTo") ? $("historyTo").value : "";
+    const fromTime = fromText ? Date.parse(fromText + "T00:00:00") : null;
+    const toTime = toText ? Date.parse(toText + "T23:59:59.999") : null;
+    let snaps = (Array.isArray(state.data.snapshots) ? state.data.snapshots : []).filter(p => p && p.observed_at);
+    if (Number.isFinite(fromTime)) snaps = snaps.filter(p => Date.parse(p.observed_at) >= fromTime);
+    if (Number.isFinite(toTime)) snaps = snaps.filter(p => Date.parse(p.observed_at) <= toTime);
+    if (fromText && toText && Number.isFinite(fromTime) && Number.isFinite(toTime) && fromTime > toTime) snaps = [];
+    const rangeNote = $("historyRangeNote");
+    if (rangeNote) rangeNote.textContent = fromText || toText
+      ? (snaps.length ? "Выбрано снимков: " + fmt(snaps.length) : "Нет снимков в выбранном диапазоне")
+      : "Все доступные снимки · " + fmt(snaps.length);
     $("countNote").textContent = snaps.length + " снимков";
     $("medianNote").textContent = snaps.length + " снимков";
     lineChart($("chartCount"), snaps.map((p) => ({ label: dayLabel(p.observed_at), value: p.active_lots })), "Динамика числа активных лотов", "История накопится после двух и более сборов.");
@@ -892,12 +903,12 @@
       summary.append(card("Позиций", "0", "Добавь свои покупки"));
       return;
     }
-    let invested = 0, estimated = 0, valued = 0;
+    let invested = 0, investedValued = 0, estimated = 0, valued = 0;
     const rows = state.portfolio.map(item => {
       const reference = portfolioReference(item);
       const cost = item.purchase_price * item.quantity;
       invested += cost;
-      if (reference) { estimated += reference.value * item.quantity; valued += 1; }
+      if (reference) { estimated += reference.value * item.quantity; investedValued += cost; valued += 1; }
       const pnl = reference ? (reference.value - item.purchase_price) * item.quantity : null;
       const row = h("article", { class: "portfolio-row" }, [
         h("div", {}, [
@@ -929,7 +940,7 @@
       card("Покупок", fmt(state.portfolio.length), "Разных позиций"),
       card("Вложено", price(invested), "По сохранённой цене покупки"),
       card("Оценка", valued ? price(estimated) : "Нет данных", fmt(valued) + " позиций с ориентиром"),
-      card("Результат", valued ? (estimated - invested >= 0 ? "+" : "") + price(estimated - invested) : "—", "Только по позициям с оценкой")
+      card("Результат", valued ? (estimated - investedValued >= 0 ? "+" : "") + price(estimated - investedValued) : "—", "Только по позициям с оценкой")
     );
   }
 
@@ -1262,6 +1273,75 @@
     renderRows();
     updateViewCounts();
   }
+  function downloadCsvFile(fileName, columns, rows) {
+    if (!Array.isArray(rows) || !rows.length) return false;
+    const cell = value => {
+      const numeric = typeof value === "number" && Number.isFinite(value);
+      let text = value == null ? "" : String(value);
+      const trimmed = text.trimStart();
+      if (!numeric && ["=", "+", "-", "@", "\t", "\r"].some(prefix => trimmed.startsWith(prefix))) text = "'" + text;
+      return numeric ? text : '"' + text.replace(/"/g, '""') + '"';
+    };
+    const csv = [columns.map(column => cell(column[0])).join(";")]
+      .concat(rows.map(row => columns.map(column => cell(column[1](row))).join(";")))
+      .join("\r\n");
+    const blob = new Blob([String.fromCharCode(0xfeff), csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+    return true;
+  }
+
+  function exportGiftCatalogCsv() {
+    const rows = Array.isArray(state.data && state.data.gift_catalog_index) ? state.data.gift_catalog_index : [];
+    const ok = downloadCsvFile("amnyam-gift-catalog-" + new Date().toISOString().slice(0, 10) + ".csv", [
+      ["ID каталога", item => item.catalog_id || item.gift_catalog_id || item.id],
+      ["Подарок", item => item.title || item.name],
+      ["Тираж", item => item.supply],
+      ["Редкость", item => item.rarity],
+      ["Ссылка", item => "https://huevo.su/gifts/" + encodeURIComponent(String(item.catalog_id || item.gift_catalog_id || item.id || ""))]
+    ], rows);
+    if (!ok) $("giftCatalogCount").textContent = "Нет карточек для экспорта";
+  }
+
+  function exportPortfolioCsv() {
+    const ok = downloadCsvFile("amnyam-portfolio-" + new Date().toISOString().slice(0, 10) + ".csv", [
+      ["Подарок", item => item.title], ["Редкость", item => item.rarity],
+      ["Количество", item => item.quantity], ["Цена покупки", item => item.purchase_price],
+      ["Всего вложено", item => item.quantity * item.purchase_price],
+      ["Добавлено", item => item.added_at]
+    ], state.portfolio);
+    if (!ok) $("portfolioCount").textContent = "Нет позиций для экспорта";
+  }
+
+  function exportEventsCsv() {
+    const changes = state.data && state.data.changes && typeof state.data.changes === "object" ? state.data.changes : {};
+    const rows = [];
+    const push = (type, item) => {
+      if (item && typeof item === "object") rows.push({
+        type, title: item.title || item.gift_title || item.name || "",
+        lot_id: item.lot_id || "", price: item.price,
+        observed_at: item.observed_at || item.event_at || item.first_seen || item.last_seen || "",
+        detail: item.label || item.event || item.status || ""
+      });
+    };
+    (Array.isArray(changes.new) ? changes.new : []).forEach(item => push("Новый лот", item));
+    (Array.isArray(changes.price_changes) ? changes.price_changes : []).forEach(item => push("Изменение цены", item));
+    (Array.isArray(changes.gone) ? changes.gone : []).forEach(item => push("Лот не найден", item));
+    (Array.isArray(state.data.catalog_events) ? state.data.catalog_events : []).forEach(item => push("Событие экземпляра", item));
+    const ok = downloadCsvFile("amnyam-market-events-" + new Date().toISOString().slice(0, 10) + ".csv", [
+      ["Тип", item => item.type], ["Подарок", item => item.title],
+      ["ID лота", item => item.lot_id], ["Цена", item => item.price],
+      ["Дата источника", item => item.observed_at], ["Событие", item => item.detail]
+    ], rows);
+    if (!ok) $("marketEventsCount").textContent = "Нет событий для экспорта";
+  }
+
   function exportMarketCsv() {
     const rows = Array.isArray(state.view) ? state.view : [];
     if (!rows.length) {
@@ -2966,6 +3046,15 @@
   });
   $("giftCatalogSearch").addEventListener("input",renderGiftCatalogIndex);
   $("giftCatalogSort").addEventListener("change",renderGiftCatalogIndex);
+  $("exportGiftCatalogCsv").addEventListener("click",exportGiftCatalogCsv);
+  $("exportPortfolioCsv").addEventListener("click",exportPortfolioCsv);
+  $("exportEventsCsv").addEventListener("click",exportEventsCsv);
+  $("historyApply").addEventListener("click",renderCharts);
+  $("historyReset").addEventListener("click",()=>{
+    $("historyFrom").value="";
+    $("historyTo").value="";
+    renderCharts();
+  });
   $("saveBelowBestTarget").addEventListener("click",()=>{const id=state._belowBestId;if(id)saveTarget(id,$("belowBestTarget").value);});
   $("belowBestMinus10").addEventListener("click",()=>{const id=state._belowBestId,lot=state.lots.find(item=>String(item.lot_id)===String(id));if(lot&&isNum(lot.price)&&lot.price>0){$("belowBestTarget").value=String(Math.max(1,Math.floor(lot.price*.9)));saveTarget(id,$("belowBestTarget").value);}});
   $("supportAmounts").addEventListener("click",event=>{const b=event.target.closest("[data-amount]");if(b&&!b.disabled)makeSupportPayment(b.dataset.amount);});
