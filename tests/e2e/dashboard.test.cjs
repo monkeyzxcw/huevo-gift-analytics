@@ -255,7 +255,7 @@ test("search, filters, sort, pagination and reset work", async () => {
   assert.equal((await page.textContent("#rows tr:first-child td:nth-child(3) .count-pill")).trim(), "9");
   await page.selectOption("#sortBy", "price:1");
   await page.click(".sort[data-key=price]");           // already ascending -> descending
-  assert.equal(await page.getAttribute("th:nth-child(2)", "aria-sort"), "descending");
+  assert.equal(await page.getAttribute("#lotsMode th:nth-child(2)", "aria-sort"), "descending");
   assert.match(await page.textContent("#rows tr:first-child td.price"), /1\s?290/);
   await page.click("#next");
   assert.match(await page.textContent("#pageInfo"), /Страница 2 из 3/);
@@ -579,17 +579,17 @@ test("load failure shows an error with a working retry", async () => {
   await browser.close();
 });
 
-test("blocked collector and stale data are announced while the last good snapshot stays visible", async () => {
+test("stale market snapshot is announced without exposing collector errors", async () => {
   const old = new Date(Date.now() - 40 * 3600e3).toISOString();
-  const { browser, page } = await open(serve(dataV2({ generated_at: old, collector: { status: "blocked", message: "HTTP 418", checked_at: NOW, blocked_until: new Date(Date.now() + 6 * 3600e3).toISOString() } })));
+  const { browser, page } = await open(serve(dataV2({ generated_at: old, collector: { status: "blocked", message: "PRIVATE HTTP 418", checked_at: NOW, blocked_until: new Date(Date.now() + 6 * 3600e3).toISOString() } })));
   await page.waitForSelector("#content:not(.hide)");
   const note = await page.textContent("#notice");
-  assert.match(note, /больше 24 ч/); assert.match(note, /HTTP 418/); assert.match(note, /Пауза до/);
-  assert.match(await page.textContent("#stateText"), /на паузе/);
+  assert.match(note, /более 24 часов/);
+  assert.doesNotMatch(note, /PRIVATE HTTP 418|Пауза до/);
+  assert.doesNotMatch(await page.textContent("#stateText"), /на паузе/);
   assert.equal(await page.locator("#rows tr").count(), 50);
   await browser.close();
 });
-
 test("sales section appears only with confirmed data", async () => {
   const sales = { summary: { count: 12, unknown: 1, min: 100, max: 900, median: 300, enough_data: true, note: "Прошлые сделки, а не объявления" } };
   const { browser, page } = await open(serve(dataV2({ sales })));
