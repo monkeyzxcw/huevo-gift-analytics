@@ -25,8 +25,11 @@
   const number = (value) => {
     if (typeof value === "number") return Number.isFinite(value) ? value : null;
     if (typeof value !== "string") return null;
-    const normal = value.trim().replace(/\s/g, "").replace(",", ".");
+    let normal = value.trim().replace(/\s/g, "").replace(/[^\d,.\-+]/g, "");
     if (!normal) return null;
+    if (/^[+-]?\d{1,3}(?:,\d{3})+$/.test(normal)) normal = normal.replace(/,/g, "");
+    else if (/^[+-]?\d{1,3}(?:\.\d{3})+$/.test(normal)) normal = normal.replace(/\./g, "");
+    else if (normal.includes(",") && !normal.includes(".")) normal = normal.replace(",", ".");
     const parsed = Number(normal);
     return Number.isFinite(parsed) ? parsed : null;
   };
@@ -454,6 +457,19 @@
   function renderMarket() {
     const body = $("usernameRows");
     body.replaceChildren();
+    const minField = $("usernameMinPrice"), maxField = $("usernameMaxPrice");
+    const minValue = minField.value === "" ? null : number(minField.value);
+    const maxValue = maxField.value === "" ? null : number(maxField.value);
+    minField.setCustomValidity("");
+    maxField.setCustomValidity("");
+    if (minValue != null && maxValue != null && minValue > maxValue) {
+      const message = "Минимальная цена не может быть выше максимальной.";
+      minField.setCustomValidity(message);
+      maxField.setCustomValidity(message);
+      $("usernameMarketCount").textContent = "Некорректный диапазон цен";
+      body.append(el("tr", {}, el("td", { colspan: "6" }, empty(message + " Исправь фильтры или сбрось их."))));
+      return;
+    }
     const rows = getFilteredItems();
     $("usernameMarketCount").textContent = rows.length.toLocaleString("ru-RU") + " из " + state.items.length.toLocaleString("ru-RU") + " объявлений";
     if (!rows.length) {
@@ -692,8 +708,20 @@
   }
 
   function bind() {
+    document.body.dataset.marketWorkspace = "gifts";
     document.querySelectorAll("[data-market-type]").forEach(button => {
       button.addEventListener("click", () => setWorkspace(button.dataset.marketType));
+    });
+    $("marketTypeNav").addEventListener("keydown", event => {
+      if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(event.key)) return;
+      const tabs = Array.from($("marketTypeNav").querySelectorAll('[role="tab"]'));
+      const current = tabs.indexOf(event.target.closest('[role="tab"]'));
+      if (current < 0) return;
+      const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 :
+        event.key === "ArrowRight" ? (current + 1) % tabs.length : (current - 1 + tabs.length) % tabs.length;
+      event.preventDefault();
+      setWorkspace(tabs[next].dataset.marketType);
+      tabs[next].focus();
     });
     document.querySelectorAll("#usernameTabs [data-username-view]").forEach(button => {
       button.addEventListener("click", () => switchView(button.dataset.usernameView));
