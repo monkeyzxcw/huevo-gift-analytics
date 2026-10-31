@@ -3,7 +3,7 @@
   "private": true,
   "description": "Cloudflare Worker dashboard and browser tests.",
   "scripts": {
-    "check": "node --check cloudflare-site/app.js && node --check src/auth.js && node --check src/huevo_launch.js && node --check src/worker.js",
+    "check": "node --check cloudflare-site/app.js && node --check cloudflare-site/sniper.js && node --check src/auth.js && node --check src/huevo_launch.js && node --check src/worker.js",
     "test:e2e": "node --test tests/worker/*.test.mjs tests/e2e/dashboard.test.cjs tests/e2e/cloudflare-account.test.cjs",
     "test:unit:worker": "node --test tests/worker/*.test.mjs"
   },

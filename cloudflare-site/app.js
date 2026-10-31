@@ -133,6 +133,14 @@
     changeKind:"new",liveFingerprint:null,compareIds:[],activeView:"overview",favorites:readFavorites(),
     targets:readTargets(),alertedTargets:readAlertedTargets(),savedFilters:readSavedFilters()
   };
+  function publishMarketData() {
+    const detail = {
+      data: state.data, lots: state.lots, targets: { ...state.targets }, deals: buildDealSignals(),
+      profileKey: accountState.user && accountState.user.id ? String(accountState.user.id) : "guest"
+    };
+    window.AMNYAM_MARKET = detail;
+    window.dispatchEvent(new CustomEvent("amnyam:market", { detail }));
+  }
   let livePollRunning = false;
   let lastHiddenPollAt = 0;
   let snapshotLoadRunning = false;
@@ -336,7 +344,29 @@
   const ALERT_SOUND_KEY = "amnyam.alertSound.v1";
   let alertSoundEnabled = false;
   let alertAudioContext = null;
-  try { alertSoundEnabled = localStorage.getItem(ALERT_SOUND_KEY) === "on"; } catch (_) {}
+  let sniperSoundPrefs = { new: false, deal: false };
+  try {
+    alertSoundEnabled = localStorage.getItem(ALERT_SOUND_KEY) === "on";
+    sniperSoundPrefs = {
+      new: localStorage.getItem("amnyam.sniperSound.new.v1") === "on",
+      deal: localStorage.getItem("amnyam.sniperSound.deal.v1") === "on"
+    };
+  } catch (_) {}
+  window.AMNYAM_SOUND_SETTINGS = {
+    get: () => ({ ...sniperSoundPrefs, master: alertSoundEnabled }),
+    set: (kind, enabled) => {
+      if (kind !== "new" && kind !== "deal") return false;
+      sniperSoundPrefs[kind] = Boolean(enabled);
+      if (accountState.user) {
+        if (!accountState.hydrating) queueProfileSave();
+      } else {
+        try { localStorage.setItem("amnyam.sniperSound." + kind + ".v1", enabled ? "on" : "off"); } catch (_) {}
+      }
+      window.dispatchEvent(new CustomEvent("amnyam:sniper-sounds", { detail: { ...sniperSoundPrefs, master: alertSoundEnabled } }));
+      return true;
+    },
+    masterEnabled: () => alertSoundEnabled
+  };
   function updateAlertSoundControls() {
     const toggle = $("toggleAlertSound"), hint = $("alertSoundHint");
     if (toggle) {
@@ -346,6 +376,7 @@
     if (hint) hint.textContent = alertSoundEnabled
       ? "Фирменная пятинотная мелодия прозвучит при достижении цены-цели."
       : "Звуковые сигналы отключены. Включи их и нажми тест, чтобы услышать сигнал AMNYAM.";
+    window.dispatchEvent(new CustomEvent("amnyam:sniper-sounds", { detail: { ...sniperSoundPrefs, master: alertSoundEnabled } }));
   }
   function playAlertSound(force) {
     if (!force && !alertSoundEnabled) return;
@@ -833,6 +864,47 @@
     renderRows();
     updateViewCounts();
   }
+  function exportMarketCsv() {
+    const rows = Array.isArray(state.view) ? state.view : [];
+    if (!rows.length) {
+      $("exportCsvStatus").textContent = "Нет строк для экспорта";
+      return;
+    }
+    const columns = [
+      ["ID лота", lot => lot.lot_id],
+      ["Подарок", lot => lot.title],
+      ["Серийный номер", lot => lot.serial],
+      ["Цена", lot => lot.price],
+      ["Редкость", lot => lot.rarity],
+      ["Статус", lot => lot.status],
+      ["Похожие лоты", lot => lot._lotCount],
+      ["Изменение к минимуму, %", lot => lot._delta],
+      ["Впервые замечен", lot => lot.first_seen],
+      ["Последнее наблюдение", lot => lot.last_seen],
+      ["Ссылка", lot => lot.lot_url]
+    ];
+    const cell = value => {
+      const numeric = typeof value === "number" && Number.isFinite(value);
+      let text = value == null ? "" : String(value);
+      const trimmed = text.trimStart();
+      if (!numeric && ["=", "+", "-", "@", "\t", "\r"].some(prefix => trimmed.startsWith(prefix))) text = "'" + text;
+      return numeric ? text : '"' + text.replace(/"/g, '""') + '"';
+    };
+    const csv = [columns.map(column => cell(column[0])).join(";")]
+      .concat(rows.map(lot => columns.map(column => cell(column[1](lot))).join(";")))
+      .join("\r\n");
+    const blob = new Blob([String.fromCharCode(0xfeff), csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "amnyam-market-" + new Date().toISOString().slice(0, 10) + ".csv";
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+    $("exportCsvStatus").textContent = "Экспортировано строк: " + fmt(rows.length);
+  }
+
   function updateCompareButton(){const b=$("compareSelected");b.textContent="Сравнить ("+state.compareIds.length+"/4)";b.disabled=state.compareIds.length<2;}
   function renderRows(){
     if(state.catalogMode==="gifts"){renderGroupRows();return;}
@@ -1169,7 +1241,7 @@
   }
 
   function switchView(view, focusSearch) {
-    const allowed = new Set(["overview", "market", "deals", "cheap", "analytics", "favorites", "support", "appearance", "help"]);
+    const allowed = new Set(["overview", "market", "sniper", "deals", "cheap", "analytics", "favorites", "support", "appearance", "help"]);
     state.activeView = allowed.has(view) ? view : "overview";
     document.querySelectorAll("[data-view-section]").forEach((section) => {
       section.classList.toggle("view-hidden", section.getAttribute("data-view-section") !== state.activeView);
@@ -1518,14 +1590,14 @@
     if(errorNode){errorNode.textContent="";errorNode.classList.remove("visible");}
     if(value===null){delete state.targets[id];state.alertedTargets=state.alertedTargets.filter(v=>v!==id);}
     else{state.targets[id]=value;if(!state.favorites.includes(id))state.favorites=[...state.favorites,id].slice(-5000);}
-    writeTargets();writeAlertedTargets();writeFavorites();checkTargetAlerts();renderFavorites();renderRows();renderDeals();renderDayPicks();updateViewCounts();return true;
+    writeTargets();writeAlertedTargets();writeFavorites();checkTargetAlerts();renderFavorites();renderRows();renderDeals();renderDayPicks();updateViewCounts();publishMarketData();return true;
   }
 
   function toggleFavorite(lotId){
     const id=String(lotId);
     if(state.favorites.includes(id)){state.favorites=state.favorites.filter(v=>v!==id);delete state.targets[id];state.alertedTargets=state.alertedTargets.filter(v=>v!==id);writeTargets();writeAlertedTargets();}
     else state.favorites=[...state.favorites,id].slice(-5000);
-    writeFavorites();renderFavorites();updateViewCounts();renderRows();renderDeals();renderDayPicks();
+    writeFavorites();renderFavorites();updateViewCounts();renderRows();renderDeals();renderDayPicks();publishMarketData();
   }
 
   function renderSavedFilters(){
@@ -1846,6 +1918,8 @@
       savedFilters: state.savedFilters.slice(0, 25),
       preferences: {
         alertSound: Boolean(alertSoundEnabled),
+        sniperNewSound: Boolean(sniperSoundPrefs.new),
+        sniperDealSound: Boolean(sniperSoundPrefs.deal),
         appearance: { ...appearance },
         seasonTheme: document.body.dataset.season || "default"
       }
@@ -1862,6 +1936,7 @@
     state.savedFilters = Array.isArray(p.savedFilters) ? p.savedFilters.filter(item => item && typeof item.name === "string" && item.name.trim() && item.filters && typeof item.filters === "object").slice(0, 25) : [];
     const prefs = p.preferences && typeof p.preferences === "object" ? p.preferences : {};
     alertSoundEnabled = prefs.alertSound === true;
+    sniperSoundPrefs = { new: prefs.sniperNewSound === true, deal: prefs.sniperDealSound === true };
     const a = prefs.appearance && typeof prefs.appearance === "object" ? prefs.appearance : {};
     appearance = {
       background: ["cosmic","liquid","nebula","minimal"].includes(a.background) ? a.background : "cosmic",
@@ -1881,7 +1956,14 @@
     state.targets = readTargets();
     state.alertedTargets = readAlertedTargets();
     state.savedFilters = readSavedFilters();
-    try { alertSoundEnabled = localStorage.getItem(ALERT_SOUND_KEY) === "on"; } catch (_) { alertSoundEnabled = false; }
+    try {
+      alertSoundEnabled = localStorage.getItem(ALERT_SOUND_KEY) === "on";
+      sniperSoundPrefs = {
+        new: localStorage.getItem("amnyam.sniperSound.new.v1") === "on",
+        deal: localStorage.getItem("amnyam.sniperSound.deal.v1") === "on"
+      };
+    } catch (_) { alertSoundEnabled = false; sniperSoundPrefs = { new: false, deal: false }; }
+    window.dispatchEvent(new CustomEvent("amnyam:sniper-sounds", { detail: { ...sniperSoundPrefs, master: alertSoundEnabled } }));
     appearance = readAppearance();
     applyAppearance();
     let theme = "default";
@@ -2128,6 +2210,7 @@
       setMascotMood("sad", "Каталог пока пуст… Жду новые лоты");
       dismissPremiumSplash();
       switchView(state.activeView);
+      publishMarketData();
       return;
     }
     show("content");
@@ -2137,6 +2220,7 @@
     renderCards(); renderCharts(); renderChanges(); renderTop(); renderSales(); fillFacets();
     renderSavedFilters();setSortMenuOptions();applyFilters();
     switchView(state.activeView);
+    publishMarketData();
   }
 
   const APPEARANCE_KEY = "amnyam.appearance.v1";
@@ -2219,7 +2303,7 @@
     }
     if (!typing && window.__amnyamGoPending && Date.now() - window.__amnyamGoPending < 750) {
       const key = event.key.toLowerCase();
-      const views = { h: "overview", m: "market", d: "deals", c: "cheap", a: "analytics", f: "favorites", i: "help" };
+      const views = { h: "overview", m: "market", s: "sniper", d: "deals", c: "cheap", a: "analytics", f: "favorites", i: "help" };
       if (views[key]) { event.preventDefault(); switchView(views[key], true); }
       window.__amnyamGoPending = 0;
     }
@@ -2246,6 +2330,7 @@
     const token=button.dataset.searchToken||"",input=$("search");input.value=(input.value.trim()+" "+token).trim();$("globalSearch").value=input.value;state.page=0;switchView("market",true);applyFilters();
   }));
   $("dealSort").addEventListener("change",renderDeals);
+  $("exportCsv").addEventListener("click",exportMarketCsv);
   $("saveBelowBestTarget").addEventListener("click",()=>{const id=state._belowBestId;if(id)saveTarget(id,$("belowBestTarget").value);});
   $("belowBestMinus10").addEventListener("click",()=>{const id=state._belowBestId,lot=state.lots.find(item=>String(item.lot_id)===String(id));if(lot&&isNum(lot.price)&&lot.price>0){$("belowBestTarget").value=String(Math.max(1,Math.floor(lot.price*.9)));saveTarget(id,$("belowBestTarget").value);}});
   $("supportAmounts").addEventListener("click",event=>{const b=event.target.closest("[data-amount]");if(b&&!b.disabled)makeSupportPayment(b.dataset.amount);});

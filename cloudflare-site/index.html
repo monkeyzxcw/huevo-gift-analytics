@@ -36,13 +36,14 @@
 <nav class="main-nav" id="mainNav" role="tablist" aria-label="Разделы AMNYAM MODE">
   <button role="tab" aria-selected="true" data-view="overview" type="button"><span>01</span> База</button>
   <button role="tab" aria-selected="false" data-view="market" type="button"><span>02</span> Маркет <small id="navMarketCount">—</small></button>
-  <button role="tab" aria-selected="false" data-view="deals" type="button"><span>03</span> Ниже рынка <small id="navDealsCount">—</small></button>
-  <button role="tab" aria-selected="false" data-view="cheap" type="button"><span>04</span> Дешёвые <small id="navCheapCount">—</small></button>
-  <button role="tab" aria-selected="false" data-view="analytics" type="button"><span>05</span> Данные</button>
-  <button role="tab" aria-selected="false" data-view="favorites" type="button"><span>06</span> Избранное <small id="navFavoritesCount">0</small></button>
-  <button role="tab" aria-selected="false" data-view="support" type="button"><span>07</span> Поддержка</button>
-  <button role="tab" aria-selected="false" data-view="appearance" type="button"><span>08</span> Внешний вид</button>
-  <button role="tab" aria-selected="false" data-view="help" type="button"><span>09</span> Инструкция</button>
+  <button role="tab" aria-selected="false" data-view="sniper" type="button"><span>03</span> Снайпер <small id="navSniperCount">0</small></button>
+  <button role="tab" aria-selected="false" data-view="deals" type="button"><span>04</span> Ниже рынка <small id="navDealsCount">—</small></button>
+  <button role="tab" aria-selected="false" data-view="cheap" type="button"><span>05</span> Дешёвые <small id="navCheapCount">—</small></button>
+  <button role="tab" aria-selected="false" data-view="analytics" type="button"><span>06</span> Данные</button>
+  <button role="tab" aria-selected="false" data-view="favorites" type="button"><span>07</span> Избранное <small id="navFavoritesCount">0</small></button>
+  <button role="tab" aria-selected="false" data-view="support" type="button"><span>08</span> Поддержка</button>
+  <button role="tab" aria-selected="false" data-view="appearance" type="button"><span>09</span> Внешний вид</button>
+  <button role="tab" aria-selected="false" data-view="help" type="button"><span>10</span> Инструкция</button>
 </nav>
 <div class="command-strip"><span class="command-mark">AMNYAM / WORKER EDITION</span><span>MARKET INTELLIGENCE <i></i> SILENT SYNC 3S</span><label class="season-control"><span>ТЕМА</span><select id="seasonTheme" aria-label="Праздничная тема"><option value="default">AMNYAM</option><option value="newyear">Новый год</option><option value="halloween">Хэллоуин</option><option value="spring">Весна</option><option value="summer">Лето</option></select></label><label class="command-search"><b>⌕</b><input id="globalSearch" type="search" placeholder="Быстрый поиск по рынку…" autocomplete="off" aria-label="Быстрый поиск"><kbd>ENTER</kbd></label></div>
 
@@ -162,6 +163,51 @@
   <p class="muted foot">Сигнал ниже рынка — сравнительная оценка, а не обещание прибыли. Сверяй серию, редкость и данные лота перед покупкой.</p>
 </section>
 
+<section class="panel sniper-panel" id="sniperPanel" data-view-section="sniper" aria-labelledby="sniperTitle">
+  <div class="section-heading">
+    <div><span class="section-index">/ LIVE MARKET RADAR</span><h2 id="sniperTitle">Снайпер</h2><p>Новые лоты, заметные снижения цены, новые сигналы ниже рынка и достигнутые цели. Лента строится по событиям из уже загруженного снимка.</p></div>
+    <span class="view-stat" id="sniperUpdated">Ожидаем данные…</span>
+  </div>
+  <div class="sniper-metrics" aria-live="polite">
+    <article><span>НОВЫЕ ЛОТЫ</span><b id="sniperNewCount">0</b><small>за последние 24 часа</small></article>
+    <article><span>СНИЖЕНИЯ ЦЕНЫ</span><b id="sniperPriceCount">0</b><small>замечены в текущей сессии</small></article>
+    <article><span>СИГНАЛЫ НИЖЕ РЫНКА</span><b id="sniperDealCount">0</b><small>по текущим данным</small></article>
+    <article><span>ДОСТИГНУТЫЕ ЦЕЛИ</span><b id="sniperTargetCount">0</b><small>среди отслеживаемых лотов</small></article>
+  </div>
+  <div class="sniper-sound-bar">
+    <div><b>Звуки событий</b><small>Работают только при включённом основном звуке в «Избранном». Системных и Push-уведомлений нет.</small></div>
+    <label><input id="sniperNewSound" type="checkbox"> Новые лоты</label>
+    <label><input id="sniperDealSound" type="checkbox"> Новые сделки</label>
+  </div>
+  <div class="sniper-filter-bar">
+    <label class="f"><span>Тип события</span><select class="select" id="sniperType"><option value="all">Все события</option><option value="new">Новые лоты</option><option value="price">Снижение цены</option><option value="deal">Ниже рынка</option><option value="target">Достигнутые цели</option></select></label>
+    <label class="f"><span>Поиск</span><input class="input" id="sniperSearch" type="search" placeholder="Название или ID"></label>
+    <label class="f"><span>Цена от</span><input class="input" id="sniperMinPrice" type="number" min="0" inputmode="numeric" placeholder="0"></label>
+    <label class="f"><span>Цена до</span><input class="input" id="sniperMaxPrice" type="number" min="0" inputmode="numeric" placeholder="∞"></label>
+    <label class="f"><span>Дисконт от, %</span><input class="input" id="sniperMinDiscount" type="number" min="0" max="80" inputmode="numeric" placeholder="0"></label>
+    <button class="btn secondary" id="sniperReset" type="button">Сбросить</button>
+  </div>
+  <div class="sniper-feed-head"><h3>Последние события</h3><span class="muted" id="sniperFeedNote">Новые события появятся после обновления рынка</span></div>
+  <ol class="sniper-feed" id="sniperFeed" aria-live="polite"><li class="empty">Ожидаем первый снимок рынка.</li></ol>
+  <div class="sniper-tools-grid">
+    <article class="sniper-tool">
+      <span class="section-index">/ BUY SCENARIO</span><h3>Калькулятор покупки</h3>
+      <p>Сравни цену входа с квартилями подтверждённых продаж. При отсутствии истории сделок может использоваться диапазон объявлений — он явно помечается как менее надёжный.</p>
+      <label class="f"><span>Подарок</span><select class="select" id="sniperGiftSelect"><option value="">Загружаем каталог…</option></select></label>
+      <label class="f"><span>Твоя цена покупки</span><input class="input" id="sniperBuyPrice" type="number" min="1" step="1" inputmode="numeric" placeholder="Например, 8000"></label>
+      <button class="btn" id="sniperCalculate" type="button">Рассчитать сценарии</button>
+      <div class="sniper-calc-result" id="sniperCalcResult" role="status"><div class="empty">Выбери подарок и укажи цену покупки.</div></div>
+    </article>
+    <article class="sniper-tool">
+      <span class="section-index">/ OBSERVED ATTRIBUTES</span><h3>Индекс редкости</h3>
+      <p>Частота характеристик среди экземпляров, которые реально попали в наблюдения. Это не тираж и не оценка редкости всего Huevo.</p>
+      <label class="f"><span>Подарок для анализа</span><select class="select" id="sniperRarityGift"><option value="">Загружаем каталог…</option></select></label>
+      <div class="sniper-rarity-result" id="sniperRarityResult"><div class="empty">Выбери подарок. Индекс появится при наличии нескольких наблюдаемых вариантов.</div></div>
+    </article>
+  </div>
+  <p class="sniper-footnote">События фиксируются только по наблюдаемым изменениям. Исчезновение лота не считается продажей. Сравнительная оценка и сценарии не гарантируют будущую цену или прибыль.</p>
+</section>
+
 <section class="panel" id="cheapPanel" data-view-section="cheap">
   <div class="section-heading"><div><span class="section-index">/ FLOOR PRICE</span><h2>Самые дешёвые</h2><p>Текущие предложения по возрастанию цены.</p></div><span class="view-stat" id="cheapCount">— лотов</span></div>
   <ol class="deal-list cheap-list" id="cheapestList"></ol>
@@ -203,22 +249,31 @@
       <ul><li>Режим «Отдельные лоты» показывает конкретные объявления.</li><li>Режим «По типам подарков» объединяет похожие предложения и показывает минимум, медиану и максимум.</li><li>Нажми на лот, чтобы открыть подробную карточку.</li></ul>
     </article>
     <article class="help-card">
-      <span class="help-number">03 / ВЫГОДА</span><h3>Ниже рынка и дешёвые</h3>
+      <span class="help-number">03 / LIVE RADAR</span><h3>Снайпер</h3>
+      <p>Лента фиксирует новые объявления, снижения цены, новые сигналы ниже рынка и достижение целевых цен. История последних событий хранится отдельно для каждого аккаунта huEVO в этом браузере.</p>
+      <ul><li>Фильтруй события по типу, названию, ID, цене и дисконту.</li><li>Включай отдельный звук для новых лотов и новых выгодных сигналов. Они работают только при включённом основном звуке.</li><li>Калькулятор использует подтверждённые продажи, а при их нехватке — явно помеченные объявления. Сценарии не являются прогнозом.</li><li>Частота характеристик отражает только собранные экземпляры и не показывает общий тираж.</li></ul>
+    </article>
+    <article class="help-card">
+      <span class="help-number">04 / EXPORT</span><h3>Экспорт маркета</h3>
+      <p>Кнопка «Экспорт CSV» скачивает всю текущую отфильтрованную выборку, а не только открытую страницу таблицы. Текстовые значения защищаются от интерпретации как формулы в табличных редакторах.</p>
+    </article>
+    <article class="help-card">
+      <span class="help-number">05 / ВЫГОДА</span><h3>Ниже рынка и дешёвые</h3>
       <p>«Ниже рынка» ищет предложения дешевле устойчивого ориентира сопоставимых лотов или подтверждённых продаж. Верхний сигнал выбирается среди кандидатов без экстремального дисконта более 80%; такие цены помечаются как подозрительные. «Дешёвые» показывает абсолютный минимум независимо от скидки.</p>
       <p class="help-note">Дисконт — ориентир для анализа, а не гарантия прибыли. Проверяй серию, редкость и конкретный лот перед покупкой.</p>
     </article>
     <article class="help-card">
-      <span class="help-number">04 / КАРТОЧКА</span><h3>Характеристики и экземпляр</h3>
+      <span class="help-number">06 / КАРТОЧКА</span><h3>Характеристики и экземпляр</h3>
       <p>В подробностях подарка блок «Характеристики» описывает модель, фон, символ и другие свойства, которые удалось получить из карточки Huevo.</p>
       <p>Блок «Экземпляр и тираж» объединяет два отдельных источника: конкретный экземпляр читается со страницы /gift/{id} (номер, владелец, история), а тираж, цена выпуска, автор и коллекция — со страницы подарка /gifts/{id}. ID подарка берётся только из связанной ссылки на странице экземпляра, после чего заголовок /gifts сверяется с названием экземпляра.</p>
       <p class="help-note">Если ссылка на /gifts/{id} неоднозначна или название страницы не совпадает, данные тиража не прикрепляются. Пустое поле означает, что источник не передал подтверждённое значение. AMNYAM не угадывает ID по названию, номеру или ID лота.</p>
     </article>
     <article class="help-card">
-      <span class="help-number">05 / МОНИТОРИНГ</span><h3>Избранное и цена-цель</h3>
+      <span class="help-number">07 / МОНИТОРИНГ</span><h3>Избранное и цена-цель</h3>
       <ul><li>Нажми ☆ у лота, чтобы добавить его в «Избранное».</li><li>Укажи целую цену, при которой хочешь получить сигнал.</li><li>Когда цена станет равна цели или ниже, AMNYAM проиграет мелодию, если звук включён и вкладка приложения открыта.</li><li>Если цена снова поднимется выше цели, условие сбросится и сможет сработать повторно при следующем снижении.</li></ul>
     </article>
     <article class="help-card">
-      <span class="help-number">06 / ЗВУК</span><h3>Звуковой сигнал AMNYAM</h3>
+      <span class="help-number">08 / ЗВУК</span><h3>Звуковой сигнал AMNYAM</h3>
       <ol>
         <li>В «Избранном» включи переключатель «Звук».</li>
         <li>Нажми «Проверить звук», чтобы убедиться, что браузер воспроизводит мелодию.</li>
@@ -228,17 +283,17 @@
       <p class="help-note">Звук работает только в открытой вкладке AMNYAM. Для получения свежих цен должен работать HuevoDualScan и оставаться авторизованным в обоих окнах Chrome.</p>
     </article>
     <article class="help-card">
-      <span class="help-number">07 / АНАЛИТИКА</span><h3>Данные</h3>
+      <span class="help-number">09 / АНАЛИТИКА</span><h3>Данные</h3>
       <p>Графики показывают динамику количества лотов и медианной цены. «Изменения каталога» позволяет просматривать новые, исчезнувшие и подорожавшие/подешевевшие объявления, а также события по экземплярам.</p>
       <p>История цены объявления не равна истории завершённых сделок. Сумма сделки показывается только тогда, когда источник действительно её предоставил.</p>
     </article>
     <article class="help-card">
-      <span class="help-number">08 / ПРОФИЛЬ</span><h3>Аккаунт и внешний вид</h3>
+      <span class="help-number">10 / ПРОФИЛЬ</span><h3>Аккаунт и внешний вид</h3>
       <p>При запуске AMNYAM из huEVO избранное, цели и настройки связываются с подтверждённым профилем huEVO. При обычном открытии в браузере персональные настройки хранятся локально в этом браузере.</p>
       <p>Во вкладке «Внешний вид» можно менять фон, маскота, анимации и стеклянные карточки. Эти эффекты не должны мешать работе с каталогом.</p>
     </article>
     <article class="help-card">
-      <span class="help-number">10 / ДИАГНОСТИКА</span><h3>Почему не звучит мелодия</h3>
+      <span class="help-number">12 / ДИАГНОСТИКА</span><h3>Почему не звучит мелодия</h3>
       <ul>
         <li><b>Звук выключен</b> — включи переключатель «Звук» в блоке «Избранное».</li>
         <li><b>Тестовая мелодия не звучит</b> — нажми «Проверить звук» после взаимодействия со страницей и проверь громкость вкладки/системы.</li>
@@ -248,7 +303,7 @@
       <p class="help-note">Сигналы намеренно воспроизводятся только в открытой вкладке AMNYAM. Фоновых браузерных или системных уведомлений больше нет.</p>
     </article>
     <article class="help-card">
-      <span class="help-number">09 / ОБНОВЛЕНИЯ</span><h3>Откуда берутся данные</h3>
+      <span class="help-number">11 / ОБНОВЛЕНИЯ</span><h3>Откуда берутся данные</h3>
       <p>AMNYAM показывает сведения, поступающие от сборщика HuevoDualScan. Первая страница маркета обновляется чаще, полный обход каталога и отдельный разбор карточек выполняются своими очередями.</p>
       <p>Cloudflare Worker обслуживает API AMNYAM и принимает свежие рыночные данные. Серверная и браузерная доставка уведомлений не используется.</p>
       <p>Сборщик работает в двух видимых окнах Chrome с ручным входом в huEVO. Если окно сборщика закрыто, вход потерян или источник ограничил доступ, свежие данные могут перестать поступать. Обновление сайта само по себе не запускает сбор Huevo.</p>
@@ -256,7 +311,7 @@
   </div>
   <div class="help-footer">
     <b>Полезные сочетания клавиш</b>
-    <span><kbd>/</kbd> поиск по рынку</span><span><kbd>Ctrl</kbd> + <kbd>K</kbd> быстрые команды</span><span><kbd>G</kbd>, затем <kbd>H</kbd> — главная</span><span><kbd>G</kbd>, затем <kbd>I</kbd> — инструкция</span>
+    <span><kbd>/</kbd> поиск по рынку</span><span><kbd>Ctrl</kbd> + <kbd>K</kbd> быстрые команды</span><span><kbd>G</kbd>, затем <kbd>H</kbd> — главная</span><span><kbd>G</kbd>, затем <kbd>S</kbd> — Снайпер</span><span><kbd>G</kbd>, затем <kbd>I</kbd> — инструкция</span>
   </div>
 </section>
 
@@ -300,6 +355,7 @@
   <div class="market-tools-row">
     <div class="catalog-modes" role="group" aria-label="Режим каталога"><button class="mode-btn active" type="button" data-catalog-mode="lots" aria-pressed="true">Отдельные лоты</button><button class="mode-btn" type="button" data-catalog-mode="gifts" aria-pressed="false">По типам подарков</button></div>
     <span class="muted mode-note">Группировка объединяет название подарка и редкость</span>
+    <div class="market-export"><button class="btn secondary" id="exportCsv" type="button">Экспорт CSV</button><small id="exportCsvStatus" role="status"></small></div>
   </div>
   <div class="saved-filters">
     <label class="f preset-name"><span>Название набора</span><input class="input" id="presetName" type="text" maxlength="40" placeholder="Например, редкие до 100k"></label>
@@ -345,6 +401,7 @@
     <button type="button" data-command-item data-command="search"><span class="palette-icon">⌕</span><span><b>Поиск по рынку</b><small>Найти подарок, ID или задать фильтр</small></span><kbd>/</kbd></button>
     <button type="button" data-command-item data-command-view="overview"><span class="palette-icon">▦</span><span><b>Главная панель</b><small>Сводка рынка и быстрые действия</small></span><kbd>G H</kbd></button>
     <button type="button" data-command-item data-command-view="market"><span class="palette-icon">▤</span><span><b>Маркет</b><small>Все лоты и фильтры</small></span><kbd>G M</kbd></button>
+    <button type="button" data-command-item data-command-view="sniper"><span class="palette-icon">⌁</span><span><b>Снайпер</b><small>Новые лоты, изменения и ценовые сигналы</small><kbd>G S</kbd></span></button>
     <button type="button" data-command-item data-command-view="deals"><span class="palette-icon">↘</span><span><b>Ниже рынка</b><small>Подтверждённые скидки относительно аналогов</small></span><kbd>G D</kbd></button>
     <button type="button" data-command-item data-command-view="cheap"><span class="palette-icon">＄</span><span><b>Дешёвые лоты</b><small>Самые доступные предложения</small></span></button>
     <button type="button" data-command-item data-command-view="analytics"><span class="palette-icon">⌁</span><span><b>Аналитика</b><small>Графики и изменения рынка</small></span></button>
@@ -390,6 +447,7 @@
 </main>
 <div id="ambientLayer" aria-hidden="true"></div><div id="cursorGlow" aria-hidden="true"></div>
 <div class="premium-splash" id="premiumSplash" aria-hidden="true"><div class="splash-mark">H<span>•</span></div><div class="splash-title">AMNYAM <b>MODE</b></div><div class="splash-subtitle">GIFT MARKET INTELLIGENCE</div><div class="splash-loader"><i></i></div></div>
-<script src="./app.js?v=amnyam-sound-only-v17" defer></script>
+<script src="./app.js?v=amnyam-sniper-v18" defer></script>
+<script src="./sniper.js?v=amnyam-sniper-v1" defer></script>
 </body>
 </html>

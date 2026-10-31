@@ -485,7 +485,7 @@ test("page has no inline handlers/styles and fits a phone screen", async () => {
 test("AMNYAM navigation renders all views and author support shows five levels", async () => {
   const { browser, page, problems } = await open(serve(dataV2()), { width: 1280, height: 900 });
   await page.waitForSelector("#content:not(.hide)");
-  for (const view of ["overview", "market", "deals", "cheap", "analytics", "favorites", "support"]) {
+  for (const view of ["overview", "market", "sniper", "deals", "cheap", "analytics", "favorites", "support"]) {
     await page.click('#mainNav [data-view="' + view + '"]');
     assert.equal(await page.getAttribute('#mainNav [data-view="' + view + '"]', "aria-selected"), "true", view + " tab selected");
     assert.equal(await page.locator('[data-view-section="' + view + '"]:not(.view-hidden)').count() > 0, true, view + " view visible");
@@ -803,6 +803,8 @@ test("help tab documents market workflows and sound-only target alerts", async (
   assert.equal(await page.locator("#helpPanel:not(.view-hidden)").count(), 1);
   const guide = await page.textContent("#helpPanel");
   assert.match(guide, /Маркет/);
+  assert.match(guide, /Снайпер/);
+  assert.match(guide, /Экспорт CSV/);
   assert.match(guide, /цена-цель/);
   assert.match(guide, /Звуковой сигнал AMNYAM/);
   assert.match(guide, /Фоновых браузерных или системных уведомлений больше нет/);
@@ -952,9 +954,11 @@ test("main navigation supports ArrowLeft, ArrowRight, Home and End with roving f
     assert.equal(await tab("market").getAttribute("aria-selected"), "true");
     assert.equal(await tab("market").evaluate(node => document.activeElement === node), true);
     await page.keyboard.press("ArrowRight");
+    assert.equal(await tab("sniper").getAttribute("aria-selected"), "true");
+    await page.keyboard.press("ArrowRight");
     assert.equal(await tab("deals").getAttribute("aria-selected"), "true");
     await page.keyboard.press("ArrowLeft");
-    assert.equal(await tab("market").getAttribute("aria-selected"), "true");
+    assert.equal(await tab("sniper").getAttribute("aria-selected"), "true");
     await page.keyboard.press("End");
     assert.equal(await tab("help").getAttribute("aria-selected"), "true");
     await page.keyboard.press("Home");
@@ -968,3 +972,72 @@ test("main navigation supports ArrowLeft, ArrowRight, Home and End with roving f
   }
 });
 
+
+
+test("Sniper shows a live new-lot event and calculates scenarios from confirmed sale data", async () => {
+  let latest = dataV2({
+    sales: {
+      generated_at: NOW,
+      summary: { count: 20, unknown: 0, median: 1000, min: 800, max: 1200, enough_data: true },
+      by_title: [{ title: "Звезда", count: 20, median: 1000, p25: 900, p75: 1100,
+        history: [{ date: "2026-10-29", median: 980 }, { date: "2026-10-30", median: 1000 }] }]
+    }
+  });
+  const { browser, page, problems } = await open((route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify(latest)
+  }));
+  try {
+    await page.waitForSelector("#content:not(.hide)");
+    await page.click('#mainNav [data-view="sniper"]');
+    assert.equal(await page.locator("#sniperPanel:not(.view-hidden)").count(), 1);
+    await page.waitForFunction(() => Array.from(document.querySelectorAll("#sniperGiftSelect option")).some(option => option.textContent === "Звезда"));
+    await page.selectOption("#sniperGiftSelect", { label: "Звезда" });
+    await page.fill("#sniperBuyPrice", "800");
+    await page.waitForSelector("#sniperCalcResult .sniper-scenario", { timeout: 5000 });
+    assert.equal(await page.locator("#sniperCalcResult .sniper-scenario").count(), 3);
+    assert.match(await page.textContent("#sniperCalcResult"), /Подтверждённые продажи/);
+    assert.match(await page.textContent("#sniperCalcResult"), /Оптимистичный/);
+    assert.match(await page.textContent("#sniperRarityResult"), /характеристик|нескольких сопоставимых/i);
+
+    latest = JSON.parse(JSON.stringify(latest));
+    latest.lots.push({
+      lot_id: "900001", title: "Звезда", rarity: "Редкий", price: 650, status: "На продаже",
+      first_seen: new Date().toISOString(), last_seen: new Date().toISOString(), active: true,
+      lot_url: "https://huevo.su/market/lot/900001", history: []
+    });
+    await page.waitForFunction(() => document.querySelector("#sniperFeed").textContent.includes("900001"), { timeout: 12000 });
+    assert.match(await page.textContent("#sniperFeed"), /НОВЫЙ ЛОТ/);
+    await page.selectOption("#sniperType", "new");
+    assert.ok(await page.locator("#sniperFeed .sniper-event").count() >= 2, "existing snapshot change and the newly detected lot are both retained");
+    await page.fill("#sniperSearch", "not-found");
+    assert.match(await page.textContent("#sniperFeed"), /Нет событий под выбранные фильтры/);
+    assert.deepEqual(problems, []);
+  } finally {
+    await browser.close();
+  }
+});
+
+
+test("CSV export contains the filtered market data and neutralises spreadsheet formulas", async () => {
+  const data = dataV2();
+  data.lots[0].title = '=HYPERLINK("https://evil.example";"open")';
+  const { browser, page, problems } = await open(serve(data));
+  try {
+    await page.waitForSelector("#content:not(.hide)");
+    await page.click('#mainNav [data-view="market"]');
+    const downloadPromise = page.waitForEvent("download");
+    await page.click("#exportCsv");
+    const download = await downloadPromise;
+    assert.ok(download.suggestedFilename().startsWith("amnyam-market-"));
+    assert.ok(download.suggestedFilename().endsWith(".csv"));
+    const file = await download.path();
+    const csv = fs.readFileSync(file, "utf8");
+    assert.match(csv, /ID лота/);
+    assert.match(csv, /Подарок/);
+    assert.match(csv, /'=HYPERLINK/);
+    assert.match(await page.textContent("#exportCsvStatus"), /Экспортировано строк/);
+    assert.deepEqual(problems, []);
+  } finally {
+    await browser.close();
+  }
+});

@@ -742,3 +742,61 @@ button:disabled{cursor:not-allowed;filter:saturate(.55)}
 .help-footer kbd{display:inline-block;padding:3px 6px;border:1px solid #46513d;border-bottom-width:2px;border-radius:5px;background:#171e14;color:#dce8ce;font:10px ui-monospace,monospace}
 @media(max-width:980px){.help-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:600px){.help-grid{grid-template-columns:1fr}.help-card{padding:14px}.help-intro{align-items:flex-start;padding:14px}.help-intro-mark{width:40px;height:40px;border-radius:11px;font-size:23px}.help-footer{align-items:flex-start;flex-direction:column}.help-footer>b{flex:auto}}
+
+
+/* AMNYAM Sniper: event radar, calculator and observed rarity */
+.sniper-panel{display:grid;gap:18px}
+.sniper-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}
+.sniper-metrics article{position:relative;min-width:0;padding:14px;border:1px solid var(--line,#2b3040);border-radius:10px;background:linear-gradient(145deg,rgba(35,39,58,.72),rgba(15,18,28,.82));display:flex;flex-direction:column;gap:6px}
+.sniper-metrics article span{font:800 9px ui-monospace,monospace;letter-spacing:.09em;color:var(--muted)}
+.sniper-metrics article b{font:900 25px ui-monospace,monospace;color:var(--text,#f3f4f8)}
+.sniper-metrics article small{font-size:10px;color:var(--muted)}
+.sniper-sound-bar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:12px 14px;border:1px solid rgba(151,132,255,.2);border-radius:10px;background:rgba(65,50,105,.12)}
+.sniper-sound-bar>div{display:flex;flex-direction:column;gap:4px;flex:1 1 250px}
+.sniper-sound-bar>div b{font-size:12px}
+.sniper-sound-bar>div small{font-size:10px;line-height:1.5;color:var(--muted)}
+.sniper-sound-bar label{display:flex;align-items:center;gap:7px;font-size:11px;white-space:nowrap}
+.sniper-sound-bar input{accent-color:var(--amnyam-acid,#c4ff58);width:15px;height:15px}
+.sniper-filter-bar{display:grid;grid-template-columns:1.1fr 1.6fr repeat(3,minmax(110px,.8fr)) auto;gap:9px;align-items:end}
+.sniper-filter-bar .f,.sniper-tool .f{min-width:0;display:flex;flex-direction:column;gap:6px}
+.sniper-filter-bar .f>span,.sniper-tool .f>span{font-size:10px;color:var(--muted)}
+.sniper-feed-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;padding-top:6px}
+.sniper-feed-head h3{margin:0;font-size:17px}
+.sniper-feed{list-style:none;padding:0;margin:0;display:grid;gap:8px}
+.sniper-event{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:14px;min-width:0;padding:12px;border:1px solid var(--line,#2b3040);border-radius:9px;background:rgba(15,18,28,.7)}
+.sniper-event>div:first-child{display:flex;flex-direction:column;gap:4px;min-width:0}
+.sniper-event-tag{font:800 9px ui-monospace,monospace;letter-spacing:.09em;color:var(--amnyam-acid,#c4ff58)}
+.sniper-event b{overflow-wrap:anywhere}
+.sniper-event small{font-size:10px;color:var(--muted)}
+.sniper-event-value{display:flex;flex-direction:column;align-items:flex-end;gap:4px;white-space:nowrap}
+.sniper-event-price .sniper-event-tag{color:#8ebaff}
+.sniper-event-deal .sniper-event-tag{color:#a9ee72}
+.sniper-event-target .sniper-event-tag{color:#d7b6ff}
+.sniper-tools-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:4px}
+.sniper-tool{min-width:0;display:flex;flex-direction:column;gap:10px;padding:17px;border:1px solid var(--line,#2b3040);border-radius:11px;background:linear-gradient(145deg,rgba(25,29,45,.82),rgba(12,15,24,.88))}
+.sniper-tool h3{margin:0;font-size:19px}
+.sniper-tool>p{margin:0;color:var(--muted);font-size:11px;line-height:1.6}
+.sniper-tool>.btn{align-self:flex-start}
+.sniper-calc-result,.sniper-rarity-result{display:grid;gap:9px;min-width:0}
+.sniper-scenario-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+.sniper-scenario{display:flex;flex-direction:column;gap:6px;min-width:0;padding:10px;border:1px solid rgba(151,132,255,.16);border-radius:8px;background:rgba(10,13,22,.5)}
+.sniper-scenario small{font-size:10px;color:var(--muted)}
+.sniper-scenario b{font:850 14px ui-monospace,monospace;overflow-wrap:anywhere}
+.sniper-scenario span{font-size:9px;color:var(--muted);overflow-wrap:anywhere}
+.sniper-calc-note{margin:0;color:var(--muted);font-size:10px;line-height:1.55}
+.sniper-rarity-row{display:grid;gap:7px;padding:10px;border:1px solid rgba(151,132,255,.15);border-radius:8px;background:rgba(10,13,22,.38)}
+.sniper-rarity-row> b{font-size:11px}
+.sniper-rarity-value{display:grid;grid-template-columns:minmax(0,1fr) 50px;gap:6px;align-items:center;font-size:10px}
+.sniper-rarity-value span{overflow-wrap:anywhere}
+.sniper-rarity-value>b{text-align:right;font:800 10px ui-monospace,monospace}
+.sniper-rarity-value i{grid-column:1/-1;height:5px;background:rgba(255,255,255,.08);border-radius:9px;overflow:hidden}
+.sniper-rarity-value em{display:block;height:100%;background:linear-gradient(90deg,#8f77ff,var(--amnyam-acid,#c4ff58));border-radius:9px}
+.sniper-footnote{margin:0;color:var(--muted);font-size:10px;line-height:1.6}
+@media(max-width:1050px){.sniper-filter-bar{grid-template-columns:repeat(3,minmax(0,1fr))}.sniper-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.sniper-tools-grid{grid-template-columns:1fr}.sniper-filter-bar{grid-template-columns:repeat(2,minmax(0,1fr))}.sniper-filter-bar .f:nth-child(2){grid-column:1/-1}.sniper-event{grid-template-columns:minmax(0,1fr) auto;gap:9px}.sniper-event>.btn{grid-column:1/-1;justify-self:start}.sniper-scenario-grid{grid-template-columns:1fr}.sniper-sound-bar{align-items:flex-start;gap:10px}}
+@media(max-width:420px){.sniper-metrics article{padding:10px}.sniper-metrics article b{font-size:20px}.sniper-filter-bar{grid-template-columns:1fr}.sniper-filter-bar .f:nth-child(2){grid-column:auto}.sniper-event{padding:10px}.sniper-event-value b{font-size:11px}}
+@media(prefers-reduced-motion:reduce){.sniper-panel *{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
+
+.market-export{display:flex;align-items:center;gap:8px;margin-left:auto}
+.market-export small{font-size:10px;color:var(--muted)}
+@media(max-width:700px){.market-export{width:100%;margin-left:0;justify-content:space-between}}
