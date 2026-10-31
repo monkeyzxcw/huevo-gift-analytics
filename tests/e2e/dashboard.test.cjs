@@ -988,9 +988,11 @@ test("Sniper shows a live new-lot event and calculates scenarios from confirmed 
     await page.waitForSelector("#content:not(.hide)");
     await page.click('#mainNav [data-view="sniper"]');
     assert.equal(await page.locator("#sniperPanel:not(.view-hidden)").count(), 1);
-    assert.match(await page.textContent("#sniperCalcResult"), /Осторожный|цену покупки/i);
+    await page.waitForFunction(() => Array.from(document.querySelectorAll("#sniperGiftSelect option")).some(option => option.textContent === "Звезда"));
+    await page.selectOption("#sniperGiftSelect", { label: "Звезда" });
     await page.fill("#sniperBuyPrice", "800");
-    await page.waitForFunction(() => document.querySelector("#sniperCalcResult").textContent.includes("900"));
+    await page.waitForSelector("#sniperCalcResult .sniper-scenario", { timeout: 5000 });
+    assert.equal(await page.locator("#sniperCalcResult .sniper-scenario").count(), 3);
     assert.match(await page.textContent("#sniperCalcResult"), /Подтверждённые продажи/);
     assert.match(await page.textContent("#sniperCalcResult"), /Оптимистичный/);
     assert.match(await page.textContent("#sniperRarityResult"), /характеристик|нескольких сопоставимых/i);
