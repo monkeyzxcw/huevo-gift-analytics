@@ -128,10 +128,24 @@
   function writeAlertedTargets(){if(accountState.user){if(!accountState.hydrating)queueProfileSave();return;}try{localStorage.setItem("amnyam.alertedTargets",JSON.stringify(state.alertedTargets));}catch(_){}}
   function readSavedFilters(){try{const x=JSON.parse(localStorage.getItem("amnyam.savedFilters")||"[]");return Array.isArray(x)?x.filter(i=>i&&typeof i.name==="string"&&i.name.trim()&&i.filters&&typeof i.filters==="object").slice(0,25):[];}catch(_){return [];}}
   function writeSavedFilters(){if(accountState.user){if(!accountState.hydrating)queueProfileSave();return;}try{localStorage.setItem("amnyam.savedFilters",JSON.stringify(state.savedFilters));}catch(_){}}
+  const PORTFOLIO_KEY = "amnyam.portfolio.v1";
+  function readPortfolio() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(PORTFOLIO_KEY) || "[]");
+      return Array.isArray(raw) ? raw.filter(item => item && typeof item.title === "string" && item.title.trim() &&
+        Number.isSafeInteger(item.quantity) && item.quantity > 0 && item.quantity <= 1000 &&
+        Number.isSafeInteger(item.purchase_price) && item.purchase_price > 0).slice(0, 100) : [];
+    } catch (_) { return []; }
+  }
+  function writePortfolio() {
+    if (accountState.user) { if (!accountState.hydrating) queueProfileSave(); }
+    else { try { localStorage.setItem(PORTFOLIO_KEY, JSON.stringify(state.portfolio)); } catch (_) {} }
+    renderPortfolio();
+  }
   const state = {
     data:null,lots:[],view:[],page:0,sort:{key:"price",dir:1},groupSort:{key:"count",dir:-1},catalogMode:"lots",
     changeKind:"new",liveFingerprint:null,compareIds:[],activeView:"overview",favorites:readFavorites(),
-    targets:readTargets(),alertedTargets:readAlertedTargets(),savedFilters:readSavedFilters()
+    targets:readTargets(),alertedTargets:readAlertedTargets(),savedFilters:readSavedFilters(),portfolio:readPortfolio()
   };
   function publishMarketData() {
     const detail = {
@@ -268,7 +282,7 @@
     });
   }
 
-  async function pollLive() {
+  async function pollFullSnapshot() {
     // The dashboard polls the Worker's merged /data.json, not only the first-page
     // endpoint. This lets both the 3-second live stream and the 5-minute full snapshot
     // reach every panel without reloading the document.
@@ -341,12 +355,104 @@
     }
   }
 
+  let fastLivePollRunning = false;
+  async function pollLive() {
+    if (fastLivePollRunning || !state.data || Date.now() < pollBackoffUntil) return;
+    if (document.visibilityState !== "visible") {
+      if (Date.now() - lastHiddenPollAt < 15000) return;
+      lastHiddenPollAt = Date.now();
+    }
+    fastLivePollRunning = true;
+    try {
+      const live = await fetchJson("./api/live/status?_=" + Date.now(), { cache: "no-store" }, 8000);
+      pollFailureCount = 0;
+      pollBackoffUntil = 0;
+      state.data.live = {
+        enabled: Boolean(live.enabled),
+        fresh: Boolean(live.fresh),
+        last_poll_at: live.last_poll_at || null,
+        item_count: Number(live.item_count) || 0,
+        age_seconds: Number.isFinite(Number(live.age_seconds)) ? Number(live.age_seconds) : null,
+        fingerprint: live.fingerprint || null,
+        message: live.fresh ? "Первая страница Huevo обновляется в реальном времени." :
+          (live.enabled ? "Локальный опрос первой страницы не поступал более 15 секунд." : "Live-хранилище пока не включено.")
+      };
+      if (live.fresh && Array.isArray(live.items)) {
+        const fingerprint = String(live.fingerprint || "");
+        if (fingerprint && fingerprint !== state.liveFingerprint) {
+          const byId = new Map(live.items.map(item => [String(item.lot_id), item]));
+          const merged = state.lots.map(lot => {
+            const fresh = byId.get(String(lot.lot_id));
+            if (!fresh) return lot;
+            byId.delete(String(lot.lot_id));
+            return {
+              ...lot,
+              title: fresh.title || lot.title,
+              serial: fresh.serial || lot.serial,
+              rarity: fresh.rarity || lot.rarity,
+              price: isNum(fresh.price) ? fresh.price : lot.price,
+              status: fresh.status || lot.status,
+              lot_url: fresh.lot_url || lot.lot_url,
+              image_url: fresh.image_url || lot.image_url,
+              active: true,
+              last_seen: live.last_poll_at || lot.last_seen
+            };
+          });
+          byId.forEach(item => merged.push({
+            ...item,
+            first_seen: live.last_poll_at || new Date().toISOString(),
+            last_seen: live.last_poll_at || new Date().toISOString(),
+            active: true,
+            history: []
+          }));
+          state.lots = merged;
+          state.liveFingerprint = fingerprint;
+          state.data.price_bins = [];
+          state.data.categories = [];
+          state.data.top_expensive = merged.filter(lot => isNum(lot.price))
+            .sort((a, b) => b.price - a.price).slice(0, 10);
+          render();
+          const detailDialog = $("detail");
+          if (detailDialog && detailDialog.open && activeDetailLotId) {
+            const refreshedLot = state.lots.find(lot => String(lot.lot_id) === activeDetailLotId);
+            if (refreshedLot) openDetail(refreshedLot, lastTrigger);
+          }
+        } else {
+          renderState();
+          renderSourceHealth();
+          checkTargetAlerts();
+        }
+      } else {
+        renderState();
+        renderSourceHealth();
+      }
+    } catch (_) {
+      pollFailureCount = Math.min(pollFailureCount + 1, 5);
+      const delays = [3000, 6000, 12000, 20000, 30000];
+      pollBackoffUntil = Date.now() + delays[pollFailureCount - 1];
+      const dot = $("stateDot"), label = $("stateText");
+      if (dot && label && state.data) {
+        dot.className = "dot warn";
+        label.textContent = "Связь восстанавливается";
+      }
+    } finally {
+      fastLivePollRunning = false;
+    }
+  }
+
   // ---------- optional target-price sound ----------
   const ALERT_SOUND_KEY = "amnyam.alertSound.v1";
   let alertSoundEnabled = false;
   let alertAudioContext = null;
+  let soundVolume = 100;
+  let soundPattern = "signature";
   let sniperSoundPrefs = { new: false, deal: false };
   try {
+    const rawVolume = localStorage.getItem("amnyam.sound.volume.v1");
+    const savedVolume = rawVolume === null ? NaN : Number(rawVolume);
+    if (Number.isInteger(savedVolume) && savedVolume >= 0 && savedVolume <= 100) soundVolume = savedVolume;
+    const savedPattern = localStorage.getItem("amnyam.sound.pattern.v1");
+    if (["signature", "soft", "double"].includes(savedPattern)) soundPattern = savedPattern;
     alertSoundEnabled = localStorage.getItem(ALERT_SOUND_KEY) === "on";
     sniperSoundPrefs = {
       new: localStorage.getItem("amnyam.sniperSound.new.v1") === "on",
@@ -354,7 +460,7 @@
     };
   } catch (_) {}
   window.AMNYAM_SOUND_SETTINGS = {
-    get: () => ({ ...sniperSoundPrefs, master: alertSoundEnabled }),
+    get: () => ({ ...sniperSoundPrefs, master: alertSoundEnabled, volume: soundVolume, pattern: soundPattern }),
     set: (kind, enabled) => {
       if (kind !== "new" && kind !== "deal") return false;
       sniperSoundPrefs[kind] = Boolean(enabled);
@@ -366,7 +472,9 @@
       window.dispatchEvent(new CustomEvent("amnyam:sniper-sounds", { detail: { ...sniperSoundPrefs, master: alertSoundEnabled } }));
       return true;
     },
-    masterEnabled: () => alertSoundEnabled
+    masterEnabled: () => alertSoundEnabled,
+    volume: () => soundVolume,
+    pattern: () => soundPattern
   };
   function updateAlertSoundControls() {
     const toggle = $("toggleAlertSound"), hint = $("alertSoundHint");
@@ -375,9 +483,31 @@
       toggle.setAttribute("aria-pressed", String(alertSoundEnabled));
     }
     if (hint) hint.textContent = alertSoundEnabled
-      ? "Фирменная пятинотная мелодия прозвучит при достижении цены-цели."
+      ? "Звуковой сигнал AMNYAM включён. " + soundVolume + "% · " + soundPatternLabel(soundPattern) + "."
       : "Звуковые сигналы отключены. Включи их и нажми тест, чтобы услышать сигнал AMNYAM.";
+    updateAdvancedSoundControls();
     window.dispatchEvent(new CustomEvent("amnyam:sniper-sounds", { detail: { ...sniperSoundPrefs, master: alertSoundEnabled } }));
+  }
+  function soundPatternLabel(pattern) {
+    return ({ signature: "фирменный, 5 нот", soft: "мягкий, 3 ноты", double: "двойной, 2 ноты" })[pattern] || "фирменный, 5 нот";
+  }
+  function updateAdvancedSoundControls() {
+    const volume = $("soundVolume"), volumeLabel = $("soundVolumeLabel"), pattern = $("soundPattern");
+    if (volume) volume.value = String(soundVolume);
+    if (volumeLabel) volumeLabel.textContent = soundVolume + "%";
+    if (pattern) pattern.value = soundPattern;
+  }
+  function persistAdvancedSoundSettings() {
+    if (accountState.user) {
+      if (!accountState.hydrating) queueProfileSave();
+    } else {
+      try {
+        localStorage.setItem("amnyam.sound.volume.v1", String(soundVolume));
+        localStorage.setItem("amnyam.sound.pattern.v1", soundPattern);
+      } catch (_) {}
+    }
+    updateAdvancedSoundControls();
+    updateAlertSoundControls();
   }
   function playAlertSound(force) {
     if (!force && !alertSoundEnabled) return;
@@ -394,15 +524,18 @@
         // AMNYAM signature: a bright five-note rising/falling arpeggio, rather
         // than the old generic two-beep alert. Triggered only by a user setting
         // or a target-price event.
-        const notes = [523.25, 659.25, 783.99, 1046.5, 783.99];
+        const notes = soundPattern === "soft" ? [659.25, 783.99, 1046.5]
+          : soundPattern === "double" ? [880, 660] : [523.25, 659.25, 783.99, 1046.5, 783.99];
+        const volume = Math.max(0, Math.min(100, soundVolume)) / 100;
         notes.forEach((frequency, index) => {
-          const start = context.currentTime + index * 0.145;
+          const start = context.currentTime + index * (soundPattern === "double" ? 0.22 : 0.145);
           const oscillator = context.createOscillator();
           const gain = context.createGain();
           oscillator.type = index === 4 ? "sine" : "triangle";
           oscillator.frequency.setValueAtTime(frequency, start);
           gain.gain.setValueAtTime(0.0001, start);
-          gain.gain.exponentialRampToValueAtTime(index === 3 ? 0.065 : 0.048, start + 0.018);
+          const peak = soundPattern === "soft" ? 0.04 : soundPattern === "double" ? 0.052 : (index === 3 ? 0.065 : 0.048);
+          gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, peak * volume), start + 0.018);
           gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.16);
           oscillator.connect(gain);
           gain.connect(context.destination);
@@ -429,6 +562,16 @@
       if (alertSoundEnabled) playAlertSound(true);
     });
     $("testAlertSound").addEventListener("click", () => playAlertSound(true));
+    const volume = $("soundVolume"), pattern = $("soundPattern");
+    if (volume) volume.addEventListener("input", () => {
+      soundVolume = Math.max(0, Math.min(100, Number(volume.value) || 0));
+      persistAdvancedSoundSettings();
+    });
+    if (pattern) pattern.addEventListener("change", () => {
+      soundPattern = ["signature", "soft", "double"].includes(pattern.value) ? pattern.value : "signature";
+      persistAdvancedSoundSettings();
+    });
+    updateAdvancedSoundControls();
   }
 
   function show(which) {
@@ -639,7 +782,18 @@
       box.append(h("div", { class: "hbar" }, [h("span", { text: c.name }), h("div", { class: "track" }, [fill]), h("span", { class: "n", text: fmt(c.count) + (isNum(c.median) ? " · мед. " + short(c.median) : "") })]));
     });
 
-    const snaps = (Array.isArray(state.data.snapshots) ? state.data.snapshots : []).filter((p) => p && p.observed_at);
+    const fromText = $("historyFrom") ? $("historyFrom").value : "";
+    const toText = $("historyTo") ? $("historyTo").value : "";
+    const fromTime = fromText ? Date.parse(fromText + "T00:00:00") : null;
+    const toTime = toText ? Date.parse(toText + "T23:59:59.999") : null;
+    let snaps = (Array.isArray(state.data.snapshots) ? state.data.snapshots : []).filter(p => p && p.observed_at);
+    if (Number.isFinite(fromTime)) snaps = snaps.filter(p => Date.parse(p.observed_at) >= fromTime);
+    if (Number.isFinite(toTime)) snaps = snaps.filter(p => Date.parse(p.observed_at) <= toTime);
+    if (fromText && toText && Number.isFinite(fromTime) && Number.isFinite(toTime) && fromTime > toTime) snaps = [];
+    const rangeNote = $("historyRangeNote");
+    if (rangeNote) rangeNote.textContent = fromText || toText
+      ? (snaps.length ? "Выбрано снимков: " + fmt(snaps.length) : "Нет снимков в выбранном диапазоне")
+      : "Все доступные снимки · " + fmt(snaps.length);
     $("countNote").textContent = snaps.length + " снимков";
     $("medianNote").textContent = snaps.length + " снимков";
     lineChart($("chartCount"), snaps.map((p) => ({ label: dayLabel(p.observed_at), value: p.active_lots })), "Динамика числа активных лотов", "История накопится после двух и более сборов.");
@@ -767,6 +921,198 @@
     top.forEach((l) => list.append(lotItem(l, price(l.price), "#" + l.lot_id + (l.rarity ? " · " + l.rarity : ""))));
   }
 
+  function portfolioReference(item) {
+    const title = normaliseSaleTitle(item.title);
+    const rarity = normaliseSaleRarity(item.rarity);
+    const group = state.lots.filter(lot => lot.active !== false &&
+      normaliseSaleTitle(lot.title) === title &&
+      normaliseSaleRarity(lot.rarity) === rarity &&
+      isNum(lot.price) && lot.price > 0);
+    const saleRows = state.data && state.data.sales && Array.isArray(state.data.sales.by_title_rarity)
+      ? state.data.sales.by_title_rarity : [];
+    const exactSale = rarity ? saleRows.find(row =>
+      normaliseSaleTitle(row.title) === title &&
+      normaliseSaleRarity(row.rarity) === rarity &&
+      isNum(row.median) && row.median > 0) : null;
+    if (exactSale && Number(exactSale.count) >= 3) {
+      return { value: exactSale.median, basis: "подтверждённые продажи · точное название и редкость", sample: exactSale.count };
+    }
+    const offers = robustOfferReference(group.map(lot => lot.price));
+    if (offers && !offers.ambiguous) return { value: offers.reference, basis: "активные объявления", sample: offers.sample_size };
+    return null;
+  }
+
+  function renderPortfolio() {
+    const list = $("portfolioList"), summary = $("portfolioSummary");
+    if (!list || !summary) return;
+    clear(list); clear(summary);
+    $("portfolioCount").textContent = fmt(state.portfolio.length) + " позиций";
+    const metricCard = (title, value, detail) => h("article", { class: "card" }, [
+      h("div", { class: "k", text: title }),
+      h("div", { class: "v", text: value }),
+      h("div", { class: "s", text: detail })
+    ]);
+    if (!state.portfolio.length) {
+      list.append(h("div", { class: "empty", text: "Портфель пока пуст. Добавь подарок, количество и цену покупки." }));
+      summary.append(metricCard("Позиций", "0", "Добавь свои покупки"));
+      return;
+    }
+    let invested = 0, investedValued = 0, estimated = 0, valued = 0;
+    const rows = state.portfolio.map(item => {
+      const reference = portfolioReference(item);
+      const cost = item.purchase_price * item.quantity;
+      invested += cost;
+      if (reference) { estimated += reference.value * item.quantity; investedValued += cost; valued += 1; }
+      const pnl = reference ? (reference.value - item.purchase_price) * item.quantity : null;
+      const row = h("article", { class: "portfolio-row" }, [
+        h("div", {}, [
+          h("b", { text: item.title }),
+          h("small", { text: (item.rarity || "Редкость не указана") + " · " + fmt(item.quantity) + " шт." })
+        ]),
+        h("div", { class: "portfolio-metric" }, [
+          h("small", { text: "ВЛОЖЕНО" }), h("b", { text: price(cost) })
+        ]),
+        h("div", { class: "portfolio-metric" }, [
+          h("small", { text: "ОЦЕНКА" }),
+          h("b", { text: reference ? price(reference.value * item.quantity) : "Нет данных" }),
+          h("small", { text: reference ? reference.basis + " · " + fmt(reference.sample) + " записей" : "Нужна выборка" })
+        ]),
+        h("div", { class: "portfolio-metric " + (pnl == null ? "" : pnl >= 0 ? "good" : "bad") }, [
+          h("small", { text: "РЕЗУЛЬТАТ" }),
+          h("b", { text: pnl == null ? "—" : (pnl >= 0 ? "+" : "") + price(pnl) })
+        ]),
+        h("button", { class: "btn secondary", type: "button", text: "Удалить", "aria-label": "Удалить " + item.title })
+      ]);
+      row.querySelector("button").addEventListener("click", () => {
+        state.portfolio = state.portfolio.filter(entry => entry.id !== item.id);
+        writePortfolio();
+      });
+      return row;
+    });
+    rows.forEach(row => list.append(row));
+    summary.append(
+      metricCard("Покупок", fmt(state.portfolio.length), "Разных позиций"),
+      metricCard("Вложено", price(invested), "По сохранённой цене покупки"),
+      metricCard("Оценка", valued ? price(estimated) : "Нет данных", fmt(valued) + " позиций с ориентиром"),
+      metricCard("Результат", valued ? (estimated - investedValued >= 0 ? "+" : "") + price(estimated - investedValued) : "—", "Только по позициям с оценкой")
+    );
+  }
+
+  function addPortfolioItem() {
+    const title = $("portfolioGift").value.trim();
+    const rarity = $("portfolioRarity").value.trim();
+    const quantity = Number($("portfolioQuantity").value);
+    const cost = Number($("portfolioCost").value);
+    if (!title || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 1000 ||
+        !Number.isSafeInteger(cost) || cost < 1 || cost > TARGET_PRICE_MAX) {
+      $("portfolioForm").reportValidity();
+      return;
+    }
+    const id = String(Date.now()) + "-" + Math.random().toString(36).slice(2, 8);
+    state.portfolio.unshift({
+      id, title: title.slice(0, 120), rarity: rarity.slice(0, 80),
+      quantity, purchase_price: cost, added_at: new Date().toISOString()
+    });
+    state.portfolio = state.portfolio.slice(0, 100);
+    $("portfolioForm").reset();
+    $("portfolioQuantity").value = "1";
+    writePortfolio();
+  }
+
+  function renderMarketEvents() {
+    const list = $("marketEventsList");
+    if (!list || !state.data) return;
+    clear(list);
+    const events = [];
+    const add = (type, label, item) => {
+      if (!item || typeof item !== "object") return;
+      const title = item.title || item.gift_title || item.name || ("Лот #" + (item.lot_id || "—"));
+      const time = item.observed_at || item.event_at || item.first_seen || item.last_seen || null;
+      events.push({
+        type, label, title: String(title), time,
+        price: isNum(item.price) ? item.price : null,
+        id: item.lot_id || item.id || null
+      });
+    };
+    const changes = state.data.changes && typeof state.data.changes === "object" ? state.data.changes : {};
+    (Array.isArray(changes.new) ? changes.new : []).slice(0, 40).forEach(item => add("new", "Новый лот", item));
+    (Array.isArray(changes.price_changes) ? changes.price_changes : []).slice(0, 40).forEach(item => add("price", "Изменение цены", item));
+    (Array.isArray(changes.gone) ? changes.gone : []).slice(0, 40).forEach(item => add("gone", "Лот больше не найден", item));
+    (Array.isArray(state.data.catalog_events) ? state.data.catalog_events : []).slice(0, 40)
+      .forEach(item => add("catalog", item.label || item.event || "Событие экземпляра", item));
+    const timeValue = value => {
+      const parsed = Date.parse(value || "");
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+    const sorted = events.sort((a, b) => timeValue(b.time) - timeValue(a.time)).slice(0, 30);
+    $("marketEventsCount").textContent = fmt(events.length) + " событий";
+    if (!sorted.length) {
+      list.append(h("li", { class: "empty", text: "События появятся после следующих сравнений снимков и истории экземпляров." }));
+      return;
+    }
+    sorted.forEach(event => list.append(h("li", { class: "market-event-row" }, [
+      h("div", {}, [
+        h("b", { text: event.title }),
+        h("small", { text: event.label + " · " + (event.time ? when(event.time) : "дата не указана") + (event.id ? " · #" + event.id : "") })
+      ]),
+      h("span", { class: "event-value", text: event.price != null ? price(event.price) : " " })
+    ])));
+  }
+
+  function renderGiftCatalogIndex() {
+    const grid = $("giftCatalogGrid");
+    if (!grid || !state.data) return;
+    clear(grid);
+    const rows = Array.isArray(state.data.gift_catalog_index) ? state.data.gift_catalog_index : [];
+    const search = String($("giftCatalogSearch").value || "").trim().toLocaleLowerCase("ru");
+    const sort = $("giftCatalogSort").value;
+    const filtered = rows.filter(item => item && typeof item === "object" &&
+      (!search || [item.title, item.name, item.catalog_id, item.gift_catalog_id].some(value =>
+        String(value || "").toLocaleLowerCase("ru").includes(search))));
+    if (sort === "supply_desc") filtered.sort((a, b) => (Number(b.supply) || 0) - (Number(a.supply) || 0));
+    else if (sort === "supply_asc") filtered.sort((a, b) => (Number(a.supply) || 0) - (Number(b.supply) || 0));
+    else filtered.sort((a, b) => String(a.title || a.name || "").localeCompare(String(b.title || b.name || ""), "ru"));
+    $("giftCatalogCount").textContent = fmt(filtered.length) + " из " + fmt(rows.length) + " карточек";
+    if (!filtered.length) {
+      grid.append(h("div", { class: "empty", text: rows.length ? "Нет совпадений по поиску." : "Индекс /gifts пока не поступил. Он собирается независимо от активных лотов." }));
+      return;
+    }
+    filtered.slice(0, 150).forEach(item => {
+      const id = String(item.catalog_id || item.gift_catalog_id || item.id || "");
+      const imageUrl = typeof item.image_url === "string" && /^https:\/\//i.test(item.image_url) ? item.image_url : "";
+      const image = imageUrl ? h("img", { src: imageUrl, alt: "", loading: "lazy", referrerpolicy: "no-referrer" }) : h("span", { class: "thumb", text: "🎁" });
+      const title = String(item.title || item.name || ("Подарок #" + (id || "—")));
+      const body = h("div", {}, [
+        h("b", { text: title }),
+        h("small", { text: (id ? "Каталог #" + id : "ID не указан") +
+          (item.supply ? " · тираж " + fmt(Number(item.supply)) : "") +
+          (item.rarity ? " · " + item.rarity : "") })
+      ]);
+      const node = h("article", { class: "catalog-index-card" }, [image, body]);
+      if (/^\d{1,20}$/.test(id)) node.append(h("a", {
+        class: "btn secondary", href: "https://huevo.su/gifts/" + encodeURIComponent(id),
+        target: "_blank", rel: "noopener noreferrer", text: "Открыть /gifts ↗"
+      }));
+      grid.append(node);
+    });
+  }
+
+  function refreshGlobalSearchSuggestions() {
+    const box = $("globalSearchSuggestions");
+    if (!box || !state.data) return;
+    clear(box);
+    const names = new Set();
+    state.lots.forEach(lot => {
+      if (lot.title) names.add(String(lot.title));
+      names.add(String(lot.lot_id));
+    });
+    const sales = state.data.sales && Array.isArray(state.data.sales.by_title) ? state.data.sales.by_title : [];
+    sales.forEach(item => { if (item.title) names.add(String(item.title)); });
+    const catalog = Array.isArray(state.data.gift_catalog_index) ? state.data.gift_catalog_index : [];
+    catalog.forEach(item => { if (item && (item.title || item.name)) names.add(String(item.title || item.name)); });
+    Array.from(names).slice(0, 500).forEach(value => box.append(h("option", { value })));
+  }
+
   // ---------- collector source health: expose real per-source progress, never infer success ----------
   function renderSourceHealth() {
     const data = state.data || {};
@@ -795,17 +1141,33 @@
       const date = new Date(value);
       return Number.isFinite(date.getTime()) ? "Проверено: " + when(date.toISOString()) : "Время проверки не распознано";
     };
-    const card = (name, status, value, detail, checkedAt) => {
+    const card = (name, status, value, detail, checkedAt, progress) => {
       const key = ["ok", "blocked", "error", "pending", "saved", "fresh", "stale"].includes(status) ? status : "unknown";
-      return h("article", { class: "source-health-card" }, [
+      const children = [
         h("div", { class: "source-health-head" }, [
           h("b", { text: name }),
           h("span", { class: "source-health-status " + key, text: statusText(key) })
         ]),
         h("strong", { class: "source-health-value", text: value }),
-        h("p", { class: "source-health-detail", text: detail }),
-        h("small", { class: "source-health-time", text: dateText(checkedAt) })
-      ]);
+        h("p", { class: "source-health-detail", text: detail })
+      ];
+      if (progress && Number.isFinite(progress.value) && progress.value >= 0 && progress.value <= 100) {
+        children.push(h("div", { class: "source-progress-wrap" }, [
+          h("div", { class: "source-progress-caption" }, [
+            h("small", { text: progress.label }),
+            h("b", { text: progress.value + "%" })
+          ]),
+          h("progress", { class: "source-progress", max: 100, value: progress.value, "aria-label": progress.label })
+        ]));
+      }
+      children.push(h("small", { class: "source-health-time", text: dateText(checkedAt) }));
+      return h("article", { class: "source-health-card" }, children);
+    };
+    const queueProgress = (current, total, label) => {
+      const done = Number(current), all = Number(total);
+      return Number.isFinite(done) && Number.isFinite(all) && all > 0
+        ? { value: Math.max(0, Math.min(100, Math.round(done / all * 100))), label: label + " · " + fmt(done) + " / " + fmt(all) }
+        : null;
     };
 
     const marketCount = Number.isFinite(Number(collector.lots)) ? Number(collector.lots) : state.lots.length;
@@ -815,10 +1177,15 @@
       : (Number.isFinite(Number(salesState.total_records)) ? Number(salesState.total_records) : salesRows.length);
     const indexCount = Number.isFinite(Number(indexState.cards)) ? Number(indexState.cards) : catalogIndex.length;
     const detailsCount = Number.isFinite(Number(detailState.known)) ? Number(detailState.known) : catalogDetails.length;
+    const detailsIndexTotal = Number(detailState.index_total) || indexCount;
+    const detailsCoverage = detailsIndexTotal > 0
+      ? Math.min(100, Math.round(detailsCount / detailsIndexTotal * 100)) : null;
     const cards = [
       card("Полный рынок", marketStatus, fmt(marketCount) + " лотов",
         (collector.pages ? fmt(collector.pages) + " страниц в последнем проходе" : "Число страниц последнего прохода не записано") +
-        (collector.message ? " · " + collector.message : ""), collector.checked_at || data.generated_at),
+        (collector.message ? " · " + collector.message : ""), collector.checked_at || data.generated_at,
+        queueProgress(collector.pages_done ?? collector.pages_completed ?? collector.pages,
+          collector.total_pages ?? collector.pages_total, "Полный обход")),
       card("Live · первая страница", liveStatus, fmt(Number(live.item_count) || 0) + " лотов",
         live.last_poll_at ? "Последний сигнал: " + when(live.last_poll_at) : "Локальный опрос первой страницы ещё не поступал",
         live.last_poll_at),
@@ -827,26 +1194,29 @@
         (salesState.pages ? fmt(salesState.pages) + " страниц обработано в последнем цикле" : "Страницы истории ещё не подтверждены") +
         (salesState.total_pages ? " · всего страниц: " + fmt(salesState.total_pages) : "") +
         (salesState.new_records ? " · новых: " + fmt(salesState.new_records) : (salesState.updated ? " · новых: " + fmt(salesState.updated) : "")),
-        salesState.checked_at),
+        salesState.checked_at, queueProgress(salesState.pages, salesState.total_pages, "История продаж")),
       card("Независимый индекс /gifts", indexState.status || (indexCount ? "saved" : "unknown"),
         fmt(indexCount) + " карточек",
         "Канонический список подарков, собирается независимо от активных объявлений",
-        indexState.checked_at || data.gift_catalog_index_checked_at),
+        indexState.checked_at || data.gift_catalog_index_checked_at,
+        queueProgress(indexState.pages, indexState.total_pages, "Индекс /gifts")),
       card("Подробности каталога", detailState.status || (detailsCount ? "saved" : "unknown"),
         fmt(Number(detailState.updated) || 0) + " обновлено",
-        fmt(detailsCount) + " полных карточек · из " + fmt(Number(detailState.index_total) || indexCount) + " в индексе · попыток: " + fmt(Number(detailState.attempted) || 0),
-        detailState.checked_at),
+        fmt(detailsCount) + " полных карточек · из " + fmt(detailsIndexTotal) + " в индексе" +
+        (detailsCoverage == null ? "" : " · покрытие " + detailsCoverage + "%") +
+        " · попыток: " + fmt(Number(detailState.attempted) || 0),
+        detailState.checked_at, detailsCoverage == null ? null : { value: detailsCoverage, label: "Полнота каталога · " + fmt(detailsCount) + " / " + fmt(detailsIndexTotal) }),
       card("Экземпляры и история владельцев", instanceState.status || "unknown",
         fmt(Number(instanceState.updated) || 0) + " обновлено",
         fmt(Number(instanceState.events_added) || 0) + " новых событий истории · попыток: " +
         fmt(Number(instanceState.attempted) || 0) + " · пакетов: " + fmt(Number(instanceState.batches) || 0),
-        instanceState.checked_at)
+        instanceState.checked_at, queueProgress(instanceState.updated, instanceState.total || instanceState.known, "Экземпляры"))
     ];
 
     const grid = clear($("sourceHealthGrid"));
     grid.append(...cards);
     const checked = [collector.checked_at, salesState.checked_at, indexState.checked_at,
-      detailState.checked_at, instanceState.checked_at, live.last_poll_at]
+      detailState.checked_at, instanceState.checked_at || instanceState.updated_at || instanceState.last_attempt_at || instanceState.last_checked_at, live.last_poll_at]
       .filter(Boolean).map(value => new Date(value).getTime()).filter(Number.isFinite);
     $("sourceHealthUpdated").textContent = checked.length
       ? "Последняя активность · " + when(new Date(Math.max(...checked)).toISOString())
@@ -981,6 +1351,75 @@
     renderRows();
     updateViewCounts();
   }
+  function downloadCsvFile(fileName, columns, rows) {
+    if (!Array.isArray(rows) || !rows.length) return false;
+    const cell = value => {
+      const numeric = typeof value === "number" && Number.isFinite(value);
+      let text = value == null ? "" : String(value);
+      const trimmed = text.trimStart();
+      if (!numeric && ["=", "+", "-", "@", "\t", "\r"].some(prefix => trimmed.startsWith(prefix))) text = "'" + text;
+      return numeric ? text : '"' + text.replace(/"/g, '""') + '"';
+    };
+    const csv = [columns.map(column => cell(column[0])).join(";")]
+      .concat(rows.map(row => columns.map(column => cell(column[1](row))).join(";")))
+      .join("\r\n");
+    const blob = new Blob([String.fromCharCode(0xfeff), csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+    return true;
+  }
+
+  function exportGiftCatalogCsv() {
+    const rows = Array.isArray(state.data && state.data.gift_catalog_index) ? state.data.gift_catalog_index : [];
+    const ok = downloadCsvFile("amnyam-gift-catalog-" + new Date().toISOString().slice(0, 10) + ".csv", [
+      ["ID каталога", item => item.catalog_id || item.gift_catalog_id || item.id],
+      ["Подарок", item => item.title || item.name],
+      ["Тираж", item => item.supply],
+      ["Редкость", item => item.rarity],
+      ["Ссылка", item => "https://huevo.su/gifts/" + encodeURIComponent(String(item.catalog_id || item.gift_catalog_id || item.id || ""))]
+    ], rows);
+    if (!ok) $("giftCatalogCount").textContent = "Нет карточек для экспорта";
+  }
+
+  function exportPortfolioCsv() {
+    const ok = downloadCsvFile("amnyam-portfolio-" + new Date().toISOString().slice(0, 10) + ".csv", [
+      ["Подарок", item => item.title], ["Редкость", item => item.rarity],
+      ["Количество", item => item.quantity], ["Цена покупки", item => item.purchase_price],
+      ["Всего вложено", item => item.quantity * item.purchase_price],
+      ["Добавлено", item => item.added_at]
+    ], state.portfolio);
+    if (!ok) $("portfolioCount").textContent = "Нет позиций для экспорта";
+  }
+
+  function exportEventsCsv() {
+    const changes = state.data && state.data.changes && typeof state.data.changes === "object" ? state.data.changes : {};
+    const rows = [];
+    const push = (type, item) => {
+      if (item && typeof item === "object") rows.push({
+        type, title: item.title || item.gift_title || item.name || "",
+        lot_id: item.lot_id || "", price: item.price,
+        observed_at: item.observed_at || item.event_at || item.first_seen || item.last_seen || "",
+        detail: item.label || item.event || item.status || ""
+      });
+    };
+    (Array.isArray(changes.new) ? changes.new : []).forEach(item => push("Новый лот", item));
+    (Array.isArray(changes.price_changes) ? changes.price_changes : []).forEach(item => push("Изменение цены", item));
+    (Array.isArray(changes.gone) ? changes.gone : []).forEach(item => push("Лот не найден", item));
+    (Array.isArray(state.data.catalog_events) ? state.data.catalog_events : []).forEach(item => push("Событие экземпляра", item));
+    const ok = downloadCsvFile("amnyam-market-events-" + new Date().toISOString().slice(0, 10) + ".csv", [
+      ["Тип", item => item.type], ["Подарок", item => item.title],
+      ["ID лота", item => item.lot_id], ["Цена", item => item.price],
+      ["Дата источника", item => item.observed_at], ["Событие", item => item.detail]
+    ], rows);
+    if (!ok) $("marketEventsCount").textContent = "Нет событий для экспорта";
+  }
+
   function exportMarketCsv() {
     const rows = Array.isArray(state.view) ? state.view : [];
     if (!rows.length) {
@@ -1143,8 +1582,51 @@
     activeDetailLotId = String(l.lot_id);
     $("dTitle").textContent = l.title || ("Лот #" + l.lot_id);
     const body = clear($("dBody"));
-    const img = l.image_url && /^https:\/\//i.test(l.image_url) ? h("img", { class: "thumb", src: l.image_url, alt: "", referrerpolicy: "no-referrer" }) : h("span", { class: "thumb", text: "🎁", "aria-hidden": "true" });
-    body.append(h("div", { class: "dl-top" }, [img, h("div", {}, [h("div", { class: "price", text: price(l.price) }), h("div", { class: "muted", text: "Цена объявления, не цена сделки" })])]));
+    const imageCandidates = [];
+    const addImage = value => {
+      const url = typeof value === "string" ? value :
+        value && typeof value === "object" ? (value.image_url || value.url || value.src || value.preview_url) : "";
+      if (typeof url === "string" && /^https:\/\/(?:huevo\.su|huevo\.departament\.site)\//i.test(url) && !imageCandidates.includes(url)) {
+        imageCandidates.push(url);
+      }
+    };
+    const addImageGroup = value => {
+      if (!value) return;
+      if (Array.isArray(value)) value.forEach(addImage);
+      else if (typeof value === "object") {
+        addImage(value.image_url); addImage(value.image); addImage(value.preview_url); addImage(value.thumbnail);
+        if (Array.isArray(value.images)) value.images.forEach(addImage);
+        if (Array.isArray(value.gallery)) value.gallery.forEach(addImage);
+      }
+    };
+    addImage(l.image_url);
+    addImageGroup(l.gift_catalog);
+    addImageGroup(l.gift_details);
+    addImageGroup(l.gift_instance);
+    const gallery = h("div", { class: "detail-image-gallery" });
+    const heroImage = imageCandidates.length
+      ? h("img", { class: "detail-hero-image", src: imageCandidates[0], alt: l.title || "Подарок", referrerpolicy: "no-referrer" })
+      : h("span", { class: "detail-hero-placeholder", text: "🎁", "aria-hidden": "true" });
+    gallery.append(heroImage);
+    if (imageCandidates.length > 1) {
+      const thumbs = h("div", { class: "detail-image-thumbs" });
+      imageCandidates.slice(0, 8).forEach((url, index) => {
+        const button = h("button", { class: "detail-image-thumb", type: "button", "aria-label": "Изображение " + (index + 1), "aria-pressed": String(index === 0) }, [
+          h("img", { src: url, alt: "", loading: "lazy", referrerpolicy: "no-referrer" })
+        ]);
+        button.addEventListener("click", () => {
+          if (heroImage.tagName === "IMG") heroImage.src = url;
+          thumbs.querySelectorAll("button").forEach(item => item.setAttribute("aria-pressed", String(item === button)));
+        });
+        thumbs.append(button);
+      });
+      gallery.append(thumbs);
+    }
+    body.append(h("div", { class: "dl-top" }, [gallery, h("div", {}, [
+      h("div", { class: "price", text: price(l.price) }),
+      h("div", { class: "muted", text: "Цена объявления, не цена сделки" }),
+      h("small", { class: "muted", text: imageCandidates.length > 1 ? "Галерея · " + imageCandidates.length + " изображений источника" : "Изображение из карточки подарка" })
+    ])]));
     // comparable group: same title & rarity, only when big enough
     const groupLots = state.lots.filter((x) => x.title === l.title && x.rarity === l.rarity && isNum(x.price));
     const group = groupLots.map((x) => x.price).sort((a, b) => a - b);
@@ -1353,19 +1835,73 @@
       saleChart.append(h("div", { class: "empty", text: "В локальной базе пока нет достаточного числа подтверждённых продаж этого подарка. Будут показаны данные, когда накопится минимум 3 записи." }));
     }
     body.append(h("p", {}, [h("a", { class: "btn", href: safeUrl(l.lot_url, l.lot_id), target: "_blank", rel: "noopener noreferrer", text: "Открыть лот на Huevo ↗" })]));
+    // Split the long detail sheet into four focused panes, moving existing
+    // nodes so all original controls and event handlers remain intact.
+    const detailGroups = {
+      overview: h("div", { class: "detail-pane", "data-detail-pane": "overview" }),
+      catalog: h("div", { class: "detail-pane", "data-detail-pane": "catalog" }),
+      history: h("div", { class: "detail-pane", "data-detail-pane": "history" }),
+      actions: h("div", { class: "detail-pane", "data-detail-pane": "actions" })
+    };
+    let activeGroup = "overview";
+    Array.from(body.childNodes).forEach(node => {
+      if (node.nodeType === 1 && node.tagName === "H4") {
+        const heading = node.textContent.toLocaleLowerCase("ru");
+        if (heading.includes("история")) activeGroup = "history";
+        else if (heading.includes("характеристики") || heading.includes("экземпляр и тираж")) activeGroup = "catalog";
+      }
+      if (node.nodeType === 1 && (node.classList.contains("detail-watch") || node.classList.contains("target-error"))) activeGroup = "actions";
+      if (node.nodeType === 1 && node.tagName === "P" && node.textContent.includes("Открыть лот на Huevo")) activeGroup = "actions";
+      detailGroups[activeGroup].append(node);
+    });
+    clear(body);
+    const detailTabs = $("detailWorkspaceTabs");
+    detailTabs.querySelectorAll("[data-detail-tab]").forEach(button => {
+      button.setAttribute("aria-selected", String(button.dataset.detailTab === "overview"));
+      button.onclick = () => {
+        detailTabs.querySelectorAll("[data-detail-tab]").forEach(tab => {
+          tab.setAttribute("aria-selected", String(tab === button));
+        });
+        Object.entries(detailGroups).forEach(([key, pane]) => {
+          pane.classList.toggle("hide", key !== button.dataset.detailTab);
+        });
+      };
+    });
+    detailGroups.catalog.classList.add("hide");
+    detailGroups.history.classList.add("hide");
+    detailGroups.actions.classList.add("hide");
+    body.append(detailGroups.overview, detailGroups.catalog, detailGroups.history, detailGroups.actions);
     const dlg = $("detail");
     if (typeof dlg.showModal === "function") dlg.showModal(); else dlg.setAttribute("open", "");
   }
 
+  function mainViewFor(view) {
+    const groups = {
+      overview:"overview", market:"market", sniper:"sniper",
+      deals:"opportunities", cheap:"opportunities",
+      analytics:"analytics", events:"analytics", data:"data", sales:"data",
+      favorites:"portfolio", portfolio:"portfolio",
+      appearance:"settings", support:"settings", help:"settings"
+    };
+    return groups[view] || "overview";
+  }
   function switchView(view, focusSearch) {
-    const allowed = new Set(["overview", "market", "sniper", "deals", "cheap", "analytics", "favorites", "support", "appearance", "help"]);
+    const allowed = new Set(["overview","market","sniper","deals","cheap","analytics","events","data","sales","favorites","portfolio","support","appearance","help"]);
     state.activeView = allowed.has(view) ? view : "overview";
-    document.querySelectorAll("[data-view-section]").forEach((section) => {
+    const mainView = mainViewFor(state.activeView);
+    document.querySelectorAll("[data-view-section]").forEach(section => {
       section.classList.toggle("view-hidden", section.getAttribute("data-view-section") !== state.activeView);
     });
-    document.querySelectorAll("#mainNav [data-view]").forEach((button) => {
+    document.querySelectorAll("#mainNav [data-view]").forEach(button => {
+      const active = (button.dataset.main || button.dataset.view) === mainView;
+      button.setAttribute("aria-selected", String(active));
+      button.tabIndex = active ? 0 : -1;
+    });
+    document.querySelectorAll(".workspace-subnav-group").forEach(group => {
+      group.classList.toggle("is-active", group.dataset.subnavGroup === mainView);
+    });
+    document.querySelectorAll(".workspace-subnav [data-view]").forEach(button => {
       button.setAttribute("aria-selected", String(button.dataset.view === state.activeView));
-      button.tabIndex = button.dataset.view === state.activeView ? 0 : -1;
     });
     if (focusSearch && state.activeView === "market") $("search").focus({ preventScroll: true });
     updateViewCounts();
@@ -1390,7 +1926,7 @@
   }
 
   function normaliseSaleRarity(value) {
-    return String(value || "").trim().toLocaleLowerCase("ru").replace(/\\s+/g, " ");
+    return String(value || "").trim().toLocaleLowerCase("ru").replace(/\s+/g, " ");
   }
 
   function salesReferenceDescription(lot) {
@@ -1507,6 +2043,7 @@
       }
     }
     signals.sort((a,b) => (a.suspicious === b.suspicious ? 0 : a.suspicious ? 1 : -1) ||
+      dealScore(b) - dealScore(a) ||
       (a.basis === b.basis ? 0 : a.basis === "sales" ? -1 : 1) ||
       b.discount_pct-a.discount_pct || a.price-b.price ||
       String(a.title).localeCompare(String(b.title), "ru"));
@@ -1524,6 +2061,31 @@
     const row = lotItem(lot, actions, sub);
     row.classList.add("deal-row");
     return row;
+  }
+
+  function dealScore(lot) {
+    if (!lot || !isNum(lot.discount_pct) || lot.discount_pct <= 0 || lot.suspicious) return 0;
+    const discount = Math.max(0, Math.min(80, Number(lot.discount_pct))) / 80;
+    const sample = Math.max(0, Number(lot.sample_size) || 0);
+    const evidence = Math.min(1, sample / 20);
+    const exactSales = lot.basis === "sales" && ["catalog_rarity", "title_rarity"].includes(lot.reference_scope);
+    const confidence = lot.confidence === "high" ? 1 : lot.confidence === "medium" ? 0.82 : 0.58;
+    const raw = discount * 60 + evidence * 25 + (exactSales ? 15 : 6);
+    return Math.round(Math.max(0, Math.min(100, raw * confidence)));
+  }
+
+  function dealScoreExplanation(lot) {
+    const confidence = lot.confidence === "high" ? "высокая" :
+      lot.confidence === "medium" ? "средняя" : "низкая";
+    const source = lot.basis === "sales"
+      ? (lot.reference_scope === "catalog_rarity" ? "продажи точного каталога и редкости" :
+        lot.reference_scope === "title_rarity" ? "продажи точного названия и редкости" :
+        "продажи только по названию")
+      : "активные объявления с тем же названием и редкостью";
+    const sample = isNum(lot.sample_size) ? fmt(lot.sample_size) : "нет";
+    return "Скидка: " + fmt(lot.discount_pct) + "%. Ориентир: " + source +
+      ". Выборка: " + sample + " записей. Уверенность источника: " + confidence +
+      ". Балл помогает расставить приоритет проверки и не предсказывает прибыль.";
   }
 
   function renderDealCard(lot,label,dayPick){
@@ -1559,9 +2121,11 @@
       h("span",{class:"deal-metric ask"},[h("small",{text:"ЦЕНА ЛОТА"}),h("b",{text:price(lot.price)})]),
       h("span",{class:"deal-metric"},[h("small",{text:salesReferenceLabel(lot)}),h("b",{text:isNum(lot.reference_price)?price(lot.reference_price):"Нет ориентира"})]),
       h("span",{class:"deal-metric saving"},[h("small",{text:"РАЗНИЦА"}),h("b",{text:isNum(saved)?price(saved)+" ниже":"Не рассчитана"})]),
+      h("span",{class:"deal-metric"},[h("small",{text:"ОЦЕНКА СИГНАЛА"}),h("b",{text:dealScore(lot)+"/100"})]),
       h("span",{class:"deal-metric"},[h("small",{text:lot.basis==="sales"?"СОВЕРШЁННЫЕ ПРОДАЖИ · "+salesReferenceDescription(lot).toUpperCase():"АКТИВНЫЕ ОБЪЯВЛЕНИЯ · ТО ЖЕ НАЗВАНИЕ И РЕДКОСТЬ"}),h("b",{text:isNum(lot.sample_size)&&lot.sample_size>0?fmt(lot.sample_size)+" записей":"Мало данных"})])
     );
     if(histLow!==null)metrics.append(h("span",{class:"deal-metric history-low"},[h("small",{text:"МИНИМУМ В ИСТОРИИ"}),h("b",{text:price(histLow)})]));
+    metrics.append(h("p",{class:"deal-score-note",text:dealScoreExplanation(lot)}));
     const mini=sparkline(lot._history);
     if(mini)metrics.append(h("div",{class:"deal-sparkline"},[mini,h("small",{text:"История цены"})]));
     row.children[1].append(metrics);
@@ -1580,8 +2144,9 @@
 
   function renderDeals(){
     const signals=buildDealSignals(),best=signals.find(lot=>!lot.suspicious)||null;
-    let deals=signals.slice(),sortBy=$("dealSort").value||"discount";
-    if(sortBy==="price")deals.sort((a,b)=>a.price-b.price||b.discount_pct-a.discount_pct);
+    let deals=signals.slice(),sortBy=$("dealSort").value||"score";
+    if(sortBy==="score")deals.sort((a,b)=>dealScore(b)-dealScore(a)||b.discount_pct-a.discount_pct);
+    else if(sortBy==="price")deals.sort((a,b)=>a.price-b.price||b.discount_pct-a.discount_pct);
     else if(sortBy==="savings")deals.sort((a,b)=>(b.reference_price-b.price)-(a.reference_price-a.price)||b.discount_pct-a.discount_pct);
     else if(sortBy==="sample")deals.sort((a,b)=>b.sample_size-a.sample_size||b.discount_pct-a.discount_pct);
     else if(sortBy==="historical")deals.sort((a,b)=>{
@@ -2087,17 +2652,25 @@
 
 
   // ---------- huEVO identity + cross-device profile sync ----------
+  window.addEventListener("amnyam:sniper-rules", () => {
+    if (accountState.user && !accountState.hydrating) queueProfileSave();
+  });
   function profilePayload() {
     return {
       favorites: state.favorites.slice(0, 5000),
       targets: { ...state.targets },
       alertedTargets: state.alertedTargets.slice(0, 5000),
       savedFilters: state.savedFilters.slice(0, 25),
+      portfolio: state.portfolio.slice(0, 100),
+      sniperRuleProfiles: window.AMNYAM_RULE_PROFILES && window.AMNYAM_RULE_PROFILES.get ? window.AMNYAM_RULE_PROFILES.get() : [],
       preferences: {
         alertSound: Boolean(alertSoundEnabled),
+        soundVolume,
+        soundPattern,
         sniperNewSound: Boolean(sniperSoundPrefs.new),
         sniperDealSound: Boolean(sniperSoundPrefs.deal),
         appearance: { ...appearance },
+        overviewWidgets: { ...overviewWidgets },
         seasonTheme: document.body.dataset.season || "default"
       }
     };
@@ -2111,9 +2684,14 @@
       ? Object.fromEntries(Object.entries(p.targets).filter(([id, value]) => /^\d{1,20}$/.test(id) && Number.isSafeInteger(value) && value > 0 && value <= TARGET_PRICE_MAX).slice(0, 5000)) : {};
     state.alertedTargets = Array.isArray(p.alertedTargets) ? [...new Set(p.alertedTargets.map(String).filter(id => /^\d{1,20}$/.test(id)))].slice(0, 5000) : [];
     state.savedFilters = Array.isArray(p.savedFilters) ? p.savedFilters.filter(item => item && typeof item.name === "string" && item.name.trim() && item.filters && typeof item.filters === "object").slice(0, 25) : [];
+    state.portfolio = Array.isArray(p.portfolio) ? p.portfolio.filter(item => item && typeof item.title === "string" && item.title.trim() && Number.isSafeInteger(item.quantity) && item.quantity > 0 && Number.isSafeInteger(item.purchase_price) && item.purchase_price > 0).slice(0, 100) : [];
+    window.AMNYAM_PENDING_RULE_PROFILES = Array.isArray(p.sniperRuleProfiles) ? p.sniperRuleProfiles : [];
     const prefs = p.preferences && typeof p.preferences === "object" ? p.preferences : {};
     alertSoundEnabled = prefs.alertSound === true;
+    soundVolume = Number.isInteger(prefs.soundVolume) && prefs.soundVolume >= 0 && prefs.soundVolume <= 100 ? prefs.soundVolume : 100;
+    soundPattern = ["signature", "soft", "double"].includes(prefs.soundPattern) ? prefs.soundPattern : "signature";
     sniperSoundPrefs = { new: prefs.sniperNewSound === true, deal: prefs.sniperDealSound === true };
+    updateAdvancedSoundControls();
     const a = prefs.appearance && typeof prefs.appearance === "object" ? prefs.appearance : {};
     appearance = {
       background: ["cosmic","liquid","nebula","minimal"].includes(a.background) ? a.background : "cosmic",
@@ -2122,6 +2700,8 @@
       glass: a.glass !== false
     };
     applyAppearance();
+    overviewWidgets = sanitizeOverviewWidgets(prefs.overviewWidgets);
+    applyOverviewWidgets(false);
     applySeasonTheme(["default","newyear","halloween","spring","summer"].includes(prefs.seasonTheme) ? prefs.seasonTheme : "default", false);
     updateAlertSoundControls();
     accountState.hydrating = false;
@@ -2133,16 +2713,30 @@
     state.targets = readTargets();
     state.alertedTargets = readAlertedTargets();
     state.savedFilters = readSavedFilters();
+    state.portfolio = readPortfolio();
     try {
       alertSoundEnabled = localStorage.getItem(ALERT_SOUND_KEY) === "on";
+      const rawVolume = localStorage.getItem("amnyam.sound.volume.v1");
+      const savedVolume = rawVolume === null ? 100 : Number(rawVolume);
+      soundVolume = Number.isInteger(savedVolume) && savedVolume >= 0 && savedVolume <= 100 ? savedVolume : 100;
+      const savedPattern = localStorage.getItem("amnyam.sound.pattern.v1");
+      soundPattern = ["signature", "soft", "double"].includes(savedPattern) ? savedPattern : "signature";
       sniperSoundPrefs = {
         new: localStorage.getItem("amnyam.sniperSound.new.v1") === "on",
         deal: localStorage.getItem("amnyam.sniperSound.deal.v1") === "on"
       };
-    } catch (_) { alertSoundEnabled = false; sniperSoundPrefs = { new: false, deal: false }; }
+    } catch (_) {
+      alertSoundEnabled = false;
+      soundVolume = 100;
+      soundPattern = "signature";
+      sniperSoundPrefs = { new: false, deal: false };
+    }
+    updateAdvancedSoundControls();
     window.dispatchEvent(new CustomEvent("amnyam:sniper-sounds", { detail: { ...sniperSoundPrefs, master: alertSoundEnabled } }));
     appearance = readAppearance();
     applyAppearance();
+    overviewWidgets = readOverviewWidgets();
+    applyOverviewWidgets(false);
     let theme = "default";
     try { theme = localStorage.getItem(seasonKey) || "default"; } catch (_) {}
     applySeasonTheme(theme, false);
@@ -2394,7 +2988,8 @@
     checkTargetAlerts();
     renderCommandCenter();
     renderDeals();renderDayPicks();renderCheapest();renderFavorites();
-    renderCards(); renderCharts(); renderChanges(); renderTop(); renderSales(); renderSourceHealth(); fillFacets();
+    renderCards(); renderCharts(); renderChanges(); renderTop(); renderSales(); renderSourceHealth();
+    renderPortfolio(); renderMarketEvents(); renderGiftCatalogIndex(); refreshGlobalSearchSuggestions(); fillFacets();
     renderSavedFilters();setSortMenuOptions();applyFilters();
     switchView(state.activeView);
     publishMarketData();
@@ -2426,6 +3021,88 @@
     if (glass) glass.checked = appearance.glass;
     if (accountState.user) { if (!accountState.hydrating) queueProfileSave(); } else { try { localStorage.setItem(APPEARANCE_KEY, JSON.stringify(appearance)); } catch (_) {} }
   }
+  const OVERVIEW_WIDGETS_KEY = "amnyam.overviewWidgets.v1";
+  function sanitizeOverviewWidgets(value) {
+    const raw = value && typeof value === "object" ? value : {};
+    return { hero: raw.hero !== false, dayPicks: raw.dayPicks !== false, charts: raw.charts !== false };
+  }
+  function readOverviewWidgets() {
+    try { return sanitizeOverviewWidgets(JSON.parse(localStorage.getItem(OVERVIEW_WIDGETS_KEY) || "{}")); }
+    catch (_) { return { hero: true, dayPicks: true, charts: true }; }
+  }
+  let overviewWidgets = readOverviewWidgets();
+  function applyOverviewWidgets(persist) {
+    [["hero","overviewShowHero"],["dayPicks","overviewShowDayPicks"],["charts","overviewShowCharts"]].forEach(([key,id]) => {
+      const section = document.querySelector('[data-overview-widget="' + key + '"]');
+      const control = $(id);
+      if (section) section.classList.toggle("hide", overviewWidgets[key] === false);
+      if (control) control.checked = overviewWidgets[key] !== false;
+    });
+    if (persist) {
+      if (accountState.user) queueProfileSave();
+      else { try { localStorage.setItem(OVERVIEW_WIDGETS_KEY, JSON.stringify(overviewWidgets)); } catch (_) {} }
+    }
+  }
+  function initOverviewWidgets() {
+    applyOverviewWidgets(false);
+    [["overviewShowHero","hero"],["overviewShowDayPicks","dayPicks"],["overviewShowCharts","charts"]].forEach(([id,key]) => {
+      const control = $(id);
+      if (control) control.addEventListener("change", () => {
+        overviewWidgets[key] = control.checked;
+        applyOverviewWidgets(true);
+      });
+    });
+  }
+  const CUSTOM_MEDIA_KEY = "amnyam.customWallpaper.v1";
+  function applyCustomAppearanceMedia() {
+    const node = $("customWallpaper"), hint = $("appearanceMediaHint");
+    if (!node) return;
+    let saved = "";
+    try { saved = localStorage.getItem(CUSTOM_MEDIA_KEY) || ""; } catch (_) {}
+    if (saved && /^data:image\/(?:png|jpeg|webp|gif);base64,/i.test(saved) && saved.length <= 720000) {
+      node.src = saved;
+      node.classList.add("is-active");
+      if (hint) hint.textContent = "Собственный фон включён. Файл хранится только в этом браузере.";
+    } else {
+      node.removeAttribute("src");
+      node.classList.remove("is-active");
+      if (hint) hint.textContent = "Изображение до 512 КБ хранится только в этом браузере и не отправляется на сервер.";
+    }
+  }
+  function initCustomAppearanceMedia() {
+    applyCustomAppearanceMedia();
+    const input = $("appearanceMediaFile");
+    if (input) input.addEventListener("change", () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      if (!/^image\/(?:png|jpeg|webp|gif)$/i.test(file.type) || file.size > 512 * 1024) {
+        $("appearanceMediaHint").textContent = "Поддерживаются PNG, JPG, WebP и GIF до 512 КБ.";
+        input.value = "";
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const value = String(reader.result || "");
+        if (!/^data:image\/(?:png|jpeg|webp|gif);base64,/i.test(value) || value.length > 720000) {
+          $("appearanceMediaHint").textContent = "Файл слишком большой для локального хранения.";
+          return;
+        }
+        try { localStorage.setItem(CUSTOM_MEDIA_KEY, value); } catch (_) {
+          $("appearanceMediaHint").textContent = "Браузер не смог сохранить файл. Освободи место в локальном хранилище.";
+          return;
+        }
+        applyCustomAppearanceMedia();
+      };
+      reader.onerror = () => { $("appearanceMediaHint").textContent = "Не удалось прочитать файл."; };
+      reader.readAsDataURL(file);
+    });
+    const clearButton = $("appearanceMediaClear");
+    if (clearButton) clearButton.addEventListener("click", () => {
+      try { localStorage.removeItem(CUSTOM_MEDIA_KEY); } catch (_) {}
+      if (input) input.value = "";
+      applyCustomAppearanceMedia();
+    });
+  }
   function initAppearance() {
     applyAppearance();
     $("appearanceBackground").addEventListener("change", e => { appearance.background = e.target.value; applyAppearance(); });
@@ -2440,6 +3117,8 @@
   refreshOwnerPresence();
   window.setInterval(refreshOwnerPresence, 30000);
   initAppearance();
+  initOverviewWidgets();
+  initCustomAppearanceMedia();
   initAmbience();
   initAlertSoundControls();
   const paletteOpen = $("openCommandPalette");
@@ -2501,13 +3180,36 @@
     tabs[next].focus();
   });
   document.querySelectorAll("#mainNav [data-view]").forEach(button=>button.addEventListener("click",()=>switchView(button.dataset.view,true)));
+  document.querySelectorAll(".workspace-subnav [data-view]").forEach(button=>button.addEventListener("click",()=>switchView(button.dataset.view,true)));
   document.querySelectorAll("[data-go-view]").forEach(button=>button.addEventListener("click",()=>switchView(button.dataset.goView,true)));
+  $("globalSearch").addEventListener("input",refreshGlobalSearchSuggestions);
   $("globalSearch").addEventListener("keydown",event=>{if(event.key!=="Enter")return;event.preventDefault();$("search").value=$("globalSearch").value.trim();state.page=0;switchView("market",true);applyFilters();});
   document.querySelectorAll("[data-search-token]").forEach(button=>button.addEventListener("click",()=>{
     const token=button.dataset.searchToken||"",input=$("search");input.value=(input.value.trim()+" "+token).trim();$("globalSearch").value=input.value;state.page=0;switchView("market",true);applyFilters();
   }));
   $("dealSort").addEventListener("change",renderDeals);
   $("exportCsv").addEventListener("click",exportMarketCsv);
+  $("portfolioForm").addEventListener("submit",event=>{event.preventDefault();addPortfolioItem();});
+  $("marketWorkspaceTabs").addEventListener("click",event=>{
+    const button=event.target.closest("[data-market-tab]");
+    if(!button)return;
+    const catalog=button.dataset.marketTab==="catalog";
+    $("catalog").classList.toggle("hide",catalog);
+    $("giftCatalogPanel").classList.toggle("hide",!catalog);
+    document.querySelectorAll("[data-market-tab]").forEach(tab=>tab.setAttribute("aria-selected",String(tab===button)));
+    if(catalog)renderGiftCatalogIndex();
+  });
+  $("giftCatalogSearch").addEventListener("input",renderGiftCatalogIndex);
+  $("giftCatalogSort").addEventListener("change",renderGiftCatalogIndex);
+  $("exportGiftCatalogCsv").addEventListener("click",exportGiftCatalogCsv);
+  $("exportPortfolioCsv").addEventListener("click",exportPortfolioCsv);
+  $("exportEventsCsv").addEventListener("click",exportEventsCsv);
+  $("historyApply").addEventListener("click",renderCharts);
+  $("historyReset").addEventListener("click",()=>{
+    $("historyFrom").value="";
+    $("historyTo").value="";
+    renderCharts();
+  });
   $("saveBelowBestTarget").addEventListener("click",()=>{const id=state._belowBestId;if(id)saveTarget(id,$("belowBestTarget").value);});
   $("belowBestMinus10").addEventListener("click",()=>{const id=state._belowBestId,lot=state.lots.find(item=>String(item.lot_id)===String(id));if(lot&&isNum(lot.price)&&lot.price>0){$("belowBestTarget").value=String(Math.max(1,Math.floor(lot.price*.9)));saveTarget(id,$("belowBestTarget").value);}});
   $("supportAmounts").addEventListener("click",event=>{const b=event.target.closest("[data-amount]");if(b&&!b.disabled)makeSupportPayment(b.dataset.amount);});
@@ -2548,5 +3250,13 @@
   initSupport();
   pollLive();
   window.setInterval(pollLive, 3000);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) { pollBackoffUntil = 0; pollFailureCount = 0; pollLive(); } });
+  window.setInterval(pollFullSnapshot, 5 * 60 * 1000);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      pollBackoffUntil = 0;
+      pollFailureCount = 0;
+      pollLive();
+      pollFullSnapshot();
+    }
+  });
 })();

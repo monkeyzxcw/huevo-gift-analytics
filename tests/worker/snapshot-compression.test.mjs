@@ -13,12 +13,12 @@ function createD1Mock() {
         bind(...values) { params = values; return this; },
         async run() {
           if (sql.includes("INSERT INTO full_snapshot")) {
-            snapshotRow = { data_json: params[0] };
+            snapshotRow = { data_json: params[0], generated_at: params[1], updated_at: params[2] };
           }
           return {};
         },
         async first() {
-          if (sql.includes("SELECT data_json FROM full_snapshot")) return snapshotRow;
+          if (sql.includes("SELECT data_json") && sql.includes("FROM full_snapshot")) return snapshotRow;
           return null;
         },
         async all() {
@@ -90,4 +90,42 @@ test("legacy uncompressed full_snapshot rows remain readable", async () => {
   const loaded = await get.json();
   assert.equal(loaded.generated_at, snapshot.generated_at);
   assert.deepEqual(loaded.lots, snapshot.lots);
+});
+
+test("three-second Live status endpoint reads only the Live row and skips schema setup", async () => {
+  const statements = [];
+  const liveItems = [{ lot_id: "live-1", title: "Live gift", price: 123, rarity: "Rare" }];
+  const DB = {
+    prepare(sql) {
+      statements.push(sql);
+      return {
+        async first() {
+          if (sql.includes("SELECT items_json, fingerprint") && sql.includes("FROM live_page_state")) {
+            return {
+              items_json: JSON.stringify(liveItems),
+              fingerprint: "live-fingerprint",
+              last_poll_at: new Date().toISOString(),
+              item_count: liveItems.length,
+              source: "https://huevo.su/market/gifts?page=1"
+            };
+          }
+          return null;
+        }
+      };
+    }
+  };
+  const response = await worker.fetch(
+    new Request("https://amnyam.test/api/live/status"),
+    { DB },
+    {}
+  );
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.equal(result.fresh, true);
+  assert.equal(result.item_count, 1);
+  assert.equal(result.fingerprint, "live-fingerprint");
+  assert.deepEqual(result.items, liveItems);
+  assert.equal(statements.length, 1);
+  assert.match(statements[0], /FROM live_page_state/);
+  assert.doesNotMatch(statements.join("\n"), /sqlite_master|CREATE TABLE/i);
 });

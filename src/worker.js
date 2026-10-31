@@ -10,6 +10,7 @@ const COMPRESSED_SNAPSHOT_PREFIX = "gzip64:";
 const LIVE_FRESH_SECONDS = 15;
 const LIVE_MERGE_SECONDS = 60 * 60;
 const DEFAULT_RETENTION_HOURS = 72;
+let publishedSnapshotCache = null;
 const FRAME_ANCESTORS = "'self' https://huevo.su https://*.huevo.su https://huevo.departament.site https://*.huevo.departament.site";
 
 function isAllowedHost(host) {
@@ -390,8 +391,20 @@ async function loadPublishedSnapshot(request, env) {
   let data = null;
   if (env.DB) {
     try {
-      const row = await env.DB.prepare("SELECT data_json FROM full_snapshot WHERE id = 1").first();
-      if (row && row.data_json) data = await parseStoredSnapshot(row.data_json);
+      const row = await env.DB.prepare("SELECT data_json, updated_at, generated_at FROM full_snapshot WHERE id = 1").first();
+      if (row && row.data_json) {
+        const cacheKey = String(row.updated_at || row.generated_at || row.data_json);
+        let base = null;
+        if (publishedSnapshotCache && publishedSnapshotCache.key === cacheKey) {
+          base = publishedSnapshotCache.data;
+        } else {
+          base = await parseStoredSnapshot(row.data_json);
+          publishedSnapshotCache = { key: cacheKey, data: base };
+        }
+        // Only the top level and lots array are mutated below. Keep the cached
+        // immutable source snapshot intact for subsequent requests in this isolate.
+        data = { ...base, lots: Array.isArray(base.lots) ? base.lots.slice() : [] };
+      }
     } catch (_) {
       // Before D1 migrations are applied, gracefully use the deployed static baseline.
     }
@@ -492,23 +505,22 @@ async function loadPublishedSnapshot(request, env) {
 }
 
 async function liveStatus(request, env) {
-  const health = await getStorageHealth(env);
-  if (!env.DB || !health.schema_ready) {
+  // This endpoint is polled every three seconds by the browser. Keep it deliberately
+  // lightweight: never run getStorageHealth(), which also checks/creates support schema.
+  if (!env.DB) {
     return jsonResponse(request, env, {
-      enabled: false,
-      storage_configured: health.storage_configured,
-      schema_ready: health.schema_ready,
-      fresh: false,
-      last_poll_at: null,
-      item_count: 0,
-      items: [],
+      enabled: false, storage_configured: false, schema_ready: false,
+      fresh: false, last_poll_at: null, item_count: 0, items: []
     });
   }
   let live = null;
   try {
     live = await getLiveState(env);
   } catch (_) {
-    return jsonResponse(request, env, { enabled: true, storage_configured: true, schema_ready: false, fresh: false, items: [] }, 503);
+    return jsonResponse(request, env, {
+      enabled: true, storage_configured: true, schema_ready: false,
+      fresh: false, last_poll_at: null, item_count: 0, items: []
+    }, 503);
   }
   return jsonResponse(request, env, {
     enabled: true,
@@ -558,6 +570,7 @@ async function storeFullSnapshot(request, env, ctx) {
   } catch (_) {
     return jsonResponse(request, env, { ok: false, error: "could not store snapshot; check D1 migrations" }, 503);
   }
+  publishedSnapshotCache = { key: writtenAt, data };
   return jsonResponse(request, env, {
     ok: true, stored_at: writtenAt, generated_at: data.generated_at, lots: data.lots.length,
     compressed: storedValue.startsWith(COMPRESSED_SNAPSHOT_PREFIX),

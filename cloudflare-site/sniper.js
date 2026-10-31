@@ -51,7 +51,7 @@
   const state = {
     data: null, lots: [], deals: [], targets: {}, events: [], seen: new Set(), lastIds: null,
     lastPrices: new Map(), lastDeals: new Set(), profileKey: "guest", eventSound: { new: false, deal: false, master: false },
-    filter: { type: "all", search: "", min: "", max: "", discount: "" }, profileLoaded: false
+    filter: { type: "all", search: "", min: "", max: "", discount: "" }, profileLoaded: false, ruleProfiles: []
   };
   const EVENTS_KEY = "amnyam.sniper.events.v1";
   const SEEN_KEY = "amnyam.sniper.seen.v1";
@@ -85,8 +85,96 @@
     storageWrite(EVENTS_KEY + "." + state.profileKey, state.events);
     storageWrite(SEEN_KEY + "." + state.profileKey, Array.from(state.seen).slice(-1200));
   }
+  const RULES_KEY = "amnyam.sniper.rules.v1";
+  function cleanRuleProfiles(value) {
+    if (!Array.isArray(value)) return [];
+    return value.slice(0, 20).filter(item => item && typeof item.name === "string" && item.name.trim()).map(item => ({
+      id: String(item.id || "").slice(0, 80),
+      name: String(item.name || "").trim().slice(0, 40),
+      filter: {
+        type: ["all", "new", "price", "deal", "target"].includes(item.filter && item.filter.type) ? item.filter.type : "all",
+        search: String(item.filter && item.filter.search || "").slice(0, 120),
+        min: String(item.filter && item.filter.min || "").slice(0, 24),
+        max: String(item.filter && item.filter.max || "").slice(0, 24),
+        discount: String(item.filter && item.filter.discount || "").slice(0, 4)
+      }
+    })).filter(item => item.id);
+  }
+  function saveRuleProfiles() {
+    storageWrite(RULES_KEY + "." + state.profileKey, state.ruleProfiles);
+    window.dispatchEvent(new CustomEvent("amnyam:sniper-rules"));
+    renderRuleProfiles();
+  }
+  function renderRuleProfiles() {
+    const select = $("sniperRuleProfiles");
+    if (!select) return;
+    const selected = select.value;
+    while (select.firstChild) select.removeChild(select.firstChild);
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = state.ruleProfiles.length ? "Выбери сохранённый профиль" : "Нет сохранённых профилей";
+    select.append(placeholder);
+    state.ruleProfiles.forEach(profile => {
+      const option = document.createElement("option");
+      option.value = profile.id;
+      option.textContent = profile.name;
+      select.append(option);
+    });
+    if (state.ruleProfiles.some(profile => profile.id === selected)) select.value = selected;
+    const hasSelection = Boolean(state.ruleProfiles.find(profile => profile.id === select.value));
+    $("sniperRuleApply").disabled = !hasSelection;
+    $("sniperRuleDelete").disabled = !hasSelection;
+  }
+  function currentRuleFilter() {
+    return {
+      type: $("sniperType").value,
+      search: $("sniperSearch").value,
+      min: $("sniperMinPrice").value,
+      max: $("sniperMaxPrice").value,
+      discount: $("sniperMinDiscount").value
+    };
+  }
+  function applyRuleFilter(profile) {
+    if (!profile) return;
+    $("sniperType").value = profile.filter.type;
+    $("sniperSearch").value = profile.filter.search;
+    $("sniperMinPrice").value = profile.filter.min;
+    $("sniperMaxPrice").value = profile.filter.max;
+    $("sniperMinDiscount").value = profile.filter.discount;
+    updateFilters();
+    $("sniperRuleStatus").textContent = "Применён профиль «" + profile.name + "».";
+  }
+  function loadRuleProfiles() {
+    const local = storageRead(RULES_KEY + "." + state.profileKey, []);
+    state.ruleProfiles = cleanRuleProfiles(local);
+    renderRuleProfiles();
+  }
+  window.AMNYAM_RULE_PROFILES = {
+    get: () => cleanRuleProfiles(state.ruleProfiles),
+    set: value => {
+      state.ruleProfiles = cleanRuleProfiles(value);
+      if (state.profileLoaded) {
+        storageWrite(RULES_KEY + "." + state.profileKey, state.ruleProfiles);
+        renderRuleProfiles();
+      } else {
+        window.AMNYAM_PENDING_RULE_PROFILES = state.ruleProfiles;
+      }
+    }
+  };
+  if (Array.isArray(window.AMNYAM_PENDING_RULE_PROFILES)) {
+    state.ruleProfiles = cleanRuleProfiles(window.AMNYAM_PENDING_RULE_PROFILES);
+    storageWrite(RULES_KEY + ".guest", state.ruleProfiles);
+    delete window.AMNYAM_PENDING_RULE_PROFILES;
+  }
+
   function loadEvents(profileKey) {
     state.profileKey = profileKey || "guest";
+    loadRuleProfiles();
+    if (Array.isArray(window.AMNYAM_PENDING_RULE_PROFILES)) {
+      state.ruleProfiles = cleanRuleProfiles(window.AMNYAM_PENDING_RULE_PROFILES);
+      saveRuleProfiles();
+      delete window.AMNYAM_PENDING_RULE_PROFILES;
+    }
     const rawEvents = storageRead(EVENTS_KEY + "." + state.profileKey, []);
     const rawSeen = storageRead(SEEN_KEY + "." + state.profileKey, []);
     state.events = Array.isArray(rawEvents) ? rawEvents.filter((event) => event && typeof event.type === "string").slice(0, MAX_EVENTS) : [];
@@ -135,9 +223,29 @@
       else play();
     } catch (_) {}
   }
-  function extractSalesProfile(title) {
-    const rows = state.data && state.data.sales && Array.isArray(state.data.sales.by_title) ? state.data.sales.by_title : [];
-    return rows.find((row) => normaliseTitle(row.title) === normaliseTitle(title) && Number(row.count) >= 3 && Number(row.median) > 0) || null;
+  function normaliseRarity(value) {
+    return String(value || "").trim().toLocaleLowerCase("ru").replace(/\\s+/g, " ");
+  }
+  function extractSalesProfile(lot) {
+    const sales = state.data && state.data.sales && typeof state.data.sales === "object" ? state.data.sales : {};
+    const title = normaliseTitle(lot && lot.title);
+    const rarity = normaliseRarity(lot && lot.rarity);
+    if (!title || !rarity) return null;
+    const valid = row => row && Number(row.count) >= 3 && Number.isFinite(Number(row.median)) && Number(row.median) > 0;
+    const catalog = lot && lot.gift_catalog && typeof lot.gift_catalog === "object" ? lot.gift_catalog : {};
+    const instance = lot && lot.gift_instance && typeof lot.gift_instance === "object" ? lot.gift_instance : {};
+    const catalogId = String(catalog.catalog_id || catalog.gift_catalog_id ||
+      instance.catalog_id || instance.gift_catalog_id || "").trim();
+    const byCatalog = Array.isArray(sales.by_catalog_rarity) ? sales.by_catalog_rarity : [];
+    const exactCatalog = catalogId ? byCatalog.find(row =>
+      String(row.catalog_id || "") === catalogId &&
+      normaliseRarity(row.rarity) === rarity && valid(row)) : null;
+    if (exactCatalog) return { ...exactCatalog, reference_scope: "catalog_rarity" };
+    const byTitleRarity = Array.isArray(sales.by_title_rarity) ? sales.by_title_rarity : [];
+    const exactRarity = byTitleRarity.find(row =>
+      normaliseTitle(row.title) === title &&
+      normaliseRarity(row.rarity) === rarity && valid(row));
+    return exactRarity ? { ...exactRarity, reference_scope: "title_rarity" } : null;
   }
   function buildDeals(lots) {
     const groups = new Map();
@@ -149,7 +257,7 @@
     const signals = [];
     groups.forEach((group) => {
       if (group.length < 3) return;
-      const sale = extractSalesProfile(group[0].title);
+      const sale = extractSalesProfile(group[0]);
       let ref = null, basis = "asks", sample = 0;
       if (sale && Number(sale.count) >= 5) {
         ref = Number(sale.median); basis = "sales"; sample = Number(sale.count);
@@ -162,7 +270,11 @@
         if (!Number.isFinite(ref) || ref <= 0 || lot.price >= ref * 0.85) return;
         const discount = (1 - lot.price / ref) * 100;
         if (discount <= 0 || discount > 80) return;
-        signals.push({ ...lot, reference_price: ref, discount_pct: discount, basis, sample_size: sample });
+        signals.push({
+          ...lot, reference_price: ref, discount_pct: discount, basis, sample_size: sample,
+          reference_scope: sale ? sale.reference_scope : null,
+          confidence: sale ? (Number(sale.count) >= 10 ? "high" : "medium") : "medium"
+        });
       });
     });
     return signals;
@@ -227,6 +339,7 @@
       if (!state.lastDeals.has(key)) {
         addEvent({ type: "deal", lot_id: id, title: lot.title || "Ниже рынка", price: lot.price,
           reference_price: lot.reference_price, discount_pct: Math.round(lot.discount_pct * 10) / 10, basis: lot.basis,
+          reference_scope: lot.reference_scope || null, sample_size: lot.sample_size || 0,
           event_at: lot.last_seen || lot.first_seen || new Date().toISOString(), lot_url: safeLotUrl(lot) }, true);
       }
     });
@@ -278,7 +391,12 @@
       right.append(amount);
       if (Number.isFinite(Number(event.discount_pct))) {
         const discount = document.createElement("small");
-        discount.textContent = "−" + fmt(event.discount_pct) + "% · " + (event.basis === "sales" ? "по продажам" : "по объявлениям");
+        const source = event.basis === "sales"
+          ? (event.reference_scope === "catalog_rarity" ? "точный каталог и редкость" :
+            event.reference_scope === "title_rarity" ? "название и редкость" : "источник не уточнён")
+          : "объявления с той же редкостью";
+        discount.textContent = "−" + fmt(event.discount_pct) + "% · " + source +
+          (Number(event.sample_size) > 0 ? " · " + fmt(event.sample_size) + " записей" : "");
         right.append(discount);
       } else if (Number.isFinite(Number(event.previous_price))) {
         const previous = document.createElement("small");
@@ -325,8 +443,32 @@
       else if (titles.length) select.value = titles[0];
     });
   }
+  function fillCalcRaritySelect(title, preferred) {
+    const select = $("sniperGiftRarity");
+    const previous = preferred != null ? preferred : select.value;
+    while (select.firstChild) select.removeChild(select.firstChild);
+    const rarities = Array.from(new Set(state.lots
+      .filter(lot => normaliseTitle(lot.title) === normaliseTitle(title))
+      .map(lot => String(lot.rarity || "").trim()).filter(Boolean)))
+      .sort((a, b) => a.localeCompare(b, "ru"));
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = rarities.length ? "Выбери редкость" : "Редкость не указана";
+    select.append(placeholder);
+    rarities.forEach(rarity => {
+      const option = document.createElement("option");
+      option.value = rarity;
+      option.textContent = rarity;
+      select.append(option);
+    });
+    if (rarities.includes(previous)) select.value = previous;
+    else if (rarities.length === 1) select.value = rarities[0];
+    return rarities;
+  }
+
   function calcPurchase() {
     const title = $("sniperGiftSelect").value;
+    const rarity = $("sniperGiftRarity").value;
     const buy = Number($("sniperBuyPrice").value);
     const box = $("sniperCalcResult");
     while (box.firstChild) box.removeChild(box.firstChild);
@@ -337,12 +479,26 @@
       box.append(message);
       return;
     }
-    const sale = extractSalesProfile(title);
+    const rarities = fillCalcRaritySelect(title, rarity);
+    if (rarities.length > 1 && !rarity) {
+      const message = document.createElement("div");
+      message.className = "empty";
+      message.textContent = "У этого названия несколько редкостей. Выбери точную редкость, чтобы не смешивать цены.";
+      box.append(message);
+      return;
+    }
+    const representative = state.lots.find(lot =>
+      normaliseTitle(lot.title) === normaliseTitle(title) &&
+      normaliseRarity(lot.rarity) === normaliseRarity(rarity));
+    const sale = representative ? extractSalesProfile(representative) : null;
     let profile = null;
     if (sale && Number(sale.count) >= 3 && Number(sale.median) > 0) {
       profile = { p25: Number(sale.p25) || Number(sale.median), median: Number(sale.median), p75: Number(sale.p75) || Number(sale.median), count: Number(sale.count), basis: "Подтверждённые продажи" };
     } else {
-      const group = state.lots.filter((lot) => normaliseTitle(lot.title) === normaliseTitle(title) && lot.active !== false);
+      const group = state.lots.filter((lot) =>
+        normaliseTitle(lot.title) === normaliseTitle(title) &&
+        normaliseRarity(lot.rarity) === normaliseRarity(rarity) &&
+        lot.active !== false);
       const offers = robustReference(group.map((lot) => Number(lot.price)));
       if (offers) profile = { p25: offers.p25, median: offers.median, p75: offers.p75, count: offers.count, basis: "Активные объявления — не сделки" };
     }
@@ -469,6 +625,7 @@
     if (nav) nav.textContent = fmt(state.events.filter((event) => event.type === "new").length);
     renderFeed();
     fillGiftSelects();
+    fillCalcRaritySelect($("sniperGiftSelect").value);
     calcPurchase();
     renderRarity();
     const settings = window.AMNYAM_SOUND_SETTINGS && window.AMNYAM_SOUND_SETTINGS.get
@@ -503,10 +660,45 @@
     $("sniperDealSound").addEventListener("change", () => {
       if (window.AMNYAM_SOUND_SETTINGS) window.AMNYAM_SOUND_SETTINGS.set("deal", $("sniperDealSound").checked);
     });
-    $("sniperGiftSelect").addEventListener("change", calcPurchase);
+    $("sniperGiftSelect").addEventListener("change", () => {
+      fillCalcRaritySelect($("sniperGiftSelect").value, "");
+      calcPurchase();
+    });
+    $("sniperGiftRarity").addEventListener("change", calcPurchase);
     $("sniperBuyPrice").addEventListener("input", calcPurchase);
     $("sniperCalculate").addEventListener("click", calcPurchase);
     $("sniperRarityGift").addEventListener("change", renderRarity);
+    $("sniperRuleProfiles").addEventListener("change", () => {
+      const selected = state.ruleProfiles.find(item => item.id === $("sniperRuleProfiles").value);
+      $("sniperRuleApply").disabled = !selected;
+      $("sniperRuleDelete").disabled = !selected;
+    });
+    $("sniperRuleSave").addEventListener("click", () => {
+      const name = $("sniperRuleName").value.trim();
+      if (!name) { $("sniperRuleStatus").textContent = "Укажи название профиля."; return; }
+      const existing = state.ruleProfiles.findIndex(item => item.name.toLocaleLowerCase("ru") === name.toLocaleLowerCase("ru"));
+      const id = existing >= 0 ? state.ruleProfiles[existing].id : "rule-" + Date.now().toString(36);
+      const profile = { id, name: name.slice(0, 40), filter: currentRuleFilter() };
+      if (existing >= 0) state.ruleProfiles[existing] = profile;
+      else if (state.ruleProfiles.length < 20) state.ruleProfiles.push(profile);
+      else { $("sniperRuleStatus").textContent = "Достигнут лимит 20 профилей."; return; }
+      saveRuleProfiles();
+      $("sniperRuleProfiles").value = id;
+      $("sniperRuleName").value = profile.name;
+      $("sniperRuleStatus").textContent = "Профиль «" + profile.name + "» сохранён.";
+    });
+    $("sniperRuleApply").addEventListener("click", () => {
+      const profile = state.ruleProfiles.find(item => item.id === $("sniperRuleProfiles").value);
+      applyRuleFilter(profile);
+    });
+    $("sniperRuleDelete").addEventListener("click", () => {
+      const id = $("sniperRuleProfiles").value;
+      const profile = state.ruleProfiles.find(item => item.id === id);
+      if (!profile) return;
+      state.ruleProfiles = state.ruleProfiles.filter(item => item.id !== id);
+      saveRuleProfiles();
+      $("sniperRuleStatus").textContent = "Профиль «" + profile.name + "» удалён.";
+    });
     window.addEventListener("amnyam:market", (event) => ingest(event.detail));
     window.addEventListener("amnyam:sniper-sounds", (event) => {
       state.eventSound = event.detail || { new: false, deal: false, master: false };

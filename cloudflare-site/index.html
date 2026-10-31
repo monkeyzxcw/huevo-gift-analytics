@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://huevo.su; style-src 'self'; img-src 'self' https://huevo.su https://huevo.departament.site data:; connect-src 'self' https://huevo.su https://*.huevo.su; base-uri 'none'; form-action 'none'">
 <title>AMNYAM MODE — Huevo Gift Intelligence</title>
-<link rel="stylesheet" href="./styles.css?v=amnyam-sound-only-v19">
+<link rel="stylesheet" href="./styles.css?v=amnyam-workspace-v20">
 </head>
 <body>
 <a class="skip" href="#catalog">К каталогу</a>
@@ -33,27 +33,48 @@
   </div>
 </header>
 
-<nav class="main-nav" id="mainNav" role="tablist" aria-label="Разделы AMNYAM MODE">
-  <button role="tab" aria-selected="true" data-view="overview" type="button"><span>01</span> База</button>
-  <button role="tab" aria-selected="false" data-view="market" type="button"><span>02</span> Маркет <small id="navMarketCount">—</small></button>
-  <button role="tab" aria-selected="false" data-view="sniper" type="button"><span>03</span> Снайпер <small id="navSniperCount">0</small></button>
-  <button role="tab" aria-selected="false" data-view="deals" type="button"><span>04</span> Ниже рынка <small id="navDealsCount">—</small></button>
-  <button role="tab" aria-selected="false" data-view="cheap" type="button"><span>05</span> Дешёвые <small id="navCheapCount">—</small></button>
-  <button role="tab" aria-selected="false" data-view="analytics" type="button"><span>06</span> Данные</button>
-  <button role="tab" aria-selected="false" data-view="favorites" type="button"><span>07</span> Избранное <small id="navFavoritesCount">0</small></button>
-  <button role="tab" aria-selected="false" data-view="support" type="button"><span>08</span> Поддержка</button>
-  <button role="tab" aria-selected="false" data-view="appearance" type="button"><span>09</span> Внешний вид</button>
-  <button role="tab" aria-selected="false" data-view="help" type="button"><span>10</span> Инструкция</button>
+<nav class="main-nav" id="mainNav" role="tablist" aria-label="Основные разделы AMNYAM MODE">
+  <button role="tab" aria-selected="true" data-view="overview" data-main="overview" type="button"><span>01</span> Обзор</button>
+  <button role="tab" aria-selected="false" data-view="market" data-main="market" type="button"><span>02</span> Маркет <small id="navMarketCount">—</small></button>
+  <button role="tab" aria-selected="false" data-view="sniper" data-main="sniper" type="button"><span>03</span> Снайпер</button>
+  <button role="tab" aria-selected="false" data-view="deals" data-main="opportunities" type="button"><span>04</span> Возможности <small id="navDealsCount">—</small></button>
+  <button role="tab" aria-selected="false" data-view="analytics" data-main="analytics" type="button"><span>05</span> Аналитика</button>
+  <button role="tab" aria-selected="false" data-view="data" data-main="data" type="button"><span>06</span> Данные</button>
+  <button role="tab" aria-selected="false" data-view="favorites" data-main="portfolio" type="button"><span>07</span> Портфель <small id="navFavoritesCount">0</small></button>
+  <button role="tab" aria-selected="false" data-view="appearance" data-main="settings" type="button"><span>08</span> Настройки</button>
 </nav>
-<div class="command-strip"><span class="command-mark">AMNYAM / WORKER EDITION</span><span>MARKET INTELLIGENCE <i></i> SILENT SYNC 3S</span><label class="season-control"><span>ТЕМА</span><select id="seasonTheme" aria-label="Праздничная тема"><option value="default">AMNYAM</option><option value="newyear">Новый год</option><option value="halloween">Хэллоуин</option><option value="spring">Весна</option><option value="summer">Лето</option></select></label><label class="command-search"><b>⌕</b><input id="globalSearch" type="search" placeholder="Быстрый поиск по рынку…" autocomplete="off" aria-label="Быстрый поиск"><kbd>ENTER</kbd></label></div>
+<nav class="workspace-subnav" id="workspaceSubnav" aria-label="Подразделы">
+  <div class="workspace-subnav-group" data-subnav-group="data">
+    <button type="button" data-view="data" aria-selected="true">Состояние сборщика</button>
+    <button type="button" data-view="sales" aria-selected="false">История продаж</button>
+  </div>
+  <div class="workspace-subnav-group" data-subnav-group="analytics">
+    <button type="button" data-view="analytics" aria-selected="true">Графики и изменения</button>
+    <button type="button" data-view="events" aria-selected="false">Рыночные события</button>
+  </div>
+  <div class="workspace-subnav-group" data-subnav-group="opportunities">
+    <button type="button" data-view="deals" aria-selected="true">Ниже рынка</button>
+    <button type="button" data-view="cheap" aria-selected="false">Самые дешёвые</button>
+  </div>
+  <div class="workspace-subnav-group" data-subnav-group="portfolio">
+    <button type="button" data-view="favorites" aria-selected="true">Избранное и цели</button>
+    <button type="button" data-view="portfolio" aria-selected="false">Мои покупки</button>
+  </div>
+  <div class="workspace-subnav-group" data-subnav-group="settings">
+    <button type="button" data-view="appearance" aria-selected="true">Оформление</button>
+    <button type="button" data-view="support" aria-selected="false">Поддержка автора</button>
+    <button type="button" data-view="help" aria-selected="false">Инструкция</button>
+  </div>
+</nav>
+<div class="command-strip"><span class="command-mark">AMNYAM / WORKER EDITION</span><span>MARKET INTELLIGENCE <i></i> LIVE 3S · FULL SCAN 5M</span><label class="season-control"><span>ТЕМА</span><select id="seasonTheme" aria-label="Праздничная тема"><option value="default">AMNYAM</option><option value="newyear">Новый год</option><option value="halloween">Хэллоуин</option><option value="spring">Весна</option><option value="summer">Лето</option></select></label><label class="command-search"><b>⌕</b><input id="globalSearch" type="search" list="globalSearchSuggestions" placeholder="Поиск по подаркам, лотам и продажам…" autocomplete="off" aria-label="Быстрый поиск по приложению"><datalist id="globalSearchSuggestions"></datalist><kbd>ENTER</kbd></label></div>
 
-<section class="hero" id="hero" data-view-section="overview" aria-labelledby="heroTitle">
+<section class="hero" id="hero" data-view-section="overview" data-overview-widget="hero" aria-labelledby="heroTitle">
   <div><div class="eyebrow">AMNYAM / ПОЛЕВОЙ СКАНЕР</div><h2 id="heroTitle">Поймай лот.<br><em>Не переплати.</em></h2>
   <p>Цены маркета, история и выгодные входы. Работаем быстро: <b>собираем данные, сравниваем рынок, принимаем решение.</b></p></div>
   <dl class="freshness" id="freshness"><div><dt>Последний успешный сбор</dt><dd id="lastOk">—</dd></div><div><dt>Последняя попытка</dt><dd id="lastTry">—</dd></div></dl>
 </section>
 
-<section class="contact-strip" id="contactPanel" aria-labelledby="contactTitle">
+<section class="contact-strip view-hidden" id="contactPanel" data-view-section="support" aria-labelledby="contactTitle">
   <div class="contact-copy">
     <span class="section-index">/ DIRECT CONTACT</span>
     <h2 id="contactTitle">По всем вопросам</h2>
@@ -98,6 +119,23 @@
     <label class="appearance-control appearance-toggle"><span><b>Стеклянные карточки</b><small>Полупрозрачные поверхности и мягкие блики.</small></span><input id="appearanceGlass" type="checkbox" checked></label>
   </div>
   <div class="appearance-preview"><div class="preview-orb"></div><div><b>AMNYAM / AURORA MODE</b><small>Космос · хром · мягкое свечение</small></div><span class="preview-chip">LIVE THEME</span></div>
+  <div class="appearance-media-control">
+    <label class="f"><span>Свой фон или GIF</span><input class="input" id="appearanceMediaFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
+    <button class="btn secondary" id="appearanceMediaClear" type="button">Убрать свой фон</button>
+    <small id="appearanceMediaHint">Изображение до 512 КБ хранится только в этом браузере и не отправляется на сервер.</small>
+  </div>
+  <div class="sound-advanced-controls" aria-label="Расширенные настройки звука">
+    <b>Звуковой сигнал AMNYAM</b>
+    <label class="f"><span>Характер сигнала</span><select class="select" id="soundPattern"><option value="signature">Фирменный · 5 нот</option><option value="soft">Мягкий · 3 ноты</option><option value="double">Двойной · 2 ноты</option></select></label>
+    <label class="f"><span>Громкость <output id="soundVolumeLabel">100%</output></span><input class="input" id="soundVolume" type="range" min="0" max="100" step="5" value="100"></label>
+    <small>Настройки влияют только на звуковые сигналы в открытой вкладке. Push и системные уведомления не используются.</small>
+  </div>
+  <div class="overview-widget-controls">
+    <b>Вид главной страницы</b>
+    <label><input type="checkbox" id="overviewShowHero" checked> Заглавный блок</label>
+    <label><input type="checkbox" id="overviewShowDayPicks" checked> 3 лота дня</label>
+    <label><input type="checkbox" id="overviewShowCharts" checked> Графики обзора</label>
+  </div>
   <button class="btn secondary" id="resetAppearance" type="button">Сбросить оформление</button>
 </section>
 <div id="loading" class="panel state"><div class="spinner" aria-hidden="true"></div><p>Загружаю data.json…</p></div>
@@ -112,17 +150,24 @@
   <div id="overviewPickLot" class="pick-lot"><span class="muted">Рынок загружается</span></div>
   <button class="btn secondary" type="button" data-go-view="deals">Все предложения ↗</button>
 </section>
-<section class="panel day-picks" data-view-section="overview" aria-labelledby="dayPicksTitle">
+<section class="panel day-picks" data-view-section="overview" data-overview-widget="dayPicks" aria-labelledby="dayPicksTitle">
   <div class="panel-head"><div><span class="section-index">/ DAILY MARKET RADAR</span><h3 id="dayPicksTitle">3 лота дня</h3><p class="muted">Сильный дисконт, низкая цена входа и достаточное число аналогов.</p></div><span class="view-stat" id="dayPicksNote">Сканируем рынок…</span></div>
   <div class="day-pick-grid" id="dayPicks"></div>
 </section>
 <section class="cards" id="cards" data-view-section="overview" aria-label="Ключевые показатели"></section>
 
-<section class="grid2" data-view-section="overview">
+<section class="grid2" data-view-section="overview" data-overview-widget="charts">
   <article class="panel"><div class="panel-head"><h3>Распределение цен</h3><span class="muted" id="binsNote"></span></div><div class="chart" id="chartBins"></div></article>
   <article class="panel"><div class="panel-head"><h3>Категории (редкость)</h3><span class="muted" id="catNote"></span></div><div id="chartCats" class="bars"></div></article>
 </section>
 
+<div class="history-range-toolbar" data-view-section="analytics" aria-label="Период истории рынка">
+  <label class="f"><span>С даты</span><input class="input" id="historyFrom" type="date"></label>
+  <label class="f"><span>По дату</span><input class="input" id="historyTo" type="date"></label>
+  <button class="btn secondary" id="historyApply" type="button">Показать период</button>
+  <button class="btn secondary" id="historyReset" type="button">Вся история</button>
+  <small id="historyRangeNote" aria-live="polite">Все доступные снимки</small>
+</div>
 <section class="grid2" data-view-section="analytics">
   <article class="panel"><div class="panel-head"><h3>Число активных лотов по снимкам</h3><span class="muted" id="countNote"></span></div><div class="chart" id="chartCount"></div></article>
   <article class="panel"><div class="panel-head"><h3>Медианная цена по снимкам</h3><span class="muted" id="medianNote"></span></div><div class="chart" id="chartMedian"></div></article>
@@ -144,12 +189,17 @@
   <article class="panel"><div class="panel-head"><h3>Самые дорогие лоты</h3><span class="muted">по цене объявления</span></div><ol class="list" id="topList"></ol></article>
 </section>
 
-<section class="panel hide" id="salesPanel" data-view-section="analytics" aria-labelledby="salesTitle">
+<section class="panel market-events-panel" id="marketEventsPanel" data-view-section="events" aria-labelledby="marketEventsTitle">
+  <div class="panel-head"><div><h3 id="marketEventsTitle">Рыночные события</h3><p class="muted">Новые лоты, изменения каталога и подтверждённые события из сохранённых снимков.</p></div><span class="view-stat" id="marketEventsCount">— событий</span></div>
+  <div class="catalog-index-actions"><button class="btn secondary" type="button" id="exportEventsCsv">Экспорт событий CSV</button></div>
+  <ol class="market-events-list" id="marketEventsList" aria-live="polite"></ol>
+</section>
+<section class="panel hide" id="salesPanel" data-view-section="sales" aria-labelledby="salesTitle">
   <div class="panel-head"><h3 id="salesTitle">История продаж</h3><span class="muted" id="salesNote"></span></div>
   <div id="salesBody"></div>
 </section>
 
-<section class="panel source-health-panel" id="sourceHealthPanel" data-view-section="analytics" aria-labelledby="sourceHealthTitle">
+<section class="panel source-health-panel" id="sourceHealthPanel" data-view-section="data" aria-labelledby="sourceHealthTitle">
   <div class="panel-head">
     <div><h3 id="sourceHealthTitle">Состояние источников</h3><p class="muted">Отдельно показываем результаты каждого этапа сбора. «Нет метаданных» означает, что сборщик ещё не сообщил результат — это не считается успешным сбором.</p></div>
     <span class="view-stat" id="sourceHealthUpdated">Ожидаем метаданные…</span>
@@ -167,7 +217,7 @@
       <div class="best-target-tools"><label class="f"><span>Желаемая цена</span><input class="input target-input" id="belowBestTarget" type="number" min="1" max="1000000000000000" step="1" inputmode="numeric" placeholder="Цена-цель"></label><button class="btn secondary" id="saveBelowBestTarget" type="button">Сохранить цену-цель</button><button class="btn secondary" id="belowBestMinus10" type="button">Цель −10%</button></div>
     </div>
   </article>
-  <div class="deal-list-toolbar"><span class="muted">Цена лота, медиана похожих предложений, разница, исторический минимум и цена-цель — прямо в карточке.</span><label class="f"><span>Сортировать</span><select class="select" id="dealSort"><option value="discount">Самый большой дисконт</option><option value="price">Самая низкая цена</option><option value="savings">Максимальная разница с медианой</option><option value="sample">Больше аналогов</option><option value="historical">Ближе к историческому минимуму</option></select></label></div>
+  <div class="deal-list-toolbar"><span class="muted">Цена лота, медиана похожих предложений, разница, исторический минимум и цена-цель — прямо в карточке.</span><label class="f"><span>Сортировать</span><select class="select" id="dealSort"><option value="score">Лучший сигнал · рейтинг 0–100</option><option value="discount">Самый большой дисконт</option><option value="price">Самая низкая цена</option><option value="savings">Максимальная разница с медианой</option><option value="sample">Больше аналогов</option><option value="historical">Ближе к историческому минимуму</option></select></label></div>
   <ol class="deal-list" id="dealsList"></ol>
   <p class="muted foot">Сигнал ниже рынка — сравнительная оценка, а не обещание прибыли. Сверяй серию, редкость и данные лота перед покупкой.</p>
 </section>
@@ -196,6 +246,14 @@
     <label class="f"><span>Дисконт от, %</span><input class="input" id="sniperMinDiscount" type="number" min="0" max="80" inputmode="numeric" placeholder="0"></label>
     <button class="btn secondary" id="sniperReset" type="button">Сбросить</button>
   </div>
+  <div class="sniper-rule-profiles" aria-label="Профили правил снайпера">
+    <label class="f"><span>Профиль правил</span><select class="select" id="sniperRuleProfiles"><option value="">Без профиля</option></select></label>
+    <label class="f"><span>Название профиля</span><input class="input" id="sniperRuleName" maxlength="40" placeholder="Например, редкие до 100k"></label>
+    <button class="btn secondary" id="sniperRuleSave" type="button">Сохранить правила</button>
+    <button class="btn secondary" id="sniperRuleApply" type="button">Применить</button>
+    <button class="btn secondary" id="sniperRuleDelete" type="button" disabled>Удалить</button>
+    <small id="sniperRuleStatus" role="status"></small>
+  </div>
   <div class="sniper-feed-head"><h3>Последние события</h3><span class="muted" id="sniperFeedNote">Новые события появятся после обновления рынка</span></div>
   <ol class="sniper-feed" id="sniperFeed" aria-live="polite"><li class="empty">Ожидаем первый снимок рынка.</li></ol>
   <div class="sniper-tools-grid">
@@ -203,6 +261,7 @@
       <span class="section-index">/ BUY SCENARIO</span><h3>Калькулятор покупки</h3>
       <p>Сравни цену входа с квартилями подтверждённых продаж. При отсутствии истории сделок может использоваться диапазон объявлений — он явно помечается как менее надёжный.</p>
       <label class="f"><span>Подарок</span><select class="select" id="sniperGiftSelect"><option value="">Загружаем каталог…</option></select></label>
+      <label class="f"><span>Редкость</span><select class="select" id="sniperGiftRarity"><option value="">Сначала выбери подарок</option></select></label>
       <label class="f"><span>Твоя цена покупки</span><input class="input" id="sniperBuyPrice" type="number" min="1" step="1" inputmode="numeric" placeholder="Например, 8000"></label>
       <button class="btn" id="sniperCalculate" type="button">Рассчитать сценарии</button>
       <div class="sniper-calc-result" id="sniperCalcResult" role="status"><div class="empty">Выбери подарок и укажи цену покупки.</div></div>
@@ -235,6 +294,20 @@
   <ol class="deal-list" id="favoritesList"></ol>
 </section>
 
+<section class="panel portfolio-panel" id="portfolioPanel" data-view-section="portfolio" aria-labelledby="portfolioTitle">
+  <div class="section-heading"><div><span class="section-index">/ MY COLLECTION</span><h2 id="portfolioTitle">Мои покупки</h2><p>Записывай собственные покупки и смотри ориентировочную стоимость по подтверждённым продажам или устойчивым объявлениям.</p></div><span class="view-stat" id="portfolioCount">0 позиций</span></div>
+  <div class="portfolio-actions"><button class="btn secondary" type="button" id="exportPortfolioCsv">Экспорт портфеля CSV</button></div>
+  <form class="portfolio-add-form" id="portfolioForm">
+    <label class="f grow"><span>Подарок</span><input class="input" id="portfolioGift" list="globalSearchSuggestions" maxlength="120" placeholder="Название подарка" required></label>
+    <label class="f"><span>Редкость</span><input class="input" id="portfolioRarity" maxlength="80" placeholder="Редкость"></label>
+    <label class="f"><span>Количество</span><input class="input" id="portfolioQuantity" type="number" min="1" max="1000" step="1" value="1" required></label>
+    <label class="f"><span>Цена покупки за шт.</span><input class="input" id="portfolioCost" type="number" min="1" step="1" placeholder="Цена" required></label>
+    <button class="btn" type="submit">Добавить покупку</button>
+  </form>
+  <div class="cards portfolio-summary" id="portfolioSummary"></div>
+  <div class="portfolio-list" id="portfolioList" aria-live="polite"><div class="empty">Добавь первую покупку.</div></div>
+  <p class="muted foot">Оценка портфеля — аналитический ориентир, не гарантированная цена продажи. При отсутствии достаточной выборки оценка не подставляется.</p>
+</section>
 <section class="panel help-panel" id="helpPanel" data-view-section="help" aria-labelledby="helpTitle">
   <div class="section-heading">
     <div><span class="section-index">/ AMNYAM FIELD MANUAL</span><h2 id="helpTitle">Инструкция по AMNYAM MODE</h2>
@@ -333,6 +406,10 @@
   <p class="muted foot">Платёж подтверждается в официальном окне huEVO. Пароль и данные аккаунта приложение не запрашивает.</p>
 </section>
 
+<div class="workspace-tabs market-workspace-tabs" id="marketWorkspaceTabs" data-view-section="market" role="tablist" aria-label="Разделы маркета">
+  <button type="button" role="tab" aria-selected="true" data-market-tab="lots">Активные лоты</button>
+  <button type="button" role="tab" aria-selected="false" data-market-tab="catalog">Каталог подарков /gifts</button>
+</div>
 <section class="panel catalog-panel" id="catalog" data-view-section="market" aria-labelledby="catTitle">
   <div class="panel-head"><div><span class="section-index">/ FULL MARKET SCAN</span><h3 id="catTitle">Каталог маркета</h3><div class="muted" id="rowCount" aria-live="polite">—</div></div><div class="catalog-header-actions"><button class="btn secondary" id="compareSelected" type="button" disabled>Сравнить (0/4)</button><span class="mono-tag">SEARCH / FILTER / SORT</span></div></div>
   <form class="toolbar" id="filters" role="search" aria-label="Фильтры каталога">
@@ -400,6 +477,20 @@
     </table></div>
   </div>
 </section>
+
+<section class="panel gift-catalog-index-panel hide" id="giftCatalogPanel" data-view-section="market" aria-labelledby="giftCatalogTitle">
+  <div class="section-heading">
+    <div><span class="section-index">/ CANONICAL GIFT INDEX</span><h2 id="giftCatalogTitle">Каталог всех подарков</h2><p>Независимый список со страницы /gifts. Карточки не зависят от наличия активного объявления.</p></div>
+    <span class="view-stat" id="giftCatalogCount">— карточек</span>
+  </div>
+  <div class="catalog-index-actions"><button class="btn secondary" type="button" id="exportGiftCatalogCsv">Экспорт каталога CSV</button></div>
+  <div class="toolbar">
+    <label class="f grow"><span>Найти подарок в каталоге</span><input class="input" id="giftCatalogSearch" type="search" placeholder="Название или ID"></label>
+    <label class="f"><span>Сортировка</span><select class="select" id="giftCatalogSort"><option value="title">Название</option><option value="supply_desc">Тираж: больше</option><option value="supply_asc">Тираж: меньше</option></select></label>
+  </div>
+  <div class="catalog-index-grid" id="giftCatalogGrid" aria-live="polite"></div>
+  <p class="muted foot">Детали и тираж показываются только при наличии подтверждённых полей источника. Необработанные карточки остаются видимыми в каталоге.</p>
+</section>
 </div>
 
 
@@ -414,6 +505,8 @@
     <button type="button" data-command-item data-command-view="deals"><span class="palette-icon">↘</span><span><b>Ниже рынка</b><small>Подтверждённые скидки относительно аналогов</small></span><kbd>G D</kbd></button>
     <button type="button" data-command-item data-command-view="cheap"><span class="palette-icon">＄</span><span><b>Дешёвые лоты</b><small>Самые доступные предложения</small></span></button>
     <button type="button" data-command-item data-command-view="analytics"><span class="palette-icon">⌁</span><span><b>Аналитика</b><small>Графики и изменения рынка</small></span></button>
+    <button type="button" data-command-item data-command-view="data"><span class="palette-icon">▥</span><span><b>Данные и диагностика</b><small>Источники, продажи и прогресс сбора</small></span></button>
+    <button type="button" data-command-item data-command-view="portfolio"><span class="palette-icon">◈</span><span><b>Мои покупки</b><small>Портфель и оценка коллекции</small></span></button>
     <button type="button" data-command-item data-command-view="favorites"><span class="palette-icon">☆</span><span><b>Избранное и цели</b><small>Отслеживаемые подарки и целевые цены</small></span></button>
     <button type="button" data-command-item data-command-view="appearance"><span class="palette-icon">◐</span><span><b>Настройки интерфейса</b><small>Фон, маскот и анимации</small></span></button>
     <button type="button" data-command-item data-command-view="help"><span class="palette-icon">?</span><span><b>Инструкция</b><small>Как пользоваться всеми разделами AMNYAM</small><kbd>G I</kbd></span></button>
@@ -448,15 +541,16 @@
 <dialog id="compareDialog" aria-labelledby="compareTitle"><div class="dlg-head"><h3 id="compareTitle">Сравнение лотов</h3><button class="btn secondary" id="compareClose" type="button" aria-label="Закрыть сравнение">✕</button></div><div id="compareBody"></div></dialog>
 
 <dialog id="detail" aria-labelledby="dTitle">
-  <div class="dlg-head"><h3 id="dTitle">Лот</h3><button class="btn secondary" id="dClose" type="button" aria-label="Закрыть">✕</button></div>
+  <div class="dlg-head"><h3 id="dTitle">Подарок</h3><button class="btn secondary" id="dClose" type="button" aria-label="Закрыть">✕</button></div>
+  <div class="detail-workspace-tabs" id="detailWorkspaceTabs" role="tablist" aria-label="Разделы карточки подарка"><button type="button" role="tab" aria-selected="true" data-detail-tab="overview">Обзор</button><button type="button" role="tab" aria-selected="false" data-detail-tab="catalog">Каталог и экземпляр</button><button type="button" role="tab" aria-selected="false" data-detail-tab="history">История</button><button type="button" role="tab" aria-selected="false" data-detail-tab="actions">Действия</button></div>
   <div id="dBody"></div>
 </dialog>
 
 <footer class="footer"><span>Huevo Gift Analytics · Cloudflare multi-user</span><span>Данные собирает локальный сборщик на ПК владельца; блокировки источника не обходятся.</span></footer>
 </main>
-<div id="ambientLayer" aria-hidden="true"></div><div id="cursorGlow" aria-hidden="true"></div>
+<img id="customWallpaper" alt="" aria-hidden="true"><div id="ambientLayer" aria-hidden="true"></div><div id="cursorGlow" aria-hidden="true"></div>
 <div class="premium-splash" id="premiumSplash" aria-hidden="true"><div class="splash-mark">H<span>•</span></div><div class="splash-title">AMNYAM <b>MODE</b></div><div class="splash-subtitle">GIFT MARKET INTELLIGENCE</div><div class="splash-loader"><i></i></div></div>
-<script src="./app.js?v=amnyam-sales-history-v21" defer></script>
-<script src="./sniper.js?v=amnyam-sniper-v1" defer></script>
+<script src="./app.js?v=amnyam-workspace-v23" defer></script>
+<script src="./sniper.js?v=amnyam-sniper-rules-v3" defer></script>
 </body>
 </html>

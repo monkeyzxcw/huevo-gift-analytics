@@ -119,7 +119,7 @@ test("collector source health distinguishes completed, paused and missing source
   const data = dataV2({
     live: { enabled: true, fresh: true, item_count: 30, last_poll_at: NOW },
     collector: {
-      status: "ok", message: "Full scan completed", checked_at: NOW, pages: 22, lots: 474,
+      status: "ok", message: "Full scan completed", checked_at: NOW, pages: 22, pages_total: 30, lots: 474,
       sales_history: { status: "ok", pages: 4, updated: 12, total: 120, total_pages: 652, checked_at: NOW },
       gift_catalog_index: { status: "ok", cards: 123, checked_at: NOW },
       gift_catalog_details: { status: "ok", attempted: 4, updated: 4, known: 89, index_total: 123, checked_at: NOW },
@@ -140,6 +140,9 @@ test("collector source health distinguishes completed, paused and missing source
   assert.match(panel, /Независимый индекс \/gifts[\s\S]*123 карточек/);
   assert.match(panel, /Подробности каталога[\s\S]*4 обновлено[\s\S]*89 полных карточек/);
   assert.match(panel, /Экземпляры и история владельцев[\s\S]*В очереди[\s\S]*1 новых событий/);
+  assert.equal(await page.locator("#sourceHealthGrid progress").count(), 3, "progress is shown only for sources with real totals");
+  const progress = await page.locator("#sourceHealthGrid progress").evaluateAll(nodes => nodes.map(node => Number(node.value)));
+  assert.deepEqual(progress, [73, 1, 72], "market scan, sales pages and catalogue detail coverage");
   assert.deepEqual(problems, []);
   await browser.close();
 });
@@ -297,6 +300,7 @@ test("saved filters, target prices, mini charts and comparison work", async () =
   await page.fill("#search","1003");
   assert.equal(await page.locator("#rows .sparkline").count(),1);
   await page.locator("#rows button[aria-label^='Подробнее о лоте']").click();
+  await page.click('#detailWorkspaceTabs [data-detail-tab="actions"]');
   await page.fill("#dBody .target-input","120");
   await page.click("#dBody button:has-text('Сохранить цену-цель')");
   assert.match(await page.textContent("#dBody"),/Цена-цель сохранена/);
@@ -404,6 +408,8 @@ test("only the authenticated owner receives the availability switch and may chan
   });
   await page.waitForSelector("#content:not(.hide)");
   await page.waitForFunction(()=>!document.querySelector("#ownerPresenceToggle").hidden);
+  await page.click('#mainNav [data-view="appearance"]');
+  await page.click('#workspaceSubnav [data-view="support"]');
   const toggle=page.locator("#ownerPresenceToggle");
   assert.equal(await toggle.getAttribute("aria-checked"),"false");
   await toggle.click();
@@ -430,6 +436,7 @@ test("detail dialog: price history, comparison, safe link, Escape closes", async
   await page.fill("#search", "1003");
   await page.click("#rows button");
   assert.ok(await page.locator("#detail[open]").count());
+  await page.click('#detailWorkspaceTabs [data-detail-tab="history"]');
   assert.equal(await page.locator("#dBody table.hist tr").count(), 3, "three history points");
   assert.ok(await page.locator("#dBody svg polyline").count());
   assert.match(await page.textContent("#dBody"), /не цена сделки/);
@@ -499,6 +506,7 @@ test("gift instance and catalogue edition use separate verified data sources", a
   await page.click('#mainNav [data-view="market"]');
   await page.fill("#search", "1003");
   await page.click("#rows button");
+  await page.click('#detailWorkspaceTabs [data-detail-tab="catalog"]');
   const detail = await page.textContent("#dBody");
   assert.match(detail, /№ 4/);
   assert.match(detail, /Полный тираж/);
@@ -514,8 +522,10 @@ test("gift instance and catalogue edition use separate verified data sources", a
   assert.match(detail, /Каталог Адидас/);
   assert.doesNotMatch(detail, /Автор экземпляра/);
   assert.doesNotMatch(detail, /Чужая коллекция/);
-  assert.match(detail, /Продан в Маркете/);
-  assert.match(detail, /teeth/);
+  await page.click('#detailWorkspaceTabs [data-detail-tab="history"]');
+  const historyDetail = await page.textContent("#dBody");
+  assert.match(historyDetail, /Продан в Маркете/);
+  assert.match(historyDetail, /teeth/);
   assert.match(detail, /не содержат сумму каждой сделки/);
   assert.equal(await page.locator("#dBody a").filter({ hasText: "Открыть страницу подарка и тираж" }).getAttribute("href"), "https://huevo.su/gifts/131");
   assert.equal(await page.locator("#dBody a").filter({ hasText: "Открыть страницу конкретного экземпляра" }).getAttribute("href"), "https://huevo.su/gift/18336");
@@ -602,12 +612,99 @@ test("page has no inline handlers/styles and fits a phone screen", async () => {
 });
 
 
+test("new catalogue, market events, date range, portfolio and Sniper rule profiles work", async () => {
+  const data = dataV2({
+    gift_catalog_index: [
+      { catalog_id: "131", title: "Звезда", rarity: "Редкий", supply: 500, image_url: "https://huevo.su/static/gift.webp" },
+      { catalog_id: "132", title: "Лунный кот", rarity: "Обычный", supply: 120, image_url: "https://huevo.su/static/gift.webp" }
+    ],
+    sales: {
+      generated_at: NOW,
+      summary: { count: 5, unknown: 0, median: 450, min: 400, max: 500, enough_data: true },
+      by_title: [{ title: "Звезда", count: 5, median: 450, p25: 420, p75: 480, history: [] }],
+      by_title_rarity: [{ title: "Звезда", rarity: "Редкий", count: 5, median: 450, p25: 420, p75: 480 }]
+    }
+  });
+  const { browser, page, problems } = await open(serve(data));
+  try {
+    await page.waitForSelector("#content:not(.hide)");
+
+    await page.click('#mainNav [data-view="market"]');
+    await page.click('#marketWorkspaceTabs [data-market-tab="catalog"]');
+    assert.equal(await page.locator("#giftCatalogGrid .catalog-index-card").count(), 2);
+    assert.match(await page.textContent("#giftCatalogGrid"), /Лунный кот/);
+    await page.fill("#giftCatalogSearch", "Звезда");
+    assert.equal(await page.locator("#giftCatalogGrid .catalog-index-card").count(), 1);
+    assert.match(await page.textContent("#giftCatalogGrid"), /Каталог #131/);
+    const catalogDownload = page.waitForEvent("download");
+    await page.click("#exportGiftCatalogCsv");
+    assert.match((await catalogDownload).suggestedFilename(), /amnyam-gift-catalog/);
+
+    await page.fill("#globalSearch", "Звезда");
+    assert.ok(await page.locator("#globalSearchSuggestions option").count() > 0);
+
+    await page.click('#mainNav [data-view="analytics"]');
+    await page.click('#workspaceSubnav [data-view="events"]');
+    assert.match(await page.textContent("#marketEventsList"), /Новинка/);
+    const eventsDownload = page.waitForEvent("download");
+    await page.click("#exportEventsCsv");
+    assert.match((await eventsDownload).suggestedFilename(), /amnyam-market-events/);
+
+    await page.click('#workspaceSubnav [data-view="analytics"]');
+    const end = new Date();
+    const start = new Date(Date.now() - 2 * 86400000);
+    const isoDate = value => value.toISOString().slice(0, 10);
+    await page.fill("#historyFrom", isoDate(start));
+    await page.fill("#historyTo", isoDate(end));
+    await page.click("#historyApply");
+    assert.match(await page.textContent("#historyRangeNote"), /Выбрано снимков:/);
+
+    await page.click('#mainNav [data-view="favorites"]');
+    await page.click('#workspaceSubnav [data-view="portfolio"]');
+    await page.fill("#portfolioGift", "Звезда");
+    await page.fill("#portfolioRarity", "Редкий");
+    await page.fill("#portfolioQuantity", "2");
+    await page.fill("#portfolioCost", "300");
+    await page.click('#portfolioForm button[type="submit"]');
+    assert.equal(await page.locator("#portfolioList .portfolio-row").count(), 1);
+    assert.match(await page.textContent("#portfolioList"), /подтверждённые продажи/);
+    assert.match(await page.textContent("#portfolioList"), /900/);
+    const portfolioDownload = page.waitForEvent("download");
+    await page.click("#exportPortfolioCsv");
+    assert.match((await portfolioDownload).suggestedFilename(), /amnyam-portfolio/);
+
+    await page.click('#mainNav [data-view="sniper"]');
+    await page.selectOption("#sniperType", "deal");
+    await page.fill("#sniperSearch", "Звезда");
+    await page.fill("#sniperMinDiscount", "20");
+    await page.fill("#sniperRuleName", "Редкие сделки");
+    await page.click("#sniperRuleSave");
+    assert.match(await page.textContent("#sniperRuleStatus"), /сохранён/);
+    assert.equal(await page.locator("#sniperRuleProfiles option").count(), 2);
+    await page.selectOption("#sniperRuleProfiles", { label: "Редкие сделки" });
+    await page.click("#sniperRuleApply");
+    assert.equal(await page.inputValue("#sniperSearch"), "Звезда");
+    await page.click("#sniperRuleDelete");
+    assert.match(await page.textContent("#sniperRuleStatus"), /удалён/);
+    assert.deepEqual(problems, []);
+  } finally {
+    await browser.close();
+  }
+});
+
 test("AMNYAM navigation renders all views and author support shows five levels", async () => {
   const { browser, page, problems } = await open(serve(dataV2()), { width: 1280, height: 900 });
   await page.waitForSelector("#content:not(.hide)");
-  for (const view of ["overview", "market", "sniper", "deals", "cheap", "analytics", "favorites", "support"]) {
-    await page.click('#mainNav [data-view="' + view + '"]');
-    assert.equal(await page.getAttribute('#mainNav [data-view="' + view + '"]', "aria-selected"), "true", view + " tab selected");
+  const routes = [
+    ["overview","overview"],["market","market"],["sniper","sniper"],
+    ["deals","deals"],["cheap","deals"],["analytics","analytics"],
+    ["events","analytics"],["data","data"],["sales","data"],
+    ["favorites","favorites"],["portfolio","favorites"],
+    ["appearance","appearance"],["support","appearance"],["help","appearance"]
+  ];
+  for (const [view,parent] of routes) {
+    await page.click('#mainNav [data-view="' + parent + '"]');
+    if (view !== parent) await page.click('#workspaceSubnav [data-view="' + view + '"]');
     assert.equal(await page.locator('[data-view-section="' + view + '"]:not(.view-hidden)').count() > 0, true, view + " view visible");
   }
   assert.equal(await page.locator("#supportAmounts [data-amount]").count(), 5);
@@ -658,6 +755,27 @@ test("appearance settings switch themes, mascot and motion and persist locally",
   assert.ok(await page.locator("body.glass-off").count());
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("amnyam.appearance.v1")));
   assert.deepEqual(saved, { background: "liquid", mascot: "none", motion: "off", glass: false });
+
+  assert.equal(await page.locator("#soundVolume").inputValue(), "100", "legacy users retain the original full volume");
+  await page.selectOption("#soundPattern", "soft");
+  await page.locator("#soundVolume").evaluate(node => {
+    node.value = "35";
+    node.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  assert.equal(await page.locator("#soundVolumeLabel").textContent(), "35%");
+  assert.equal(await page.evaluate(() => localStorage.getItem("amnyam.sound.pattern.v1")), "soft");
+  assert.equal(await page.evaluate(() => localStorage.getItem("amnyam.sound.volume.v1")), "35");
+
+  const gif = Buffer.from("R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==", "base64");
+  await page.locator("#appearanceMediaFile").setInputFiles({
+    name: "wallpaper.gif", mimeType: "image/gif", buffer: gif
+  });
+  await page.waitForFunction(() => document.querySelector("#customWallpaper").src.startsWith("data:image/gif;base64,"), { timeout: 5000 });
+  assert.match(await page.locator("#customWallpaper").getAttribute("src"), /^data:image\/gif;base64,/);
+  assert.match(await page.locator("#appearanceMediaHint").textContent(), /Собственный фон включён/);
+  await page.click("#appearanceMediaClear");
+  assert.equal(await page.locator("#customWallpaper").getAttribute("src"), null);
+
   await page.click("#resetAppearance");
   assert.equal(await page.locator("body").getAttribute("data-bg"), "cosmic");
   assert.equal(await page.locator("body").getAttribute("data-mascot"), "omnom");
@@ -759,12 +877,17 @@ test("live polling refreshes every gift-instance field and event detail", async 
     label: "Продан в Маркете", from_user: "seller", to_user: "buyer", time_raw: "28 окт в 21:37"
   };
 
-  await page.waitForTimeout(3600);
+  // Full catalogue enrichment refreshes with the full snapshot, not the lightweight Live endpoint.
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await page.waitForFunction(() => document.querySelector("#dBody").textContent.includes("Новый автор"), { timeout: 8000 });
+  await page.click('#detailWorkspaceTabs [data-detail-tab="catalog"]');
+  const catalogDetail = await page.textContent("#dBody");
+  assert.match(catalogDetail, /Новый автор/);
+  assert.match(catalogDetail, /Обновлённая коллекция/);
+  assert.match(catalogDetail, /Тираж разошёлся/);
+  await page.click('#detailWorkspaceTabs [data-detail-tab="history"]');
   const detail = await page.textContent("#dBody");
-  assert.match(detail, /Новый автор/);
-  assert.match(detail, /Обновлённая коллекция/);
   assert.match(detail, /new_owner/);
-  assert.match(detail, /Тираж разошёлся/);
   assert.match(detail, /Продан в Маркете/);
   assert.match(detail, /seller → buyer/);
   assert.deepEqual(problems, []);
@@ -933,6 +1056,20 @@ test("target price crossing plays sound only without browser notifications", asy
   const { browser, page, problems } = await open((route) => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify(latest)
   }), { width: 1280, height: 900 }, {
+    supportRoutes: {
+      "/api/live/status": route => {
+        const lot = latest.lots[0];
+        return route.fulfill({
+          status: 200, contentType: "application/json",
+          body: JSON.stringify({
+            enabled: true, fresh: true, last_poll_at: NOW, age_seconds: 0,
+            fingerprint: "lot-1000-price-" + lot.price, item_count: 1,
+            items: [{ lot_id: lot.lot_id, title: lot.title, price: lot.price, rarity: lot.rarity,
+              status: lot.status, lot_url: lot.lot_url, image_url: lot.image_url }]
+          })
+        });
+      }
+    },
     initScript: () => {
       localStorage.setItem("amnyam.targets", JSON.stringify({ "1000": 120 }));
       localStorage.setItem("amnyam.alertSound.v1", "on");
@@ -954,6 +1091,7 @@ test("target price crossing plays sound only without browser notifications", asy
   assert.equal(await page.locator("#enablePushNotifications, #enableNotifications").count(), 0);
   assert.equal(await page.locator("#watchAlert").count(), 0);
   assert.equal(await page.evaluate(() => window.__soundNotes), 0, "no sound before the ask reaches the target");
+  await page.waitForTimeout(3300);
   latest = JSON.parse(JSON.stringify(latest));
   latest.lots[0].price = 100;
   await page.waitForFunction(() => window.__soundNotes === 5, { timeout: 10000 });
@@ -965,7 +1103,8 @@ test("target price crossing plays sound only without browser notifications", asy
 test("help tab documents market workflows and sound-only target alerts", async () => {
   const { browser, page, problems } = await open(serve(dataV2()));
   await page.waitForSelector("#content:not(.hide)");
-  await page.click('#mainNav [data-view="help"]');
+  await page.click('#mainNav [data-view="appearance"]');
+  await page.click('#workspaceSubnav [data-view="help"]');
   assert.equal(await page.locator("#helpPanel:not(.view-hidden)").count(), 1);
   const guide = await page.textContent("#helpPanel");
   assert.match(guide, /Маркет/);
@@ -1013,6 +1152,7 @@ test("target prices reject fractions and values above the safe limit; blank inpu
   await page.click('#mainNav [data-view="market"]');
   await page.fill("#search", "1003");
   await page.locator("#rows button[aria-label^='Подробнее о лоте']").click();
+  await page.click('#detailWorkspaceTabs [data-detail-tab="actions"]');
 
   const input = page.locator("#dBody .target-input");
   const save = page.locator("#dBody .detail-watch button.btn:not(.secondary)");
@@ -1083,7 +1223,8 @@ test("support payment status failures do not invite duplicate intents and can be
     }
   });
   await page.waitForSelector("#content:not(.hide)");
-  await page.click('#mainNav [data-view="support"]');
+  await page.click('#mainNav [data-view="appearance"]');
+  await page.click('#workspaceSubnav [data-view="support"]');
   await page.waitForFunction(() => document.querySelector("#supportHint").textContent.includes("Платёж будет создан"));
   await page.click('#supportAmounts [data-amount="5000"]');
   await page.waitForFunction(() => document.querySelector("#supportRetryStatus") && !document.querySelector("#supportRetryStatus").hidden);
@@ -1094,7 +1235,8 @@ test("support payment status failures do not invite duplicate intents and can be
 
   await page.reload();
   await page.waitForSelector("#content:not(.hide)");
-  await page.click('#mainNav [data-view="support"]');
+  await page.click('#mainNav [data-view="appearance"]');
+  await page.click('#workspaceSubnav [data-view="support"]');
   await page.waitForFunction(() => document.querySelector("#supportRetryStatus") && !document.querySelector("#supportRetryStatus").hidden);
   assert.match(await page.textContent("#supportMsgText"), /ранее созданный платёж/i);
 
@@ -1110,7 +1252,7 @@ test("support payment status failures do not invite duplicate intents and can be
   await browser.close();
 });
 
-test("main navigation supports ArrowLeft, ArrowRight, Home and End with roving focus", async () => {
+test("workspace navigation supports roving focus and contextual sub-tabs", async () => {
   const { browser, page, problems } = await open(serve(dataV2()));
   try {
     await page.waitForSelector("#content:not(.hide)");
@@ -1126,18 +1268,19 @@ test("main navigation supports ArrowLeft, ArrowRight, Home and End with roving f
     await page.keyboard.press("ArrowLeft");
     assert.equal(await tab("sniper").getAttribute("aria-selected"), "true");
     await page.keyboard.press("End");
-    assert.equal(await tab("help").getAttribute("aria-selected"), "true");
+    assert.equal(await tab("appearance").getAttribute("aria-selected"), "true");
     await page.keyboard.press("Home");
     assert.equal(await tab("overview").getAttribute("aria-selected"), "true");
     assert.equal(await tab("overview").evaluate(node => document.activeElement === node), true);
-    await tab("help").click();
+    await tab("appearance").click();
+    await page.click('#workspaceSubnav [data-view="help"]');
     assert.equal(await page.locator("#helpPanel:not(.view-hidden)").count(), 1);
+    assert.equal(await page.locator('#workspaceSubnav [data-view="help"]').getAttribute("aria-selected"), "true");
     assert.deepEqual(problems, []);
   } finally {
     await browser.close();
   }
 });
-
 
 
 test("Sniper shows a live new-lot event and calculates scenarios from confirmed sale data", async () => {
@@ -1146,18 +1289,36 @@ test("Sniper shows a live new-lot event and calculates scenarios from confirmed 
       generated_at: NOW,
       summary: { count: 20, unknown: 0, median: 1000, min: 800, max: 1200, enough_data: true },
       by_title: [{ title: "Звезда", count: 20, median: 1000, p25: 900, p75: 1100,
-        history: [{ date: "2026-10-29", median: 980 }, { date: "2026-10-30", median: 1000 }] }]
+        history: [{ date: "2026-10-29", median: 980 }, { date: "2026-10-30", median: 1000 }] }],
+      by_title_rarity: [{ title: "Звезда", rarity: "Редкий", count: 20, median: 1000, p25: 900, p75: 1100 }]
     }
   });
+  let liveCalls = 0;
   const { browser, page, problems } = await open((route) => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify(latest)
-  }));
+  }), { width: 1280, height: 900 }, {
+    supportRoutes: {
+      "/api/live/status": route => {
+        liveCalls += 1;
+        const items = latest.lots.slice(0, 100).map(lot => ({
+          lot_id: lot.lot_id, title: lot.title, price: lot.price, rarity: lot.rarity,
+          serial: lot.serial, status: lot.status, lot_url: lot.lot_url, image_url: lot.image_url
+        }));
+        const fingerprint = items.map(item => String(item.lot_id) + ":" + String(item.price)).join("|");
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+          enabled: true, fresh: true, last_poll_at: NOW, age_seconds: 0,
+          fingerprint, item_count: items.length, items
+        }) });
+      }
+    }
+  });
   try {
     await page.waitForSelector("#content:not(.hide)");
     await page.click('#mainNav [data-view="sniper"]');
     assert.equal(await page.locator("#sniperPanel:not(.view-hidden)").count(), 1);
     await page.waitForFunction(() => Array.from(document.querySelectorAll("#sniperGiftSelect option")).some(option => option.textContent === "Звезда"));
     await page.selectOption("#sniperGiftSelect", { label: "Звезда" });
+    await page.selectOption("#sniperGiftRarity", { label: "Редкий" });
     await page.fill("#sniperBuyPrice", "800");
     await page.waitForSelector("#sniperCalcResult .sniper-scenario", { timeout: 5000 });
     assert.equal(await page.locator("#sniperCalcResult .sniper-scenario").count(), 3);
@@ -1165,8 +1326,10 @@ test("Sniper shows a live new-lot event and calculates scenarios from confirmed 
     assert.match(await page.textContent("#sniperCalcResult"), /Оптимистичный/);
     assert.match(await page.textContent("#sniperRarityResult"), /характеристик|нескольких сопоставимых/i);
 
+    await page.waitForTimeout(3300);
+    assert.ok(liveCalls > 0, "the lightweight Live endpoint is polled independently");
     latest = JSON.parse(JSON.stringify(latest));
-    latest.lots.push({
+    latest.lots.unshift({
       lot_id: "900001", title: "Звезда", rarity: "Редкий", price: 650, status: "На продаже",
       first_seen: new Date().toISOString(), last_seen: new Date().toISOString(), active: true,
       lot_url: "https://huevo.su/market/lot/900001", history: []

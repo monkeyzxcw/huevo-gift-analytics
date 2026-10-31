@@ -8,8 +8,12 @@ const DEFAULT_PROFILE = {
   targets: {},
   alertedTargets: [],
   savedFilters: [],
+  portfolio: [],
+  sniperRuleProfiles: [],
   preferences: {
     alertSound: false,
+    soundVolume: 100,
+    soundPattern: "signature",
     sniperNewSound: false,
     sniperDealSound: false,
     appearance: { background: "cosmic", mascot: "omnom", motion: "normal", glass: true },
@@ -123,12 +127,15 @@ export function sanitiseProfile(value) {
     targets: {},
     alertedTargets: [],
     savedFilters: [],
+    portfolio: [],
+    sniperRuleProfiles: [],
     preferences: {
       alertSound: false,
       sniperNewSound: false,
       sniperDealSound: false,
       appearance: { ...DEFAULT_PROFILE.preferences.appearance },
-      seasonTheme: "default"
+      seasonTheme: "default",
+      overviewWidgets: { hero: true, dayPicks: true, charts: true }
     }
   };
   if (Array.isArray(raw.favorites)) {
@@ -167,10 +174,52 @@ export function sanitiseProfile(value) {
       };
     }).filter((item) => item && item.name);
   }
+  if (Array.isArray(raw.portfolio)) {
+    profile.portfolio = raw.portfolio.slice(0, 100).map((item, index) => {
+      if (!item || typeof item !== "object") return null;
+      const title = cleanString(item.title, 120);
+      const quantity = Number(item.quantity);
+      const purchasePrice = Number(item.purchase_price);
+      if (!title || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 1000 ||
+          !Number.isSafeInteger(purchasePrice) || purchasePrice < 1 || purchasePrice > 1e15) return null;
+      return {
+        id: cleanString(item.id, 80) || "portfolio-" + index,
+        title,
+        rarity: cleanString(item.rarity, 80),
+        quantity,
+        purchase_price: purchasePrice,
+        added_at: cleanString(item.added_at, 40)
+      };
+    }).filter(Boolean);
+  }
+  if (Array.isArray(raw.sniperRuleProfiles)) {
+    const allowedTypes = new Set(["all", "new", "price", "deal", "target"]);
+    profile.sniperRuleProfiles = raw.sniperRuleProfiles.slice(0, 20).map(item => {
+      if (!item || typeof item !== "object" || !item.filter || typeof item.filter !== "object") return null;
+      const filter = item.filter;
+      const id = cleanString(item.id, 80);
+      const name = cleanString(item.name, 40);
+      if (!id || !name) return null;
+      return {
+        id,
+        name,
+        filter: {
+          type: allowedTypes.has(filter.type) ? filter.type : "all",
+          search: cleanString(filter.search, 120),
+          min: cleanString(filter.min, 24),
+          max: cleanString(filter.max, 24),
+          discount: cleanString(filter.discount, 4)
+        }
+      };
+    }).filter(Boolean);
+  }
   const preferences = raw.preferences && typeof raw.preferences === "object" ? raw.preferences : {};
   const appearance = preferences.appearance && typeof preferences.appearance === "object" ? preferences.appearance : {};
+  const overviewWidgets = preferences.overviewWidgets && typeof preferences.overviewWidgets === "object" ? preferences.overviewWidgets : {};
   profile.preferences = {
     alertSound: preferences.alertSound === true,
+    soundVolume: Number.isInteger(preferences.soundVolume) && preferences.soundVolume >= 0 && preferences.soundVolume <= 100 ? preferences.soundVolume : 100,
+    soundPattern: ["signature", "soft", "double"].includes(preferences.soundPattern) ? preferences.soundPattern : "signature",
     sniperNewSound: preferences.sniperNewSound === true,
     sniperDealSound: preferences.sniperDealSound === true,
     appearance: {
@@ -179,7 +228,12 @@ export function sanitiseProfile(value) {
       motion: ["normal", "subtle", "off"].includes(appearance.motion) ? appearance.motion : "normal",
       glass: appearance.glass !== false
     },
-    seasonTheme: ["default", "newyear", "halloween", "spring", "summer"].includes(preferences.seasonTheme) ? preferences.seasonTheme : "default"
+    seasonTheme: ["default", "newyear", "halloween", "spring", "summer"].includes(preferences.seasonTheme) ? preferences.seasonTheme : "default",
+    overviewWidgets: {
+      hero: overviewWidgets.hero !== false,
+      dayPicks: overviewWidgets.dayPicks !== false,
+      charts: overviewWidgets.charts !== false
+    }
   };
   return profile;
 }
