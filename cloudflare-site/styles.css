@@ -947,7 +947,7 @@ button:disabled{cursor:not-allowed;filter:saturate(.55)}
 .overview-widget-controls{align-items:center}
 .overview-widget-controls>b{flex-basis:100%}
 .overview-widget-controls label{display:flex;gap:6px;align-items:center;color:var(--muted);font-size:11px}
-#customWallpaper{position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.14;background-position:center;background-size:cover;background-repeat:no-repeat}
+#customWallpaper{position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.14;width:100%;height:100%;object-fit:cover;display:none}#customWallpaper.is-active{display:block}
 .detail-workspace-tabs{position:sticky;top:0;z-index:2;padding:8px 0;background:#10130f}
 .detail-pane{min-width:0}
 #dBody{max-height:min(72vh,760px);overflow:auto;padding-right:4px}
