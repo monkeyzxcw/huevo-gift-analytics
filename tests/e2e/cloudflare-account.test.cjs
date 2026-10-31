@@ -90,8 +90,13 @@ async function openApp(search = "") {
 test("all market tabs stay available without huEVO login and profile dialog explains how to connect", async () => {
   const { browser, page, problems } = await openApp();
   try {
-    for (const view of ["overview", "market", "deals", "cheap", "analytics", "favorites", "support", "appearance"]) {
+    for (const view of ["overview", "market", "sniper", "deals", "analytics", "data", "favorites", "appearance"]) {
       const tab = page.locator('#mainNav [data-view="' + view + '"]');
+      await tab.click();
+      assert.equal(await tab.getAttribute("aria-selected"), "true", view);
+    }
+    for (const view of ["cheap", "support"]) {
+      const tab = page.locator('#workspaceSubnav [data-view="' + view + '"]');
       await tab.click();
       assert.equal(await tab.getAttribute("aria-selected"), "true", view);
     }
