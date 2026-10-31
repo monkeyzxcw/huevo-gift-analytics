@@ -45,7 +45,7 @@
 </nav>
 <nav class="workspace-subnav" id="workspaceSubnav" aria-label="Подразделы">
   <div class="workspace-subnav-group" data-subnav-group="data">
-    <button type="button" data-view="data" aria-selected="true">Состояние сборщика</button>
+    <button type="button" data-view="data" aria-selected="true">Свежесть данных</button>
     <button type="button" data-view="sales" aria-selected="false">История продаж</button>
   </div>
   <div class="workspace-subnav-group" data-subnav-group="analytics">
@@ -152,7 +152,7 @@
       <article class="desk-tool-card"><b>Недавно открытые лоты</b><div id="deskRecentList"><p class="muted">Открывай лоты, чтобы они появились здесь.</p></div>
         <div class="desk-note-editor" id="deskNoteEditor" hidden><b id="deskNoteTitle">Заметка к лоту</b><textarea id="deskNoteText" maxlength="1000" placeholder="Например: сравнить с продажами, проверить редкость…"></textarea><button class="btn secondary" id="deskNoteSave" type="button">Сохранить заметку</button><small>Заметки хранятся только в этом браузере.</small></div>
       </article>
-      <article class="desk-tool-card"><b>Чек-лист сессии</b><p class="muted">Локальные отметки перед анализом рынка.</p><div class="desk-checklist"><label><input type="checkbox" data-desk-check="collector"> Сборщик запущен</label><label><input type="checkbox" data-desk-check="freshness"> Свежесть данных проверена</label><label><input type="checkbox" data-desk-check="sound"> Звук проверен</label><label><input type="checkbox" data-desk-check="targets"> Целевые цены настроены</label></div></article>
+      <article class="desk-tool-card"><b>Чек-лист сессии</b><p class="muted">Локальные отметки перед анализом рынка.</p><div class="desk-checklist"><label><input type="checkbox" data-desk-check="market"> Проверил актуальность цен</label><label><input type="checkbox" data-desk-check="history"> Сверил историю цены</label><label><input type="checkbox" data-desk-check="budget"> Проверил бюджет покупки</label><label><input type="checkbox" data-desk-check="targets"> Целевые цены настроены</label></div></article>
       <article class="desk-tool-card"><b>Состояние рабочего места</b><p class="desk-status" id="deskStatus" role="status" aria-live="polite">Стандартный вид</p><p class="muted">Все настройки применяются сразу и сохраняются в текущем браузере.</p></article>
     </div>
   </section>
@@ -209,6 +209,22 @@
     <p class="muted foot">Исчезнувший лот проверяется по истории экземпляра: продажа и передача отмечаются отдельно, а отсутствие новых событий означает «вероятно снят продавцом» — только если история уже была собрана раньше.</p>
   </article>
   <article class="panel"><div class="panel-head"><h3>Самые дорогие лоты</h3><span class="muted">по цене объявления</span></div><ol class="list" id="topList"></ol></article>
+</section>
+
+
+<section class="panel intel-panel" id="intelLab" data-view-section="analytics" aria-labelledby="intelTitle">
+<div class="section-heading"><div><span class="section-index">/ MARKET INTELLIGENCE V2</span><h2 id="intelTitle">AMNYAM Intelligence Lab</h2><p>Сигналы по истории цен и насыщенности предложений. Ориентиры не гарантируют цену продажи.</p></div><span class="view-stat" id="intelCount">Ожидаем данные…</span></div>
+<div class="intel-kpis" id="intelKpis" aria-live="polite"></div>
+<div class="intel-controls" role="search" aria-label="Фильтры аналитики">
+<label><span>Поиск по лоту / подарку</span><input class="input" id="intelQuery" maxlength="120" placeholder="Название, ID, редкость"></label>
+<label><span>Редкость</span><select class="select" id="intelRarity"><option value="">Все редкости</option></select></label>
+<label><span>Цена от</span><input class="input" id="intelMin" type="number" min="0" step="1" placeholder="Мин."></label>
+<label><span>Цена до</span><input class="input" id="intelMax" type="number" min="0" step="1" placeholder="Макс."></label>
+<label><span>Сигнал</span><select class="select" id="intelSignal"><option value="all">Все лоты</option><option value="discount">Ниже ориентира</option><option value="drop">Цена падает</option><option value="rise">Цена растёт</option><option value="new">Новые за 24 ч</option><option value="scarce">Мало аналогов</option><option value="crowded">Много аналогов</option><option value="wide">Широкий разброс</option><option value="stale">Данные старше 24 ч</option></select></label>
+<label><span>Сортировка</span><select class="select" id="intelSort"><option value="discount">Скидка к ориентиру</option><option value="price">Цена: дороже → дешевле</option><option value="delta">Изменение цены</option><option value="supply">Количество аналогов</option><option value="confidence">Надёжность выборки</option><option value="fresh">Дата появления</option><option value="volatility">Разброс цен</option></select></label>
+</div>
+<div class="intel-actions"><button class="btn" id="intelSaveFilter" type="button">Сохранить скринер</button><button class="btn secondary" id="intelReset" type="button">Сбросить фильтры</button><button class="btn secondary" id="intelExportCsv" type="button">Экспорт CSV</button><button class="btn secondary" id="intelExportJson" type="button">Экспорт JSON</button><button class="btn secondary" id="intelCopyBrief" type="button">Скопировать сводку</button></div>
+<div class="intel-layout"><div><div class="intel-table-wrap"><table class="intel-table"><thead><tr><th>Подарок</th><th>Цена / динамика</th><th>Ориентир</th><th>Аналоги</th><th>Сигнал / выборка</th><th>Разброс</th><th>Лот</th></tr></thead><tbody id="intelRows"><tr><td colspan="7" class="empty">Загрузка рынка…</td></tr></tbody></table></div><p class="muted">Показаны первые 100 строк; экспорт включает все отфильтрованные результаты.</p></div><aside class="intel-side"><section class="intel-side-card"><h3>Сравнение по редкости</h3><div id="intelRarityStats"></div></section><section class="intel-side-card"><h3>Сохранённые скринеры</h3><div id="intelSaved"></div><p class="muted">Скринеры локальны для текущего профиля и браузера.</p></section></aside></div><p class="intel-status" id="intelStatus" role="status" aria-live="polite"></p>
 </section>
 
 <section class="panel market-events-panel" id="marketEventsPanel" data-view-section="events" aria-labelledby="marketEventsTitle">
@@ -575,5 +591,6 @@
 <script src="./app.js?v=amnyam-workspace-v23" defer></script>
 <script src="./sniper.js?v=amnyam-sniper-rules-v3" defer></script>
 <script src="./desk-tools.js?v=amnyam-desk-v1" defer></script>
+<script src="./intel-lab.js?v=amnyam-intel-v2" defer></script>
 </body>
 </html>
