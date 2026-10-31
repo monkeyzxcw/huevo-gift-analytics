@@ -885,10 +885,11 @@
       ["Ссылка", lot => lot.lot_url]
     ];
     const cell = value => {
+      const numeric = typeof value === "number" && Number.isFinite(value);
       let text = value == null ? "" : String(value);
       const trimmed = text.trimStart();
-      if (["=", "+", "-", "@", "\t", "\r"].some(prefix => trimmed.startsWith(prefix))) text = "'" + text;
-      return '"' + text.replace(/"/g, '""') + '"';
+      if (!numeric && ["=", "+", "-", "@", "\t", "\r"].some(prefix => trimmed.startsWith(prefix))) text = "'" + text;
+      return numeric ? text : '"' + text.replace(/"/g, '""') + '"';
     };
     const csv = [columns.map(column => cell(column[0])).join(";")]
       .concat(rows.map(lot => columns.map(column => cell(column[1](lot))).join(";")))
