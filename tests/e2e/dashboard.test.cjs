@@ -833,6 +833,49 @@ test("sale benchmarks beat inflated asking prices and split offer clusters are s
   await second.browser.close();
 });
 
+test("catalog changes has a confirmed sales tab with original sellers, buyers and Huevo date text", async () => {
+  const data = dataV2({
+    sales_history: [
+      {
+        transaction_id: "sale-1", lot_id: "39001", title: "Звёздный кот",
+        serial: "42", price: 12345, seller: "seller-one", buyer: "buyer-two",
+        date_raw: "01:22", sale_date: null, source_page: 1, source_row: 1
+      },
+      {
+        transaction_id: "sale-2", lot_id: "39002", title: "Лунный кот",
+        serial: "7", price: 23456, seller: "seller-three", buyer: "buyer-four",
+        date_raw: "29.10.26", sale_date: "2026-10-29", source_page: 1, source_row: 2
+      }
+    ]
+  });
+  const { browser, page, problems } = await open(serve(data));
+  await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="analytics"]');
+  await page.click("#tabSales");
+  assert.equal(await page.locator("#tabSales").getAttribute("aria-selected"), "true");
+  assert.equal(await page.locator("#changeList").getAttribute("aria-labelledby"), "tabSales");
+  const text = await page.textContent("#changeList");
+  assert.match(text, /Звёздный кот/);
+  assert.match(text, /Продавец: seller-one/);
+  assert.match(text, /Покупатель: buyer-two/);
+  assert.match(text, /01:22/);
+  assert.match(text, /Лунный кот/);
+  assert.match(text, /29\.10\.26/);
+  assert.match(text, /12[\s\u00a0]?345/);
+  assert.deepEqual(problems, []);
+  await browser.close();
+});
+
+test("confirmed sales tab has an explicit first-collection empty state", async () => {
+  const { browser, page, problems } = await open(serve(dataV2()));
+  await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="analytics"]');
+  await page.click("#tabSales");
+  assert.match(await page.textContent("#changeList"), /История завершённых сделок пока не собрана/);
+  assert.deepEqual(problems, []);
+  await browser.close();
+});
+
 test("daily-pick cards keep gift art, title, metrics and actions in separate responsive tracks", async () => {
   for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }, { width: 360, height: 780 }]) {
     const { browser, page, problems } = await open(serve(dataV2()), viewport);
