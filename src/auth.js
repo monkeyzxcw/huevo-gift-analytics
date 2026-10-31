@@ -12,6 +12,8 @@ const DEFAULT_PROFILE = {
   sniperRuleProfiles: [],
   preferences: {
     alertSound: false,
+    soundVolume: 100,
+    soundPattern: "signature",
     sniperNewSound: false,
     sniperDealSound: false,
     appearance: { background: "cosmic", mascot: "omnom", motion: "normal", glass: true },
@@ -216,6 +218,8 @@ export function sanitiseProfile(value) {
   const overviewWidgets = preferences.overviewWidgets && typeof preferences.overviewWidgets === "object" ? preferences.overviewWidgets : {};
   profile.preferences = {
     alertSound: preferences.alertSound === true,
+    soundVolume: Number.isInteger(preferences.soundVolume) && preferences.soundVolume >= 0 && preferences.soundVolume <= 100 ? preferences.soundVolume : 100,
+    soundPattern: ["signature", "soft", "double"].includes(preferences.soundPattern) ? preferences.soundPattern : "signature",
     sniperNewSound: preferences.sniperNewSound === true,
     sniperDealSound: preferences.sniperDealSound === true,
     appearance: {
