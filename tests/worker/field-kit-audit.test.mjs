@@ -49,6 +49,7 @@ test("audited dashboard cache versions and motion preferences are present", asyn
   assert.match(html, /styles\.css\?v=amnyam-dota2-hud-v3/);
   assert.match(html, /app\.js\?v=amnyam-workspace-v25/);
   assert.match(css, /body\.amnyam-compact/);
-  assert.match(css, /body\.amnyam-focus/);
+  assert.match(css, /amnyam-focus \.catalog-panel/);
+  assert.doesNotMatch(css, /amnyam-focus \[data-view-section\]/, "focus mode must not hide navigation destinations");
   assert.match(css, /body\.amnyam-calm/);
 });
