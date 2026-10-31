@@ -282,7 +282,7 @@
     });
   }
 
-  async function pollLive() {
+  async function pollFullSnapshot() {
     // The dashboard polls the Worker's merged /data.json, not only the first-page
     // endpoint. This lets both the 3-second live stream and the 5-minute full snapshot
     // reach every panel without reloading the document.
@@ -352,6 +352,91 @@
       }
     } finally {
       livePollRunning = false;
+    }
+  }
+
+  let fastLivePollRunning = false;
+  async function pollLive() {
+    if (fastLivePollRunning || !state.data || Date.now() < pollBackoffUntil) return;
+    if (document.visibilityState !== "visible") {
+      if (Date.now() - lastHiddenPollAt < 15000) return;
+      lastHiddenPollAt = Date.now();
+    }
+    fastLivePollRunning = true;
+    try {
+      const live = await fetchJson("./api/live/status?_=" + Date.now(), { cache: "no-store" }, 8000);
+      pollFailureCount = 0;
+      pollBackoffUntil = 0;
+      state.data.live = {
+        enabled: Boolean(live.enabled),
+        fresh: Boolean(live.fresh),
+        last_poll_at: live.last_poll_at || null,
+        item_count: Number(live.item_count) || 0,
+        age_seconds: Number.isFinite(Number(live.age_seconds)) ? Number(live.age_seconds) : null,
+        fingerprint: live.fingerprint || null,
+        message: live.fresh ? "Первая страница Huevo обновляется в реальном времени." :
+          (live.enabled ? "Локальный опрос первой страницы не поступал более 15 секунд." : "Live-хранилище пока не включено.")
+      };
+      if (live.fresh && Array.isArray(live.items)) {
+        const fingerprint = String(live.fingerprint || "");
+        if (fingerprint && fingerprint !== state.liveFingerprint) {
+          const byId = new Map(live.items.map(item => [String(item.lot_id), item]));
+          const merged = state.lots.map(lot => {
+            const fresh = byId.get(String(lot.lot_id));
+            if (!fresh) return lot;
+            byId.delete(String(lot.lot_id));
+            return {
+              ...lot,
+              title: fresh.title || lot.title,
+              serial: fresh.serial || lot.serial,
+              rarity: fresh.rarity || lot.rarity,
+              price: isNum(fresh.price) ? fresh.price : lot.price,
+              status: fresh.status || lot.status,
+              lot_url: fresh.lot_url || lot.lot_url,
+              image_url: fresh.image_url || lot.image_url,
+              active: true,
+              last_seen: live.last_poll_at || lot.last_seen
+            };
+          });
+          byId.forEach(item => merged.push({
+            ...item,
+            first_seen: live.last_poll_at || new Date().toISOString(),
+            last_seen: live.last_poll_at || new Date().toISOString(),
+            active: true,
+            history: []
+          }));
+          state.lots = merged;
+          state.liveFingerprint = fingerprint;
+          state.data.price_bins = [];
+          state.data.categories = [];
+          state.data.top_expensive = merged.filter(lot => isNum(lot.price))
+            .sort((a, b) => b.price - a.price).slice(0, 10);
+          render();
+          const detailDialog = $("detail");
+          if (detailDialog && detailDialog.open && activeDetailLotId) {
+            const refreshedLot = state.lots.find(lot => String(lot.lot_id) === activeDetailLotId);
+            if (refreshedLot) openDetail(refreshedLot, lastTrigger);
+          }
+        } else {
+          renderState();
+          renderSourceHealth();
+          checkTargetAlerts();
+        }
+      } else {
+        renderState();
+        renderSourceHealth();
+      }
+    } catch (_) {
+      pollFailureCount = Math.min(pollFailureCount + 1, 5);
+      const delays = [3000, 6000, 12000, 20000, 30000];
+      pollBackoffUntil = Date.now() + delays[pollFailureCount - 1];
+      const dot = $("stateDot"), label = $("stateText");
+      if (dot && label && state.data) {
+        dot.className = "dot warn";
+        label.textContent = "Связь восстанавливается";
+      }
+    } finally {
+      fastLivePollRunning = false;
     }
   }
 
