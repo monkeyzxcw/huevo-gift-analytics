@@ -155,6 +155,13 @@
   <article class="panel"><div class="panel-head"><h3>Категории (редкость)</h3><span class="muted" id="catNote"></span></div><div id="chartCats" class="bars"></div></article>
 </section>
 
+<div class="history-range-toolbar" data-view-section="analytics" aria-label="Период истории рынка">
+  <label class="f"><span>С даты</span><input class="input" id="historyFrom" type="date"></label>
+  <label class="f"><span>По дату</span><input class="input" id="historyTo" type="date"></label>
+  <button class="btn secondary" id="historyApply" type="button">Показать период</button>
+  <button class="btn secondary" id="historyReset" type="button">Вся история</button>
+  <small id="historyRangeNote" aria-live="polite">Все доступные снимки</small>
+</div>
 <section class="grid2" data-view-section="analytics">
   <article class="panel"><div class="panel-head"><h3>Число активных лотов по снимкам</h3><span class="muted" id="countNote"></span></div><div class="chart" id="chartCount"></div></article>
   <article class="panel"><div class="panel-head"><h3>Медианная цена по снимкам</h3><span class="muted" id="medianNote"></span></div><div class="chart" id="chartMedian"></div></article>
@@ -178,6 +185,7 @@
 
 <section class="panel market-events-panel" id="marketEventsPanel" data-view-section="events" aria-labelledby="marketEventsTitle">
   <div class="panel-head"><div><h3 id="marketEventsTitle">Рыночные события</h3><p class="muted">Новые лоты, изменения каталога и подтверждённые события из сохранённых снимков.</p></div><span class="view-stat" id="marketEventsCount">— событий</span></div>
+  <div class="catalog-index-actions"><button class="btn secondary" type="button" id="exportEventsCsv">Экспорт событий CSV</button></div>
   <ol class="market-events-list" id="marketEventsList" aria-live="polite"></ol>
 </section>
 <section class="panel hide" id="salesPanel" data-view-section="sales" aria-labelledby="salesTitle">
@@ -281,6 +289,7 @@
 
 <section class="panel portfolio-panel" id="portfolioPanel" data-view-section="portfolio" aria-labelledby="portfolioTitle">
   <div class="section-heading"><div><span class="section-index">/ MY COLLECTION</span><h2 id="portfolioTitle">Мои покупки</h2><p>Записывай собственные покупки и смотри ориентировочную стоимость по подтверждённым продажам или устойчивым объявлениям.</p></div><span class="view-stat" id="portfolioCount">0 позиций</span></div>
+  <div class="portfolio-actions"><button class="btn secondary" type="button" id="exportPortfolioCsv">Экспорт портфеля CSV</button></div>
   <form class="portfolio-add-form" id="portfolioForm">
     <label class="f grow"><span>Подарок</span><input class="input" id="portfolioGift" list="globalSearchSuggestions" maxlength="120" placeholder="Название подарка" required></label>
     <label class="f"><span>Редкость</span><input class="input" id="portfolioRarity" maxlength="80" placeholder="Редкость"></label>
@@ -467,6 +476,7 @@
     <div><span class="section-index">/ CANONICAL GIFT INDEX</span><h2 id="giftCatalogTitle">Каталог всех подарков</h2><p>Независимый список со страницы /gifts. Карточки не зависят от наличия активного объявления.</p></div>
     <span class="view-stat" id="giftCatalogCount">— карточек</span>
   </div>
+  <div class="catalog-index-actions"><button class="btn secondary" type="button" id="exportGiftCatalogCsv">Экспорт каталога CSV</button></div>
   <div class="toolbar">
     <label class="f grow"><span>Найти подарок в каталоге</span><input class="input" id="giftCatalogSearch" type="search" placeholder="Название или ID"></label>
     <label class="f"><span>Сортировка</span><select class="select" id="giftCatalogSort"><option value="title">Название</option><option value="supply_desc">Тираж: больше</option><option value="supply_asc">Тираж: меньше</option></select></label>
