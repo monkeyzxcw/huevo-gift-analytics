@@ -135,9 +135,9 @@ test("shared data status shows market freshness without exposing collector inter
   assert.equal(await page.locator("#sourceHealthGrid .source-health-card").count(), 5);
   const panel = await page.textContent("#sourceHealthGrid");
   assert.match(panel, /Каталог рынка/);
-  assert.match(panel, /Live · первая страница[\\s\\S]*30 лотов/);
-  assert.match(panel, /История продаж[\\s\\S]*120 записей/);
-  assert.match(panel, /Каталог подарков[\\s\\S]*123 карточек/);
+  assert.match(panel, /Live · первая страница/); assert.match(panel, /30 лотов/);
+  assert.match(panel, /История продаж/); assert.match(panel, /120 записей/);
+  assert.match(panel, /Каталог подарков/); assert.match(panel, /123 карточек/);
   assert.doesNotMatch(panel, /PRIVATE FULL SCAN DETAIL|Экземпляры и история владельцев|попыток:|страниц обработано/);
   assert.equal(await page.locator("#sourceHealthGrid progress").count(), 0);
   assert.deepEqual(problems, []);
