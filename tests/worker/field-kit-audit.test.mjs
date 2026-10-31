@@ -10,7 +10,9 @@ const read = (path) => readFile(resolve(root, path), "utf8");
 test("Field Kit exposes exactly twenty local workflow actions", async () => {
   const html = await read("cloudflare-site/index.html");
   const kit = await read("cloudflare-site/field-kit.js");
+  const packageJson = await read("package.json");
   const labels = kit.match(/^ {6}\["[^"]+",/gm) || [];
+  assert.match(packageJson, /node --check cloudflare-site\/field-kit\.js/);
   assert.equal(labels.length, 20, "all twenty promised actions must be wired");
   assert.match(html, /field-kit\.js\?v=amnyam-field-kit-v1/);
   assert.match(kit, /copyIds/);
