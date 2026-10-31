@@ -1999,10 +1999,24 @@
     const discount = Math.max(0, Math.min(80, Number(lot.discount_pct))) / 80;
     const sample = Math.max(0, Number(lot.sample_size) || 0);
     const evidence = Math.min(1, sample / 20);
-    const exactSales = lot.basis === "sales" && lot.reference_scope !== "title";
+    const exactSales = lot.basis === "sales" && ["catalog_rarity", "title_rarity"].includes(lot.reference_scope);
     const confidence = lot.confidence === "high" ? 1 : lot.confidence === "medium" ? 0.82 : 0.58;
     const raw = discount * 60 + evidence * 25 + (exactSales ? 15 : 6);
     return Math.round(Math.max(0, Math.min(100, raw * confidence)));
+  }
+
+  function dealScoreExplanation(lot) {
+    const confidence = lot.confidence === "high" ? "высокая" :
+      lot.confidence === "medium" ? "средняя" : "низкая";
+    const source = lot.basis === "sales"
+      ? (lot.reference_scope === "catalog_rarity" ? "продажи точного каталога и редкости" :
+        lot.reference_scope === "title_rarity" ? "продажи точного названия и редкости" :
+        "продажи только по названию")
+      : "активные объявления с тем же названием и редкостью";
+    const sample = isNum(lot.sample_size) ? fmt(lot.sample_size) : "нет";
+    return "Скидка: " + fmt(lot.discount_pct) + "%. Ориентир: " + source +
+      ". Выборка: " + sample + " записей. Уверенность источника: " + confidence +
+      ". Балл помогает расставить приоритет проверки и не предсказывает прибыль.";
   }
 
   function renderDealCard(lot,label,dayPick){
@@ -2042,7 +2056,7 @@
       h("span",{class:"deal-metric"},[h("small",{text:lot.basis==="sales"?"СОВЕРШЁННЫЕ ПРОДАЖИ · "+salesReferenceDescription(lot).toUpperCase():"АКТИВНЫЕ ОБЪЯВЛЕНИЯ · ТО ЖЕ НАЗВАНИЕ И РЕДКОСТЬ"}),h("b",{text:isNum(lot.sample_size)&&lot.sample_size>0?fmt(lot.sample_size)+" записей":"Мало данных"})])
     );
     if(histLow!==null)metrics.append(h("span",{class:"deal-metric history-low"},[h("small",{text:"МИНИМУМ В ИСТОРИИ"}),h("b",{text:price(histLow)})]));
-    metrics.append(h("p",{class:"deal-score-note",text:"Оценка учитывает размер дисконта, объём выборки и источник ориентира. Это приоритет проверки, а не прогноз прибыли."}));
+    metrics.append(h("p",{class:"deal-score-note",text:dealScoreExplanation(lot)}));
     const mini=sparkline(lot._history);
     if(mini)metrics.append(h("div",{class:"deal-sparkline"},[mini,h("small",{text:"История цены"})]));
     row.children[1].append(metrics);
