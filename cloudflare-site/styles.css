@@ -1677,7 +1677,7 @@ tbody tr:hover td{background:rgba(219,169,103,.08)}
 body.amnyam-compact #lotsMode td{padding-top:6px;padding-bottom:6px}
 body.amnyam-compact #lotsMode .thumb{width:27px;height:27px}
 body.amnyam-compact #lotsMode .lot{gap:7px}
-body.amnyam-focus [data-view-section]:not([data-view-section="market"]){display:none!important}
+.amnyam-focus .catalog-panel .search-tips,.amnyam-focus .catalog-panel .sort-help{display:none!important}.amnyam-focus .catalog-panel{border-color:var(--amnyam-acid,#e6b66f)}
 body.amnyam-calm *,body.amnyam-calm *:before,body.amnyam-calm *:after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
 @media(max-width:760px){.fieldkit-groups{grid-template-columns:1fr}.fieldkit-recent-label{display:grid;margin-right:0}.fieldkit-recent{max-width:100%;width:100%}}
 @media(prefers-reduced-motion:reduce){.fieldkit-action{transition:none!important}}
