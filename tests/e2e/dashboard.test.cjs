@@ -803,6 +803,8 @@ test("help tab documents market workflows and sound-only target alerts", async (
   assert.equal(await page.locator("#helpPanel:not(.view-hidden)").count(), 1);
   const guide = await page.textContent("#helpPanel");
   assert.match(guide, /Маркет/);
+  assert.match(guide, /Снайпер/);
+  assert.match(guide, /Экспорт CSV/);
   assert.match(guide, /цена-цель/);
   assert.match(guide, /Звуковой сигнал AMNYAM/);
   assert.match(guide, /Фоновых браузерных или системных уведомлений больше нет/);
