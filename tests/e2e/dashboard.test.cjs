@@ -1475,6 +1475,22 @@ test("username workspace imports real rows, calculates peer signals and keeps gi
     assert.equal(await page.locator("#usernameTabs [data-username-view]").count(), 8);
     assert.equal(await page.locator("#usernameRows tr").count(), 1, "empty state is one table row");
     assert.match(await page.textContent("#usernameRows"), /База юзернеймов пока пуста/);
+    const usernameNavDebug = await page.evaluate(() => {
+      const node = document.querySelector("#usernameTabs [data-username-view=market]");
+      const chain = [];
+      let parent = node;
+      while (parent) {
+        const style = getComputedStyle(parent);
+        const rect = parent.getBoundingClientRect();
+        chain.push({ tag: parent.tagName, id: parent.id, className: String(parent.className || ""),
+          display: style.display, visibility: style.visibility, opacity: style.opacity,
+          width: Math.round(rect.width), height: Math.round(rect.height) });
+        parent = parent.parentElement;
+      }
+      return chain;
+    });
+    assert.ok(await page.locator("#usernameTabs [data-username-view=market]").isVisible(),
+      "username navigation must be visible after workspace switch: " + JSON.stringify(usernameNavDebug));
     await page.click('#usernameTabs [data-username-view="market"]');
 
     const listings = [
