@@ -30,8 +30,8 @@ test("Field Kit never adds market requests or browser/system notifications", asy
 
 test("Field Kit exports protect CSV against spreadsheet formula injection", async () => {
   const kit = await read("cloudflare-site/field-kit.js");
-  assert.ok(kit.includes("if (/^[\s]*[=+\-@\t\r]/.test(text))"), "CSV values must neutralise spreadsheet formulas");
-  assert.ok(kit.includes("text.replace(/"/g, '""')"), "CSV values must escape quotes");
+  assert.ok(kit.includes(String.raw\`if (/^[\s]*[=+\-@\t\r]/.test(text))\`), "CSV values must neutralise spreadsheet formulas");
+  assert.ok(kit.includes(String.raw\`text.replace(/"/g, '""')\`), "CSV values must escape quotes");
 });
 
 test("invalid price ranges are reported explicitly and do not leave stale rows visible", async () => {
