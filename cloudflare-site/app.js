@@ -134,7 +134,10 @@
     targets:readTargets(),alertedTargets:readAlertedTargets(),savedFilters:readSavedFilters()
   };
   function publishMarketData() {
-    const detail = { data: state.data, lots: state.lots, targets: { ...state.targets } };
+    const detail = {
+      data: state.data, lots: state.lots, targets: { ...state.targets },
+      profileKey: accountState.user && accountState.user.id ? String(accountState.user.id) : "guest"
+    };
     window.AMNYAM_MARKET = detail;
     window.dispatchEvent(new CustomEvent("amnyam:market", { detail }));
   }
