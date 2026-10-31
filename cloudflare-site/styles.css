@@ -991,3 +991,11 @@ html,body{max-width:100%;overflow-x:clip}
   .toolbar,.history-range-toolbar,.portfolio-add-form{min-width:0;max-width:100%}
   .grid2{grid-template-columns:minmax(0,1fr)}
 }
+.sound-advanced-controls{display:grid;grid-template-columns:minmax(180px,1fr) minmax(180px,1fr);gap:12px;align-items:end;margin:12px 0;padding:13px;border:1px solid var(--line);border-radius:10px;background:#10150e}
+.sound-advanced-controls>b,.sound-advanced-controls>small{grid-column:1/-1}
+.sound-advanced-controls>b{font-size:12px;color:var(--amnyam-acid)}
+.sound-advanced-controls .f{min-width:0}
+.sound-advanced-controls input[type=range]{width:100%;accent-color:var(--amnyam-acid)}
+.sound-advanced-controls output{float:right;font-variant-numeric:tabular-nums;color:var(--amnyam-acid)}
+.sound-advanced-controls>small{color:var(--muted);font-size:10px;line-height:1.5}
+@media(max-width:650px){.sound-advanced-controls{grid-template-columns:minmax(0,1fr)}.sound-advanced-controls>b,.sound-advanced-controls>small{grid-column:auto}}
