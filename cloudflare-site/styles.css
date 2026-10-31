@@ -974,3 +974,20 @@ button:disabled{cursor:not-allowed;filter:saturate(.55)}
 .detail-image-thumb{flex:0 0 38px;width:38px;height:38px;border:1px solid var(--line);border-radius:6px;background:#111610;padding:2px;cursor:pointer}
 .detail-image-thumb[aria-pressed=true]{border-color:var(--amnyam-acid);box-shadow:0 0 0 1px var(--amnyam-acid)}
 .detail-image-thumb img{display:block;width:100%;height:100%;object-fit:cover;border-radius:4px}
+
+/* Keep the workspace inside narrow viewports; data tables retain their own scroll area. */
+html,body{max-width:100%;overflow-x:clip}
+.wrap,#content,.command-strip,.workspace-subnav,.workspace-subnav-group,.panel,.grid2,.cards{min-width:0;max-width:100%}
+.command-strip>span:nth-child(2){min-width:0;flex-wrap:wrap;letter-spacing:.05em}
+.command-strip .season-control{min-width:0;max-width:100%}
+.command-search{min-width:0;width:min(100%,370px)}
+@media(max-width:650px){
+  .wrap{padding-left:10px;padding-right:10px}
+  .main-nav{width:100%;min-width:0}
+  .workspace-subnav{width:100%;overflow-x:auto}
+  .command-strip{width:100%;align-items:stretch}
+  .command-strip>span:nth-child(2){width:100%}
+  .command-search{flex-basis:100%;max-width:none}
+  .toolbar,.history-range-toolbar,.portfolio-add-form{min-width:0;max-width:100%}
+  .grid2{grid-template-columns:minmax(0,1fr)}
+}
