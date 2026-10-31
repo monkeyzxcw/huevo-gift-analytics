@@ -2446,6 +2446,7 @@
         sniperNewSound: Boolean(sniperSoundPrefs.new),
         sniperDealSound: Boolean(sniperSoundPrefs.deal),
         appearance: { ...appearance },
+        overviewWidgets: { ...overviewWidgets },
         seasonTheme: document.body.dataset.season || "default"
       }
     };
@@ -2473,6 +2474,8 @@
       glass: a.glass !== false
     };
     applyAppearance();
+    overviewWidgets = sanitizeOverviewWidgets(prefs.overviewWidgets);
+    applyOverviewWidgets(false);
     applySeasonTheme(["default","newyear","halloween","spring","summer"].includes(prefs.seasonTheme) ? prefs.seasonTheme : "default", false);
     updateAlertSoundControls();
     accountState.hydrating = false;
@@ -2496,6 +2499,8 @@
     window.dispatchEvent(new CustomEvent("amnyam:sniper-sounds", { detail: { ...sniperSoundPrefs, master: alertSoundEnabled } }));
     appearance = readAppearance();
     applyAppearance();
+    overviewWidgets = readOverviewWidgets();
+    applyOverviewWidgets(false);
     let theme = "default";
     try { theme = localStorage.getItem(seasonKey) || "default"; } catch (_) {}
     applySeasonTheme(theme, false);
@@ -2780,6 +2785,88 @@
     if (glass) glass.checked = appearance.glass;
     if (accountState.user) { if (!accountState.hydrating) queueProfileSave(); } else { try { localStorage.setItem(APPEARANCE_KEY, JSON.stringify(appearance)); } catch (_) {} }
   }
+  const OVERVIEW_WIDGETS_KEY = "amnyam.overviewWidgets.v1";
+  function sanitizeOverviewWidgets(value) {
+    const raw = value && typeof value === "object" ? value : {};
+    return { hero: raw.hero !== false, dayPicks: raw.dayPicks !== false, charts: raw.charts !== false };
+  }
+  function readOverviewWidgets() {
+    try { return sanitizeOverviewWidgets(JSON.parse(localStorage.getItem(OVERVIEW_WIDGETS_KEY) || "{}")); }
+    catch (_) { return { hero: true, dayPicks: true, charts: true }; }
+  }
+  let overviewWidgets = readOverviewWidgets();
+  function applyOverviewWidgets(persist) {
+    [["hero","overviewShowHero"],["dayPicks","overviewShowDayPicks"],["charts","overviewShowCharts"]].forEach(([key,id]) => {
+      const section = document.querySelector('[data-overview-widget="' + key + '"]');
+      const control = $(id);
+      if (section) section.classList.toggle("hide", overviewWidgets[key] === false);
+      if (control) control.checked = overviewWidgets[key] !== false;
+    });
+    if (persist) {
+      if (accountState.user) queueProfileSave();
+      else { try { localStorage.setItem(OVERVIEW_WIDGETS_KEY, JSON.stringify(overviewWidgets)); } catch (_) {} }
+    }
+  }
+  function initOverviewWidgets() {
+    applyOverviewWidgets(false);
+    [["overviewShowHero","hero"],["overviewShowDayPicks","dayPicks"],["overviewShowCharts","charts"]].forEach(([id,key]) => {
+      const control = $(id);
+      if (control) control.addEventListener("change", () => {
+        overviewWidgets[key] = control.checked;
+        applyOverviewWidgets(true);
+      });
+    });
+  }
+  const CUSTOM_MEDIA_KEY = "amnyam.customWallpaper.v1";
+  function applyCustomAppearanceMedia() {
+    const node = $("customWallpaper"), hint = $("appearanceMediaHint");
+    if (!node) return;
+    let saved = "";
+    try { saved = localStorage.getItem(CUSTOM_MEDIA_KEY) || ""; } catch (_) {}
+    if (saved && /^data:image\/(?:png|jpeg|webp|gif);base64,/i.test(saved) && saved.length <= 720000) {
+      node.style.backgroundImage = "url('" + saved + "')";
+      node.classList.add("is-active");
+      if (hint) hint.textContent = "Собственный фон включён. Файл хранится только в этом браузере.";
+    } else {
+      node.style.backgroundImage = "";
+      node.classList.remove("is-active");
+      if (hint) hint.textContent = "Изображение до 512 КБ хранится только в этом браузере и не отправляется на сервер.";
+    }
+  }
+  function initCustomAppearanceMedia() {
+    applyCustomAppearanceMedia();
+    const input = $("appearanceMediaFile");
+    if (input) input.addEventListener("change", () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      if (!/^image\/(?:png|jpeg|webp|gif)$/i.test(file.type) || file.size > 512 * 1024) {
+        $("appearanceMediaHint").textContent = "Поддерживаются PNG, JPG, WebP и GIF до 512 КБ.";
+        input.value = "";
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const value = String(reader.result || "");
+        if (!/^data:image\/(?:png|jpeg|webp|gif);base64,/i.test(value) || value.length > 720000) {
+          $("appearanceMediaHint").textContent = "Файл слишком большой для локального хранения.";
+          return;
+        }
+        try { localStorage.setItem(CUSTOM_MEDIA_KEY, value); } catch (_) {
+          $("appearanceMediaHint").textContent = "Браузер не смог сохранить файл. Освободи место в локальном хранилище.";
+          return;
+        }
+        applyCustomAppearanceMedia();
+      };
+      reader.onerror = () => { $("appearanceMediaHint").textContent = "Не удалось прочитать файл."; };
+      reader.readAsDataURL(file);
+    });
+    const clearButton = $("appearanceMediaClear");
+    if (clearButton) clearButton.addEventListener("click", () => {
+      try { localStorage.removeItem(CUSTOM_MEDIA_KEY); } catch (_) {}
+      if (input) input.value = "";
+      applyCustomAppearanceMedia();
+    });
+  }
   function initAppearance() {
     applyAppearance();
     $("appearanceBackground").addEventListener("change", e => { appearance.background = e.target.value; applyAppearance(); });
@@ -2794,6 +2881,8 @@
   refreshOwnerPresence();
   window.setInterval(refreshOwnerPresence, 30000);
   initAppearance();
+  initOverviewWidgets();
+  initCustomAppearanceMedia();
   initAmbience();
   initAlertSoundControls();
   const paletteOpen = $("openCommandPalette");
