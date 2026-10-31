@@ -181,11 +181,7 @@
   }
   function restoreSearch() {
     const value = recent.value;
-    if (value === "") {
-      const item = saved[Number(savedSelect.value)];
-      if (!item) return announce("Выбери сохранённый набор ниже.");
-      restore(item); return;
-    }
+    if (value === "") return announce("Выбери запрос из списка недавних поисков.");
     input.value = history[Number(value)] || "";
     apply(); announce("Недавний поиск восстановлен.");
   }
