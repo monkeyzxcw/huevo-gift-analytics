@@ -128,10 +128,24 @@
   function writeAlertedTargets(){if(accountState.user){if(!accountState.hydrating)queueProfileSave();return;}try{localStorage.setItem("amnyam.alertedTargets",JSON.stringify(state.alertedTargets));}catch(_){}}
   function readSavedFilters(){try{const x=JSON.parse(localStorage.getItem("amnyam.savedFilters")||"[]");return Array.isArray(x)?x.filter(i=>i&&typeof i.name==="string"&&i.name.trim()&&i.filters&&typeof i.filters==="object").slice(0,25):[];}catch(_){return [];}}
   function writeSavedFilters(){if(accountState.user){if(!accountState.hydrating)queueProfileSave();return;}try{localStorage.setItem("amnyam.savedFilters",JSON.stringify(state.savedFilters));}catch(_){}}
+  const PORTFOLIO_KEY = "amnyam.portfolio.v1";
+  function readPortfolio() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(PORTFOLIO_KEY) || "[]");
+      return Array.isArray(raw) ? raw.filter(item => item && typeof item.title === "string" && item.title.trim() &&
+        Number.isSafeInteger(item.quantity) && item.quantity > 0 && item.quantity <= 1000 &&
+        Number.isSafeInteger(item.purchase_price) && item.purchase_price > 0).slice(0, 100) : [];
+    } catch (_) { return []; }
+  }
+  function writePortfolio() {
+    if (accountState.user) { if (!accountState.hydrating) queueProfileSave(); }
+    else { try { localStorage.setItem(PORTFOLIO_KEY, JSON.stringify(state.portfolio)); } catch (_) {} }
+    renderPortfolio();
+  }
   const state = {
     data:null,lots:[],view:[],page:0,sort:{key:"price",dir:1},groupSort:{key:"count",dir:-1},catalogMode:"lots",
     changeKind:"new",liveFingerprint:null,compareIds:[],activeView:"overview",favorites:readFavorites(),
-    targets:readTargets(),alertedTargets:readAlertedTargets(),savedFilters:readSavedFilters()
+    targets:readTargets(),alertedTargets:readAlertedTargets(),savedFilters:readSavedFilters(),portfolio:readPortfolio()
   };
   function publishMarketData() {
     const detail = {
@@ -1357,15 +1371,33 @@
     if (typeof dlg.showModal === "function") dlg.showModal(); else dlg.setAttribute("open", "");
   }
 
+  function mainViewFor(view) {
+    const groups = {
+      overview:"overview", market:"market", sniper:"sniper",
+      deals:"opportunities", cheap:"opportunities",
+      analytics:"analytics", data:"data",
+      favorites:"portfolio", portfolio:"portfolio",
+      appearance:"settings", support:"settings", help:"settings"
+    };
+    return groups[view] || "overview";
+  }
   function switchView(view, focusSearch) {
-    const allowed = new Set(["overview", "market", "sniper", "deals", "cheap", "analytics", "favorites", "support", "appearance", "help"]);
+    const allowed = new Set(["overview","market","sniper","deals","cheap","analytics","data","favorites","portfolio","support","appearance","help"]);
     state.activeView = allowed.has(view) ? view : "overview";
-    document.querySelectorAll("[data-view-section]").forEach((section) => {
+    const mainView = mainViewFor(state.activeView);
+    document.querySelectorAll("[data-view-section]").forEach(section => {
       section.classList.toggle("view-hidden", section.getAttribute("data-view-section") !== state.activeView);
     });
-    document.querySelectorAll("#mainNav [data-view]").forEach((button) => {
+    document.querySelectorAll("#mainNav [data-view]").forEach(button => {
+      const active = (button.dataset.main || button.dataset.view) === mainView;
+      button.setAttribute("aria-selected", String(active));
+      button.tabIndex = active ? 0 : -1;
+    });
+    document.querySelectorAll(".workspace-subnav-group").forEach(group => {
+      group.classList.toggle("is-active", group.dataset.subnavGroup === mainView);
+    });
+    document.querySelectorAll(".workspace-subnav [data-view]").forEach(button => {
       button.setAttribute("aria-selected", String(button.dataset.view === state.activeView));
-      button.tabIndex = button.dataset.view === state.activeView ? 0 : -1;
     });
     if (focusSearch && state.activeView === "market") $("search").focus({ preventScroll: true });
     updateViewCounts();
@@ -2093,6 +2125,8 @@
       targets: { ...state.targets },
       alertedTargets: state.alertedTargets.slice(0, 5000),
       savedFilters: state.savedFilters.slice(0, 25),
+      portfolio: state.portfolio.slice(0, 100),
+      sniperRuleProfiles: window.AMNYAM_RULE_PROFILES && window.AMNYAM_RULE_PROFILES.get ? window.AMNYAM_RULE_PROFILES.get() : [],
       preferences: {
         alertSound: Boolean(alertSoundEnabled),
         sniperNewSound: Boolean(sniperSoundPrefs.new),
@@ -2111,6 +2145,9 @@
       ? Object.fromEntries(Object.entries(p.targets).filter(([id, value]) => /^\d{1,20}$/.test(id) && Number.isSafeInteger(value) && value > 0 && value <= TARGET_PRICE_MAX).slice(0, 5000)) : {};
     state.alertedTargets = Array.isArray(p.alertedTargets) ? [...new Set(p.alertedTargets.map(String).filter(id => /^\d{1,20}$/.test(id)))].slice(0, 5000) : [];
     state.savedFilters = Array.isArray(p.savedFilters) ? p.savedFilters.filter(item => item && typeof item.name === "string" && item.name.trim() && item.filters && typeof item.filters === "object").slice(0, 25) : [];
+    state.portfolio = Array.isArray(p.portfolio) ? p.portfolio.filter(item => item && typeof item.title === "string" && item.title.trim() && Number.isSafeInteger(item.quantity) && item.quantity > 0 && Number.isSafeInteger(item.purchase_price) && item.purchase_price > 0).slice(0, 100) : [];
+    if (window.AMNYAM_RULE_PROFILES && window.AMNYAM_RULE_PROFILES.set) window.AMNYAM_RULE_PROFILES.set(Array.isArray(p.sniperRuleProfiles) ? p.sniperRuleProfiles : []);
+    else window.AMNYAM_PENDING_RULE_PROFILES = Array.isArray(p.sniperRuleProfiles) ? p.sniperRuleProfiles : [];
     const prefs = p.preferences && typeof p.preferences === "object" ? p.preferences : {};
     alertSoundEnabled = prefs.alertSound === true;
     sniperSoundPrefs = { new: prefs.sniperNewSound === true, deal: prefs.sniperDealSound === true };
@@ -2133,6 +2170,8 @@
     state.targets = readTargets();
     state.alertedTargets = readAlertedTargets();
     state.savedFilters = readSavedFilters();
+    state.portfolio = readPortfolio();
+    if (window.AMNYAM_RULE_PROFILES && window.AMNYAM_RULE_PROFILES.set) window.AMNYAM_RULE_PROFILES.set([]);
     try {
       alertSoundEnabled = localStorage.getItem(ALERT_SOUND_KEY) === "on";
       sniperSoundPrefs = {
@@ -2394,7 +2433,8 @@
     checkTargetAlerts();
     renderCommandCenter();
     renderDeals();renderDayPicks();renderCheapest();renderFavorites();
-    renderCards(); renderCharts(); renderChanges(); renderTop(); renderSales(); renderSourceHealth(); fillFacets();
+    renderCards(); renderCharts(); renderChanges(); renderTop(); renderSales(); renderSourceHealth();
+    renderPortfolio(); renderMarketEvents(); renderGiftCatalogIndex(); refreshGlobalSearchSuggestions(); fillFacets();
     renderSavedFilters();setSortMenuOptions();applyFilters();
     switchView(state.activeView);
     publishMarketData();
