@@ -1793,3 +1793,45 @@ body[data-market-workspace="usernames"] .market-type-switch{border-color:#66513a
 @media(max-width:900px){.username-hero-seal{width:110px;height:110px}.username-hero-seal b{font-size:52px}.username-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:680px){.market-type-switch{width:100%}.market-type-switch button{min-width:0;flex:1}.username-hero{align-items:flex-start}.username-hero-seal{width:76px;height:76px}.username-hero-seal b{font-size:36px}.username-hero-seal span{font-size:6px}.username-hero h2{font-size:32px}.username-overview-grid,.username-deal-grid,.username-watch-list,.username-import-grid,.username-settings-grid{grid-template-columns:1fr}.username-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.username-section-heading h3{font-size:20px}.username-event{grid-template-columns:28px minmax(0,1fr)}.username-event time{grid-column:2}.username-filters .f.grow{min-width:100%}.username-filters .f:not(.grow){flex:1;min-width:calc(50% - 6px)}}
 @media(max-width:390px){.username-hero{padding:16px}.username-hero-seal{display:none}.username-kpi{padding:10px}.username-kpi b{font-size:18px}.username-bar-row{grid-template-columns:78px minmax(30px,1fr) 50px;gap:6px}}
+
+/* CSS-only data bars avoid dynamic inline styles under the strict CSP. */
+.username-bar-w-5{width:5%}
+.username-bar-h-5{height:5%}
+.username-bar-w-10{width:10%}
+.username-bar-h-10{height:10%}
+.username-bar-w-15{width:15%}
+.username-bar-h-15{height:15%}
+.username-bar-w-20{width:20%}
+.username-bar-h-20{height:20%}
+.username-bar-w-25{width:25%}
+.username-bar-h-25{height:25%}
+.username-bar-w-30{width:30%}
+.username-bar-h-30{height:30%}
+.username-bar-w-35{width:35%}
+.username-bar-h-35{height:35%}
+.username-bar-w-40{width:40%}
+.username-bar-h-40{height:40%}
+.username-bar-w-45{width:45%}
+.username-bar-h-45{height:45%}
+.username-bar-w-50{width:50%}
+.username-bar-h-50{height:50%}
+.username-bar-w-55{width:55%}
+.username-bar-h-55{height:55%}
+.username-bar-w-60{width:60%}
+.username-bar-h-60{height:60%}
+.username-bar-w-65{width:65%}
+.username-bar-h-65{height:65%}
+.username-bar-w-70{width:70%}
+.username-bar-h-70{height:70%}
+.username-bar-w-75{width:75%}
+.username-bar-h-75{height:75%}
+.username-bar-w-80{width:80%}
+.username-bar-h-80{height:80%}
+.username-bar-w-85{width:85%}
+.username-bar-h-85{height:85%}
+.username-bar-w-90{width:90%}
+.username-bar-h-90{height:90%}
+.username-bar-w-95{width:95%}
+.username-bar-h-95{height:95%}
+.username-bar-w-100{width:100%}
+.username-bar-h-100{height:100%}
