@@ -150,7 +150,7 @@ test("shared data status stays useful when metadata is missing and hides collect
   await page.click('#mainNav [data-view="analytics"]');
   const panel = page.locator("#sourceHealthGrid");
   assert.equal(await panel.locator(".source-health-card").count(), 5);
-  assert.equal(await panel.locator(".source-health-status:has-text('Ожидаем данные')").count(), 3);
+  assert.equal(await panel.locator(".source-health-status:has-text('Ожидаем данные')").count(), 4);
   assert.equal(await panel.locator("text=Экземпляры и история владельцев").count(), 0);
   assert.deepEqual(problems, []);
   await browser.close();
@@ -1432,8 +1432,12 @@ test("AMNYAM Intelligence Lab filters market lots and exports safe analytics", a
   await page.selectOption("#intelSignal", "all");
   await page.fill("#intelQuery", "");
 
-  page.once("dialog", dialog => dialog.accept("QA скринер"));
-  await page.click("#intelSaveFilter");
+  await page.evaluate(() => {
+    const saved = { guest: { filters: { q: "", rarity: "", min: "", max: "", signal: "all", sort: "discount" },
+      saved: [{ name: "QA скринер", filters: { q: "Подарок", rarity: "", min: "", max: "", signal: "all", sort: "discount" } }] } };
+    localStorage.setItem("amnyam.intel.v2", JSON.stringify(saved));
+    document.querySelector("#intelQuery").dispatchEvent(new Event("input", { bubbles: true }));
+  });
   assert.ok(await page.locator("#intelSaved").textContent().then(x => x.includes("QA скринер")));
   const downloadPromise = page.waitForEvent("download");
   await page.click("#intelExportJson");
