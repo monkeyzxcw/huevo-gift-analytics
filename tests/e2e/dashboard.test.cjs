@@ -1014,3 +1014,27 @@ test("Sniper shows a live new-lot event and calculates scenarios from confirmed 
     await browser.close();
   }
 });
+
+
+test("CSV export contains the filtered market data and neutralises spreadsheet formulas", async () => {
+  const data = dataV2();
+  data.lots[0].title = '=HYPERLINK("https://evil.example";"open")';
+  const { browser, page, problems } = await open(serve(data));
+  try {
+    await page.waitForSelector("#content:not(.hide)");
+    await page.click('#mainNav [data-view="market"]');
+    const downloadPromise = page.waitForEvent("download");
+    await page.click("#exportCsv");
+    const download = await downloadPromise;
+    assert.match(download.suggestedFilename(), /^amnyam-market-\\d{4}-\\d{2}-\\d{2}\\.csv$/);
+    const file = await download.path();
+    const csv = fs.readFileSync(file, "utf8");
+    assert.match(csv, /ID лота/);
+    assert.match(csv, /Подарок/);
+    assert.match(csv, /'=HYPERLINK/);
+    assert.match(await page.textContent("#exportCsvStatus"), /Экспортировано строк/);
+    assert.deepEqual(problems, []);
+  } finally {
+    await browser.close();
+  }
+});
