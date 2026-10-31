@@ -1475,6 +1475,7 @@ test("username workspace imports real rows, calculates peer signals and keeps gi
     assert.equal(await page.locator("#usernameTabs [data-username-view]").count(), 8);
     assert.equal(await page.locator("#usernameRows tr").count(), 1, "empty state is one table row");
     assert.match(await page.textContent("#usernameRows"), /База юзернеймов пока пуста/);
+    await page.click('#usernameTabs [data-username-view="market"]');
 
     const listings = [
       ["alfaee", 50], ["bravoo", 100], ["charly", 110],
