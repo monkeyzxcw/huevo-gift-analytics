@@ -36,7 +36,8 @@
 <nav class="main-nav" id="mainNav" role="tablist" aria-label="Разделы AMNYAM MODE">
   <button role="tab" aria-selected="true" data-view="overview" type="button"><span>01</span> База</button>
   <button role="tab" aria-selected="false" data-view="market" type="button"><span>02</span> Маркет <small id="navMarketCount">—</small></button>
-  <button role="tab" aria-selected="false" data-view="deals" type="button"><span>03</span> Ниже рынка <small id="navDealsCount">—</small></button>
+  <button role="tab" aria-selected="false" data-view="sniper" type="button"><span>03</span> Снайпер <small id="navSniperCount">0</small></button>
+  <button role="tab" aria-selected="false" data-view="deals" type="button"><span>04</span> Ниже рынка <small id="navDealsCount">—</small></button>
   <button role="tab" aria-selected="false" data-view="cheap" type="button"><span>04</span> Дешёвые <small id="navCheapCount">—</small></button>
   <button role="tab" aria-selected="false" data-view="analytics" type="button"><span>05</span> Данные</button>
   <button role="tab" aria-selected="false" data-view="favorites" type="button"><span>06</span> Избранное <small id="navFavoritesCount">0</small></button>
@@ -160,6 +161,51 @@
   <div class="deal-list-toolbar"><span class="muted">Цена лота, медиана похожих предложений, разница, исторический минимум и цена-цель — прямо в карточке.</span><label class="f"><span>Сортировать</span><select class="select" id="dealSort"><option value="discount">Самый большой дисконт</option><option value="price">Самая низкая цена</option><option value="savings">Максимальная разница с медианой</option><option value="sample">Больше аналогов</option><option value="historical">Ближе к историческому минимуму</option></select></label></div>
   <ol class="deal-list" id="dealsList"></ol>
   <p class="muted foot">Сигнал ниже рынка — сравнительная оценка, а не обещание прибыли. Сверяй серию, редкость и данные лота перед покупкой.</p>
+</section>
+
+<section class="panel sniper-panel" id="sniperPanel" data-view-section="sniper" aria-labelledby="sniperTitle">
+  <div class="section-heading">
+    <div><span class="section-index">/ LIVE MARKET RADAR</span><h2 id="sniperTitle">Снайпер</h2><p>Новые лоты, заметные снижения цены, новые сигналы ниже рынка и достигнутые цели. Лента строится по событиям из уже загруженного снимка.</p></div>
+    <span class="view-stat" id="sniperUpdated">Ожидаем данные…</span>
+  </div>
+  <div class="sniper-metrics" aria-live="polite">
+    <article><span>НОВЫЕ ЛОТЫ</span><b id="sniperNewCount">0</b><small>за последние 24 часа</small></article>
+    <article><span>СНИЖЕНИЯ ЦЕНЫ</span><b id="sniperPriceCount">0</b><small>замечены в текущей сессии</small></article>
+    <article><span>СИГНАЛЫ НИЖЕ РЫНКА</span><b id="sniperDealCount">0</b><small>по текущим данным</small></article>
+    <article><span>ДОСТИГНУТЫЕ ЦЕЛИ</span><b id="sniperTargetCount">0</b><small>среди отслеживаемых лотов</small></article>
+  </div>
+  <div class="sniper-sound-bar">
+    <div><b>Звуки событий</b><small>Работают только при включённом основном звуке в «Избранном». Системных и Push-уведомлений нет.</small></div>
+    <label><input id="sniperNewSound" type="checkbox"> Новые лоты</label>
+    <label><input id="sniperDealSound" type="checkbox"> Новые сделки</label>
+  </div>
+  <div class="sniper-filter-bar">
+    <label class="f"><span>Тип события</span><select class="select" id="sniperType"><option value="all">Все события</option><option value="new">Новые лоты</option><option value="price">Снижение цены</option><option value="deal">Ниже рынка</option><option value="target">Достигнутые цели</option></select></label>
+    <label class="f"><span>Поиск</span><input class="input" id="sniperSearch" type="search" placeholder="Название или ID"></label>
+    <label class="f"><span>Цена от</span><input class="input" id="sniperMinPrice" type="number" min="0" inputmode="numeric" placeholder="0"></label>
+    <label class="f"><span>Цена до</span><input class="input" id="sniperMaxPrice" type="number" min="0" inputmode="numeric" placeholder="∞"></label>
+    <label class="f"><span>Дисконт от, %</span><input class="input" id="sniperMinDiscount" type="number" min="0" max="80" inputmode="numeric" placeholder="0"></label>
+    <button class="btn secondary" id="sniperReset" type="button">Сбросить</button>
+  </div>
+  <div class="sniper-feed-head"><h3>Последние события</h3><span class="muted" id="sniperFeedNote">Новые события появятся после обновления рынка</span></div>
+  <ol class="sniper-feed" id="sniperFeed" aria-live="polite"><li class="empty">Ожидаем первый снимок рынка.</li></ol>
+  <div class="sniper-tools-grid">
+    <article class="sniper-tool">
+      <span class="section-index">/ BUY SCENARIO</span><h3>Калькулятор покупки</h3>
+      <p>Сравни цену входа с квартилями подтверждённых продаж. При отсутствии истории сделок может использоваться диапазон объявлений — он явно помечается как менее надёжный.</p>
+      <label class="f"><span>Подарок</span><select class="select" id="sniperGiftSelect"><option value="">Загружаем каталог…</option></select></label>
+      <label class="f"><span>Твоя цена покупки</span><input class="input" id="sniperBuyPrice" type="number" min="1" step="1" inputmode="numeric" placeholder="Например, 8000"></label>
+      <button class="btn" id="sniperCalculate" type="button">Рассчитать сценарии</button>
+      <div class="sniper-calc-result" id="sniperCalcResult" role="status"><div class="empty">Выбери подарок и укажи цену покупки.</div></div>
+    </article>
+    <article class="sniper-tool">
+      <span class="section-index">/ OBSERVED ATTRIBUTES</span><h3>Индекс редкости</h3>
+      <p>Частота характеристик среди экземпляров, которые реально попали в наблюдения. Это не тираж и не оценка редкости всего Huevo.</p>
+      <label class="f"><span>Подарок для анализа</span><select class="select" id="sniperRarityGift"><option value="">Загружаем каталог…</option></select></label>
+      <div class="sniper-rarity-result" id="sniperRarityResult"><div class="empty">Выбери подарок. Индекс появится при наличии нескольких наблюдаемых вариантов.</div></div>
+    </article>
+  </div>
+  <p class="sniper-footnote">События фиксируются только по наблюдаемым изменениям. Исчезновение лота не считается продажей. Сравнительная оценка и сценарии не гарантируют будущую цену или прибыль.</p>
 </section>
 
 <section class="panel" id="cheapPanel" data-view-section="cheap">
@@ -345,6 +391,7 @@
     <button type="button" data-command-item data-command="search"><span class="palette-icon">⌕</span><span><b>Поиск по рынку</b><small>Найти подарок, ID или задать фильтр</small></span><kbd>/</kbd></button>
     <button type="button" data-command-item data-command-view="overview"><span class="palette-icon">▦</span><span><b>Главная панель</b><small>Сводка рынка и быстрые действия</small></span><kbd>G H</kbd></button>
     <button type="button" data-command-item data-command-view="market"><span class="palette-icon">▤</span><span><b>Маркет</b><small>Все лоты и фильтры</small></span><kbd>G M</kbd></button>
+    <button type="button" data-command-item data-command-view="sniper"><span class="palette-icon">⌁</span><span><b>Снайпер</b><small>Новые лоты, изменения и ценовые сигналы</small><kbd>G S</kbd></span></button>
     <button type="button" data-command-item data-command-view="deals"><span class="palette-icon">↘</span><span><b>Ниже рынка</b><small>Подтверждённые скидки относительно аналогов</small></span><kbd>G D</kbd></button>
     <button type="button" data-command-item data-command-view="cheap"><span class="palette-icon">＄</span><span><b>Дешёвые лоты</b><small>Самые доступные предложения</small></span></button>
     <button type="button" data-command-item data-command-view="analytics"><span class="palette-icon">⌁</span><span><b>Аналитика</b><small>Графики и изменения рынка</small></span></button>
@@ -390,6 +437,7 @@
 </main>
 <div id="ambientLayer" aria-hidden="true"></div><div id="cursorGlow" aria-hidden="true"></div>
 <div class="premium-splash" id="premiumSplash" aria-hidden="true"><div class="splash-mark">H<span>•</span></div><div class="splash-title">AMNYAM <b>MODE</b></div><div class="splash-subtitle">GIFT MARKET INTELLIGENCE</div><div class="splash-loader"><i></i></div></div>
-<script src="./app.js?v=amnyam-sound-only-v17" defer></script>
+<script src="./app.js?v=amnyam-sniper-v18" defer></script>
+<script src="./sniper.js?v=amnyam-sniper-v1" defer></script>
 </body>
 </html>
