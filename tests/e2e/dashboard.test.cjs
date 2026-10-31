@@ -1220,7 +1220,8 @@ test("Sniper shows a live new-lot event and calculates scenarios from confirmed 
     assert.match(await page.textContent("#sniperCalcResult"), /Оптимистичный/);
     assert.match(await page.textContent("#sniperRarityResult"), /характеристик|нескольких сопоставимых/i);
 
-    await page.waitForFunction(() => liveCalls > 0, { timeout: 8000 });
+    await page.waitForTimeout(3300);
+    assert.ok(liveCalls > 0, "the lightweight Live endpoint is polled independently");
     latest = JSON.parse(JSON.stringify(latest));
     latest.lots.unshift({
       lot_id: "900001", title: "Звезда", rarity: "Редкий", price: 650, status: "На продаже",
