@@ -21,7 +21,7 @@ test("Cloudflare deployment performs production smoke checks after wrangler depl
   assert.match(workflow, /hero_art_ready/);
   assert.match(workflow, /snapshot_has_lots/);
   assert.match(workflow, /ingest_secret_configured/);
-  assert.match(workflow, /Chrome\\/131\\.0\\.0\\.0/);
+  assert.ok(workflow.includes("Chrome/131.0.0.0"), "smoke requests must use a browser-like User-Agent");
   assert.match(workflow, /cf-ray/);
   assert.match(workflow, /cf-mitigated/);
 });
