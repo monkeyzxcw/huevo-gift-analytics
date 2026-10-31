@@ -1478,7 +1478,7 @@ test("username workspace imports real rows, calculates peer signals and keeps gi
 
     const listings = [
       ["alfaee", 50], ["bravoo", 100], ["charly", 110],
-      ["deltaa", 120], ["echooo", 130], ["foxttt", 140], ["gammmy", 150]
+      ["deltaa", 120], ["echooo", 130], ["foxttt", 140], ["gammmy", "1,000"]
     ].map(([username, price], index) => ({
       username, lot_id: "handle-" + (index + 1), price, status: "active",
       url: "https://huevo.su/market/lot/handle-" + (index + 1)
@@ -1504,6 +1504,12 @@ test("username workspace imports real rows, calculates peer signals and keeps gi
     assert.match(await page.textContent("#usernameRows"), /По выбранным фильтрам/);
     await page.selectOption("#usernameKind", "");
     await page.selectOption("#usernameLength", "");
+    assert.match(await page.textContent("#usernameRows"), /1\s?000/);
+    await page.fill("#usernameMinPrice", "100");
+    await page.fill("#usernameMaxPrice", "50");
+    assert.match(await page.textContent("#usernameMarketCount"), /Некорректный диапазон цен/);
+    assert.match(await page.textContent("#usernameRows"), /Минимальная цена не может быть выше максимальной/);
+    await page.click("#usernameResetFilters");
 
     await page.click('#usernameTabs [data-username-view="deals"]');
     assert.ok(await page.locator("#usernameDealsList .username-deal-card").count() > 0);
