@@ -999,3 +999,12 @@ html,body{max-width:100%;overflow-x:clip}
 .sound-advanced-controls output{float:right;font-variant-numeric:tabular-nums;color:var(--amnyam-acid)}
 .sound-advanced-controls>small{color:var(--muted);font-size:10px;line-height:1.5}
 @media(max-width:650px){.sound-advanced-controls{grid-template-columns:minmax(0,1fr)}.sound-advanced-controls>b,.sound-advanced-controls>small{grid-column:auto}}
+
+.source-progress-wrap{display:grid;gap:5px;margin-top:8px}
+.source-progress-caption{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.source-progress-caption small{color:var(--muted);font-size:9px}
+.source-progress-caption b{color:var(--amnyam-acid);font:800 10px ui-monospace,monospace}
+.source-progress{display:block;width:100%;height:6px;border:0;border-radius:99px;overflow:hidden;background:#252d20;accent-color:var(--amnyam-acid)}
+.source-progress::-webkit-progress-bar{background:#252d20;border-radius:99px}
+.source-progress::-webkit-progress-value{background:var(--amnyam-acid);border-radius:99px}
+.source-progress::-moz-progress-bar{background:var(--amnyam-acid);border-radius:99px}
