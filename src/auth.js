@@ -125,6 +125,8 @@ export function sanitiseProfile(value) {
     targets: {},
     alertedTargets: [],
     savedFilters: [],
+    portfolio: [],
+    sniperRuleProfiles: [],
     preferences: {
       alertSound: false,
       sniperNewSound: false,
