@@ -57,6 +57,7 @@
   const SEEN_KEY = "amnyam.sniper.seen.v1";
   const MAX_EVENTS = 100;
   let soundContext = null;
+  const lastSoundAt = { new: 0, deal: 0 };
   function storageRead(key, fallback) {
     try {
       const value = JSON.parse(localStorage.getItem(key) || "null");
@@ -104,6 +105,10 @@
     if (!state.eventSound.master) return;
     if (type === "new" && !state.eventSound.new) return;
     if (type === "deal" && !state.eventSound.deal) return;
+    if (type !== "new" && type !== "deal") return;
+    const now = Date.now();
+    if (now - lastSoundAt[type] < 8000) return;
+    lastSoundAt[type] = now;
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) return;
     try {
