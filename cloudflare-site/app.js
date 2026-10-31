@@ -1218,6 +1218,17 @@
     const inputMax = $("pmax").value === "" ? null : Number($("pmax").value);
     const lower = Math.max(inputMin == null || !Number.isFinite(inputMin) ? -Infinity : inputMin, q.min == null ? -Infinity : q.min);
     const upper = Math.min(inputMax == null || !Number.isFinite(inputMax) ? Infinity : inputMax, q.max == null ? Infinity : q.max);
+    $("pmin").setCustomValidity("");
+    $("pmax").setCustomValidity("");
+    if (lower > upper) {
+      $("pmin").setCustomValidity("Минимальная цена не может быть выше максимальной.");
+      $("pmax").setCustomValidity("Максимальная цена не может быть ниже минимальной.");
+      state.view = [];
+      state.page = 0;
+      renderRows();
+      $("rowCount").textContent = "Некорректный диапазон цен: минимум выше максимума.";
+      return;
+    }
     const wantedRarity = raritySelect || q.rarity;
     const wantedStatus = statusSelect || q.status;
     const { key, dir } = state.sort;
