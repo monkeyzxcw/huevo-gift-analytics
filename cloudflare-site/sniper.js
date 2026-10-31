@@ -223,9 +223,29 @@
       else play();
     } catch (_) {}
   }
-  function extractSalesProfile(title) {
-    const rows = state.data && state.data.sales && Array.isArray(state.data.sales.by_title) ? state.data.sales.by_title : [];
-    return rows.find((row) => normaliseTitle(row.title) === normaliseTitle(title) && Number(row.count) >= 3 && Number(row.median) > 0) || null;
+  function normaliseRarity(value) {
+    return String(value || "").trim().toLocaleLowerCase("ru").replace(/\\s+/g, " ");
+  }
+  function extractSalesProfile(lot) {
+    const sales = state.data && state.data.sales && typeof state.data.sales === "object" ? state.data.sales : {};
+    const title = normaliseTitle(lot && lot.title);
+    const rarity = normaliseRarity(lot && lot.rarity);
+    if (!title || !rarity) return null;
+    const valid = row => row && Number(row.count) >= 3 && Number.isFinite(Number(row.median)) && Number(row.median) > 0;
+    const catalog = lot && lot.gift_catalog && typeof lot.gift_catalog === "object" ? lot.gift_catalog : {};
+    const instance = lot && lot.gift_instance && typeof lot.gift_instance === "object" ? lot.gift_instance : {};
+    const catalogId = String(catalog.catalog_id || catalog.gift_catalog_id ||
+      instance.catalog_id || instance.gift_catalog_id || "").trim();
+    const byCatalog = Array.isArray(sales.by_catalog_rarity) ? sales.by_catalog_rarity : [];
+    const exactCatalog = catalogId ? byCatalog.find(row =>
+      String(row.catalog_id || "") === catalogId &&
+      normaliseRarity(row.rarity) === rarity && valid(row)) : null;
+    if (exactCatalog) return { ...exactCatalog, reference_scope: "catalog_rarity" };
+    const byTitleRarity = Array.isArray(sales.by_title_rarity) ? sales.by_title_rarity : [];
+    const exactRarity = byTitleRarity.find(row =>
+      normaliseTitle(row.title) === title &&
+      normaliseRarity(row.rarity) === rarity && valid(row));
+    return exactRarity ? { ...exactRarity, reference_scope: "title_rarity" } : null;
   }
   function buildDeals(lots) {
     const groups = new Map();
@@ -237,7 +257,7 @@
     const signals = [];
     groups.forEach((group) => {
       if (group.length < 3) return;
-      const sale = extractSalesProfile(group[0].title);
+      const sale = extractSalesProfile(group[0]);
       let ref = null, basis = "asks", sample = 0;
       if (sale && Number(sale.count) >= 5) {
         ref = Number(sale.median); basis = "sales"; sample = Number(sale.count);
@@ -250,7 +270,11 @@
         if (!Number.isFinite(ref) || ref <= 0 || lot.price >= ref * 0.85) return;
         const discount = (1 - lot.price / ref) * 100;
         if (discount <= 0 || discount > 80) return;
-        signals.push({ ...lot, reference_price: ref, discount_pct: discount, basis, sample_size: sample });
+        signals.push({
+          ...lot, reference_price: ref, discount_pct: discount, basis, sample_size: sample,
+          reference_scope: sale ? sale.reference_scope : null,
+          confidence: sale ? (Number(sale.count) >= 10 ? "high" : "medium") : "medium"
+        });
       });
     });
     return signals;
@@ -315,6 +339,7 @@
       if (!state.lastDeals.has(key)) {
         addEvent({ type: "deal", lot_id: id, title: lot.title || "Ниже рынка", price: lot.price,
           reference_price: lot.reference_price, discount_pct: Math.round(lot.discount_pct * 10) / 10, basis: lot.basis,
+          reference_scope: lot.reference_scope || null, sample_size: lot.sample_size || 0,
           event_at: lot.last_seen || lot.first_seen || new Date().toISOString(), lot_url: safeLotUrl(lot) }, true);
       }
     });
@@ -366,7 +391,12 @@
       right.append(amount);
       if (Number.isFinite(Number(event.discount_pct))) {
         const discount = document.createElement("small");
-        discount.textContent = "−" + fmt(event.discount_pct) + "% · " + (event.basis === "sales" ? "по продажам" : "по объявлениям");
+        const source = event.basis === "sales"
+          ? (event.reference_scope === "catalog_rarity" ? "точный каталог и редкость" :
+            event.reference_scope === "title_rarity" ? "название и редкость" : "источник не уточнён")
+          : "объявления с той же редкостью";
+        discount.textContent = "−" + fmt(event.discount_pct) + "% · " + source +
+          (Number(event.sample_size) > 0 ? " · " + fmt(event.sample_size) + " записей" : "");
         right.append(discount);
       } else if (Number.isFinite(Number(event.previous_price))) {
         const previous = document.createElement("small");
