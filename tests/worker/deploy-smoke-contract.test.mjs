@@ -12,13 +12,14 @@ test("Cloudflare deployment performs production smoke checks after wrangler depl
   const smoke = workflow.indexOf("Smoke-test deployed Worker, D1, and published snapshot");
   assert.ok(deploy >= 0, "deploy command must exist");
   assert.ok(smoke > deploy, "production smoke checks must run after deployment");
-  for (const endpoint of ["/", "/assets/amnyam-battlefield.webp", "/api/health", "/api/live/status", "/data.json"]) {
+  for (const endpoint of ["/", "/assets/amnyam-battlefield.webp", "/field-kit.js", "/api/health", "/api/live/status", "/data.json"]) {
     assert.ok(workflow.includes(endpoint), "smoke check must probe " + endpoint);
   }
   assert.match(workflow, /huevo-gift-analytics\.monkeyzxc1437\.workers\.dev/);
   assert.match(workflow, /range\(1, 9\)/, "smoke checks must tolerate short deployment propagation delays");
   assert.match(workflow, /dashboard_html_ready/);
   assert.match(workflow, /hero_art_ready/);
+  assert.match(workflow, /field_kit_ready/);
   assert.match(workflow, /snapshot_has_lots/);
   assert.match(workflow, /ingest_secret_configured/);
   assert.ok(workflow.includes("Chrome/131.0.0.0"), "smoke requests must use a browser-like User-Agent");
