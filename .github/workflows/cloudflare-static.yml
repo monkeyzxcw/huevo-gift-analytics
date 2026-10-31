@@ -142,7 +142,7 @@ jobs:
                   checks = {
                       "dashboard_html_ready": root_status == 200 and b"AMNYAM" in root_body,
                       "hero_art_ready": art_status == 200 and "image/webp" in art_headers.get("Content-Type", ""),
-                      "field_kit_ready": field_kit_status == 200 and b"20 \\xd0\\xb8\\xd0\\xbd\\xd1\\x81\\xd1\\x82\\xd1\\x80\\xd1\\x83\\xd0\\xbc\\xd0\\xb5\\xd0\\xbd\\xd1\\x82\\xd0\\xbe\\xd0\\xb2" in field_kit_body,
+                      "field_kit_ready": field_kit_status == 200 and b"function csvCell" in field_kit_body and b"restoreSearch" in field_kit_body,
                       "health_ok": health.get("ok") is True,
                       "d1_configured": health.get("storage_configured") is True,
                       "schema_ready": health.get("schema_ready") is True,
