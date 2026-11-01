@@ -19,7 +19,7 @@ test("gifts and usernames are separate market workspaces with independent eight-
   assert.equal((giftTabs.match(/role="tab"/g) || []).length, 8, "gift navigation must preserve its eight existing tabs");
   assert.equal((usernameTabs.match(/data-username-view=/g) || []).length, 8, "username market has its own eight tabs");
   assert.match(html, /https:\/\/huevo\.su\/market/);
-  assert.match(html, /usernames\.js\?v=amnyam-usernames-v2/);
+  assert.match(html, /usernames\.js\?v=amnyam-usernames-v3/);
 });
 
 test("username workspace accepts automatic Cloudflare snapshots and keeps JSON/CSV as a manual fallback", async () => {
@@ -45,7 +45,7 @@ test("username prices are treated as asking prices and signals require five comp
   const html = await read("cloudflare-site/index.html");
   const script = await read("cloudflare-site/usernames.js");
   assert.match(html, /Цена объявления ≠ подтверждённая цена продажи/);
-  assert.match(html, /HuevoDualScan v13 автоматически собирает этот рынок/);
+  assert.match(html, /AMNYAM показывает сведения, поступающие от сборщика HuevoDualScan/);
   assert.match(script, /if \(peers\.length < 5\) return/);
   assert.match(script, /Медиана/);
   assert.match(html, /минимум 5 аналогов/);
