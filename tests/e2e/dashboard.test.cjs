@@ -1029,6 +1029,32 @@ test("daily-pick cards keep gift art, title, metrics and actions in separate res
   }
 });
 
+test("username workspace navigation and layout work at desktop and mobile widths", async () => {
+  for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }, { width: 360, height: 780 }]) {
+    const { browser, page, problems } = await open(serve(dataV2()), viewport);
+    await page.waitForSelector("#content:not(.hide)");
+    await page.click('#marketTypeNav [data-market-type="usernames"]');
+    assert.equal(await page.locator("#usernameWorkspace:not(.hide)").count(), 1);
+    assert.equal(await page.locator("#giftsWorkspace.hide").count(), 1);
+    const tabs = page.locator("#usernameTabs [data-username-view]");
+    assert.equal(await tabs.count(), 8);
+    for (const view of ["overview", "market", "sniper", "deals", "analytics", "favorites", "data", "settings"]) {
+      const tab = page.locator('#usernameTabs [data-username-view="' + view + '"]');
+      await tab.click();
+      assert.equal(await tab.getAttribute("aria-selected"), "true", view);
+      assert.equal(await page.locator('[data-username-section="' + view + '"]:not(.hide)').count(), 1, view + " section");
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
+        "username workspace must not create page-level horizontal overflow at " + viewport.width + "px");
+    }
+    await page.click('#marketTypeNav [data-market-type="gifts"]');
+    assert.equal(await page.locator("#giftsWorkspace:not(.hide)").count(), 1);
+    assert.equal(await page.locator("#usernameWorkspace.hide").count(), 1);
+    assert.equal(await page.locator('#mainNav [data-view="overview"]').getAttribute("aria-selected"), "true");
+    assert.deepEqual(problems, []);
+    await browser.close();
+  }
+});
+
 test("target price sound is opt-in and persists locally", async () => {
   const { browser, page, problems } = await open(serve(dataV2()));
   await page.waitForSelector("#content:not(.hide)");
