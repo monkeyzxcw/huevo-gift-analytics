@@ -252,7 +252,7 @@ test("atomic D1 freshness condition reports a concurrent newer upload instead of
         },
         async run() {
           if (sql.includes("INSERT INTO full_snapshot")) {
-            assert.match(sql, /WHERE excluded\.generated_at >= full_snapshot\.generated_at/);
+            assert.match(sql, /WHERE julianday\(excluded\.generated_at\) >= julianday\(full_snapshot\.generated_at\)/);
             snapshotRow = {
               data_json: JSON.stringify({ generated_at: "2026-11-01T12:00:00.000Z", lots: [{ lot_id: "winner" }] }),
               generated_at: "2026-11-01T12:00:00.000Z",
