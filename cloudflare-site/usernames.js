@@ -269,7 +269,7 @@
     document.querySelectorAll("[data-market-type]").forEach(button => {
       button.setAttribute("aria-selected", String(button.dataset.marketType === (usernames ? "usernames" : "gifts")));
     });
-    if (usernames) renderAll();
+    if (usernames) { renderAll(); syncRemoteMarket(); }
   }
   function switchView(view) {
     activeView = allowedViews.includes(view) ? view : "overview";
