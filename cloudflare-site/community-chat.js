@@ -103,6 +103,10 @@
     }
     return data;
   }
+  function updateUnread() {
+    unread.textContent = unreadCount > 99 ? "99+" : String(unreadCount);
+    unread.hidden = unreadCount === 0 || active;
+  }
   async function loadMessages(initial) {
     if (polling || !active) return;
     polling = true;
@@ -120,6 +124,8 @@
           messages.append(empty);
         } else items.forEach(appendMessage);
         messages.scrollTop = messages.scrollHeight;
+        unreadCount = 0;
+        updateUnread();
       } else items.forEach(appendMessage);
       status("На связи · обновление каждые 3 секунды");
     } catch (error) {
@@ -128,6 +134,33 @@
         status("Требуется вход через huEVO", true);
       } else status(error.message || "Не удалось обновить чат", true);
     } finally { polling = false; }
+  }
+  async function pollUnread() {
+    if (active || polling) return;
+    polling = true;
+    try {
+      const data = await request("./api/community/messages" + (lastId ? "?after=" + lastId : ""));
+      const items = Array.isArray(data.messages) ? data.messages : [];
+      for (const item of items) {
+        const id = Number(item.id);
+        if (!Number.isSafeInteger(id) || id <= lastId) continue;
+        lastId = id;
+        if (!item.mine) unreadCount += 1;
+      }
+      updateUnread();
+    } catch (_) {
+      // The chat remains usable; retry on the next background poll.
+    } finally { polling = false; }
+  }
+  async function establishUnreadBaseline() {
+    try {
+      const data = await request("./api/community/messages");
+      const items = Array.isArray(data.messages) ? data.messages : [];
+      if (items.length) lastId = Math.max(...items.map(item => Number(item.id) || 0));
+    } catch (_) {
+      // Guests will see the normal sign-in prompt when they open the chat.
+    }
+    pollHandle = setInterval(() => active ? loadMessages(false) : pollUnread(), 3000);
   }
   function openChat() {
     active = true;
@@ -138,11 +171,8 @@
     usernames.classList.add("hide");
     workspace.classList.remove("hide");
     unreadCount = 0;
-    unread.hidden = true;
-    if (!lastId) loadMessages(true);
-    else loadMessages(false);
-    if (pollHandle) clearInterval(pollHandle);
-    pollHandle = setInterval(() => loadMessages(false), 3000);
+    updateUnread();
+    loadMessages(true);
   }
   function closeChat() {
     active = false;
@@ -153,8 +183,6 @@
     const usernameMode = document.body.dataset.marketWorkspace === "usernames";
     gifts.classList.toggle("hide", usernameMode);
     usernames.classList.toggle("hide", !usernameMode);
-    if (pollHandle) clearInterval(pollHandle);
-    pollHandle = null;
   }
   button.addEventListener("click", () => active ? closeChat() : openChat());
   $("communityRefresh").addEventListener("click", () => loadMessages(!lastId));
@@ -202,4 +230,5 @@
   document.addEventListener("keydown", event => {
     if (event.key === "Escape" && active && !event.target.closest("dialog")) closeChat();
   });
+  establishUnreadBaseline();
 })();
