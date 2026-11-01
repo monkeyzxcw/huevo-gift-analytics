@@ -35,7 +35,7 @@ def verify_sql_dump(sql_text: str) -> dict[str, object]:
     try:
         # D1 exports may insert rows before referenced tables; defer FK checks
         # during import, then enable and run an explicit check after restoration.
-        connection.executescript("PRAGMA foreign_keys = OFF;\\n" + sql_text)
+        connection.executescript("PRAGMA foreign_keys = OFF;\n" + sql_text)
         connection.execute("PRAGMA foreign_keys = ON")
         integrity = connection.execute("PRAGMA integrity_check").fetchone()
         if not integrity or integrity[0] != "ok":
