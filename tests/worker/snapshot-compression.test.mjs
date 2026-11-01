@@ -279,3 +279,82 @@ test("atomic D1 freshness condition reports a concurrent newer upload instead of
   assert.equal(result.error, "stale_snapshot");
   assert.equal(result.current_generated_at, snapshotRow.generated_at);
 });
+
+test("Live ingest retains validated Huevo seller identity and rejects spoofed values", async () => {
+  let liveRow = null;
+  const DB = {
+    prepare(sql) {
+      let params = [];
+      return {
+        bind(...values) { params = values; return this; },
+        async first() {
+          if (sql.includes("SELECT items_json") && sql.includes("FROM live_page_state")) return liveRow;
+          return null;
+        },
+        async run() {
+          if (sql.includes("INSERT INTO live_page_state")) {
+            liveRow = {
+              items_json: params[1],
+              fingerprint: params[2],
+              last_poll_at: params[3],
+              item_count: params[4],
+              source: params[5],
+            };
+          }
+          return { meta: { changes: 1 } };
+        },
+      };
+    },
+    async batch(statements) {
+      for (const statement of statements) await statement.run();
+    },
+  };
+  const env = { LIVE_INGEST_TOKEN: "test-ingest-token", DB };
+  const post = await worker.fetch(new Request("https://amnyam.test/api/live/page", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer test-ingest-token",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      source: "https://huevo.su/market/gifts?page=1",
+      items: [
+        {
+          lot_id: "seller-1", title: "Owned gift", price: 100,
+          seller: "monkeyzxcw", seller_user_id: "14188",
+          seller_url: "https://huevo.su/profile/14188",
+        },
+        {
+          lot_id: "seller-2", title: "Spoofed seller", price: 200,
+          seller: "<script>alert(1)</script>", seller_user_id: "not-a-user-id",
+          seller_url: "https://evil.example/profile/1",
+        }
+      ],
+    }),
+  }), env, {});
+  assert.equal(post.status, 200);
+  const status = await worker.fetch(new Request("https://amnyam.test/api/live/status"), env, {});
+  assert.equal(status.status, 200);
+  const result = await status.json();
+  assert.equal(result.items.length, 2);
+  assert.deepEqual(
+    {
+      seller: result.items[0].seller,
+      seller_user_id: result.items[0].seller_user_id,
+      seller_url: result.items[0].seller_url,
+    },
+    {
+      seller: "monkeyzxcw",
+      seller_user_id: "14188",
+      seller_url: "https://huevo.su/profile/14188",
+    }
+  );
+  assert.deepEqual(
+    {
+      seller: result.items[1].seller,
+      seller_user_id: result.items[1].seller_user_id,
+      seller_url: result.items[1].seller_url,
+    },
+    { seller: "", seller_user_id: "", seller_url: "" }
+  );
+});
