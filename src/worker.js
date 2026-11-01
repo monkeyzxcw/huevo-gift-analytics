@@ -330,6 +330,7 @@ async function ingestLivePage(request, env, ctx) {
   const observedAt = new Date().toISOString();
   const fingerprintSource = JSON.stringify(items.map((item) => ({
     lot_id: item.lot_id, title: item.title, rarity: item.rarity, price: item.price, status: item.status,
+    seller: item.seller, seller_user_id: item.seller_user_id, seller_url: item.seller_url,
   })));
   const fingerprint = await sha256Hex(fingerprintSource);
   let previousItems = [];
