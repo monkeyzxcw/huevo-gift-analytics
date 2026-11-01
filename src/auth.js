@@ -484,6 +484,75 @@ export async function saveAccountProfile(request, env, jsonResponse) {
 }
 
 
+
+export async function listCommunityMessages(request, env, jsonResponse) {
+  if (!(await authSchemaReady(env))) return jsonResponse(request, env, { ok: false, error: "Чат пока не настроен на сервере." }, 503);
+  try {
+    const user = await authenticatedUser(request, env);
+    if (!user) return jsonResponse(request, env, { ok: false, error: "Открой AMNYAM через huEVO, чтобы читать общий чат." }, 401);
+    const url = new URL(request.url);
+    const after = Number(url.searchParams.get("after") || 0);
+    let rows;
+    if (Number.isSafeInteger(after) && after > 0) {
+      rows = await env.DB.prepare(
+        "SELECT id, user_id, display_name, username, avatar_url, message, created_at FROM community_messages WHERE id > ? ORDER BY id ASC LIMIT 100"
+      ).bind(after).all();
+    } else {
+      rows = await env.DB.prepare(
+        "SELECT id, user_id, display_name, username, avatar_url, message, created_at FROM (SELECT id, user_id, display_name, username, avatar_url, message, created_at FROM community_messages ORDER BY id DESC LIMIT 50) ORDER BY id ASC"
+      ).all();
+    }
+    return jsonResponse(request, env, {
+      ok: true,
+      messages: (rows.results || []).map(row => ({
+        id: Number(row.id), user_id: String(row.user_id),
+        display_name: row.display_name || row.username || "Пользователь huEVO",
+        username: row.username || "", avatar_url: row.avatar_url || "",
+        message: row.message, created_at: row.created_at,
+        mine: String(row.user_id) === String(user.user_id)
+      }))
+    });
+  } catch (_) {
+    return jsonResponse(request, env, { ok: false, error: "Не удалось загрузить сообщения." }, 503);
+  }
+}
+
+export async function sendCommunityMessage(request, env, jsonResponse) {
+  if (!sameOriginMutation(request)) return jsonResponse(request, env, { ok: false, error: "Недопустимый источник запроса." }, 403);
+  if (!(await authSchemaReady(env))) return jsonResponse(request, env, { ok: false, error: "Чат пока не настроен на сервере." }, 503);
+  let user;
+  try { user = await authenticatedUser(request, env); }
+  catch (_) { return jsonResponse(request, env, { ok: false, error: "Сессия временно недоступна." }, 503); }
+  if (!user) return jsonResponse(request, env, { ok: false, error: "Войди через huEVO, чтобы писать в общий чат." }, 401);
+  const parsed = await readBody(request);
+  if (parsed.error) return jsonResponse(request, env, { ok: false, error: parsed.error }, parsed.status);
+  const message = typeof parsed.value.message === "string"
+    ? [...parsed.value.message].filter(char => { const code = char.charCodeAt(0); return code === 9 || code === 10 || code === 13 || (code >= 32 && code !== 127); }).join("").trim()
+    : "";
+  if (!message) return jsonResponse(request, env, { ok: false, error: "Напиши сообщение перед отправкой." }, 400);
+  if ([...message].length > 500) return jsonResponse(request, env, { ok: false, error: "Сообщение слишком длинное: максимум 500 символов." }, 413);
+  try {
+    if (!(await checkRateLimit(env, "community:" + user.user_id, 10, 60 * 1000))) {
+      return jsonResponse(request, env, { ok: false, error: "Слишком часто. Подожди минуту и попробуй снова." }, 429);
+    }
+    const createdAt = nowIso();
+    const result = await env.DB.prepare(
+      "INSERT INTO community_messages (user_id, display_name, username, avatar_url, message, created_at) VALUES (?, ?, ?, ?, ?, ?)"
+    ).bind(user.user_id, user.display_name || user.hu_username || "Пользователь huEVO",
+      user.hu_username || "", user.avatar_url || "", message, createdAt).run();
+    await env.DB.prepare("DELETE FROM community_messages WHERE id NOT IN (SELECT id FROM community_messages ORDER BY id DESC LIMIT 10000)").run();
+    return jsonResponse(request, env, {
+      ok: true,
+      message: { id: Number(result.meta?.last_row_id || 0), user_id: String(user.user_id),
+        display_name: user.display_name || user.hu_username || "Пользователь huEVO",
+        username: user.hu_username || "", avatar_url: user.avatar_url || "",
+        message, created_at: createdAt, mine: true }
+    }, 201);
+  } catch (_) {
+    return jsonResponse(request, env, { ok: false, error: "Не удалось отправить сообщение. Попробуй ещё раз." }, 503);
+  }
+}
+
 export async function purgeAuthRecords(env) {
   if (!env.DB) return;
   const now = nowIso();
