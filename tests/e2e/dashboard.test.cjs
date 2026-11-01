@@ -216,7 +216,7 @@ test("below-market signals prefer exact catalogue and rarity sale profiles over 
   await browser.close();
 });
 
-test("title-only sale benchmarks are clearly marked as broad and low-confidence", async () => {
+test("title-only sale benchmarks are rejected when catalog and rarity evidence is unavailable", async () => {
   const lots = Array.from({ length: 5 }, (_, i) => ({
     lot_id: "broad-" + i, title: "Подарок без связанной сделки", serial: "#" + (i + 1),
     rarity: "Редкий", price: [8000, 8100, 8200, 8300, 9000][i], status: "На продаже", active: true,
@@ -236,11 +236,10 @@ test("title-only sale benchmarks are clearly marked as broad and low-confidence"
   const { browser, page, problems } = await open(serve(data));
   await page.waitForSelector("#content:not(.hide)");
   await page.click('#mainNav [data-view="deals"]');
-  const first = page.locator("#dealsList .deal-card-rich").first();
-  assert.match(await first.textContent(), /МЕДИАНА ПРОДАЖ · ТОЛЬКО НАЗВАНИЕ/);
-  assert.match(await first.textContent(), /сделки пока не связаны с точным каталогом и редкостью/i);
-  assert.match(await page.textContent("#belowBestMeta"), /названию без подтверждённой редкости/i);
-  assert.match(await page.textContent("#belowBestMeta"), /низкая уверенность/i);
+  assert.equal(await page.locator("#dealsList .deal-card-rich").count(), 0,
+    "title-only sale history must not be used to value a specific rarity/catalog lot");
+  assert.match(await page.textContent("#dealsNote"), /устойчивой группы/);
+  assert.match(await page.textContent("#belowBestMeta"), /нет достаточных продаж/i);
   assert.deepEqual(problems, []);
   await browser.close();
 });
@@ -946,7 +945,7 @@ test("sale benchmarks beat inflated asking prices and split offer clusters are s
       { date: "2026-10-28", median: 102000, count: 2 }
     ]
   };
-  const sales = { generated_at: NOW, summary: { count: 20, unknown: 0, median: 100000, min: 80000, max: 130000, enough_data: true }, by_title: [profile] };
+  const sales = { generated_at: NOW, summary: { count: 20, unknown: 0, median: 100000, min: 80000, max: 130000, enough_data: true }, by_title: [profile], by_title_rarity: [{ ...profile, rarity: "Редкий", match_scope: "title_rarity" }], by_catalog_rarity: [] };
   const second = await open(serve(dataV2({ lots, sales })));
   await second.page.waitForSelector("#content:not(.hide)");
   await second.page.click('#mainNav [data-view="deals"]');
