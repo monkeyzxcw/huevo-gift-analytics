@@ -19,7 +19,7 @@ test("gifts and usernames are separate market workspaces with independent eight-
   assert.equal((giftTabs.match(/role="tab"/g) || []).length, 8, "gift navigation must preserve its eight existing tabs");
   assert.equal((usernameTabs.match(/data-username-view=/g) || []).length, 8, "username market has its own eight tabs");
   assert.match(html, /https:\/\/huevo\.su\/market/);
-  assert.match(html, /usernames\.js\?v=amnyam-usernames-v1/);
+  assert.match(html, /usernames\.js\?v=amnyam-usernames-v2/);
 });
 
 test("username workspace accepts automatic Cloudflare snapshots and keeps JSON/CSV as a manual fallback", async () => {
@@ -32,7 +32,7 @@ test("username workspace accepts automatic Cloudflare snapshots and keeps JSON/C
   assert.match(script, /localStorage/);
   assert.match(script, /AMNYAM_MARKET/);
   assert.match(script, /BASE_KEY/);
-  assert.doesNotMatch(script, /\bfetch\s*\(|XMLHttpRequest|WebSocket/i, "username module must not attempt unapproved Huevo scraping");
+  assert.match(script, /fetch\("\/data\.json"/);\n  assert.match(script, /syncRemoteMarket/);
   assert.doesNotMatch(script, /document\.cookie|localStorage\.getItem\(["'](?:huevo|cookie|session)/i);
   assert.match(html, /https:\/\/huevo\.su\/market/);
 });
