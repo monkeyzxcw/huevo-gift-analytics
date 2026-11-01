@@ -585,7 +585,8 @@ async function storeFullSnapshot(request, env, ctx) {
     }
     await env.DB.prepare(
       "INSERT INTO full_snapshot (id, data_json, generated_at, updated_at) VALUES (1, ?, ?, ?) " +
-      "ON CONFLICT(id) DO UPDATE SET data_json=excluded.data_json, generated_at=excluded.generated_at, updated_at=excluded.updated_at"
+      "ON CONFLICT(id) DO UPDATE SET data_json=excluded.data_json, generated_at=excluded.generated_at, updated_at=excluded.updated_at " +
+      "WHERE excluded.generated_at >= full_snapshot.generated_at"
     ).bind(storedValue, data.generated_at, writtenAt).run();
   } catch (_) {
     return jsonResponse(request, env, { ok: false, error: "could not store snapshot; check D1 migrations" }, 503);
