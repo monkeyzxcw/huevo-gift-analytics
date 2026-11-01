@@ -399,6 +399,9 @@
               status: fresh.status || lot.status,
               lot_url: fresh.lot_url || lot.lot_url,
               image_url: fresh.image_url || lot.image_url,
+              seller: fresh.seller || lot.seller || "",
+              seller_user_id: fresh.seller_user_id || lot.seller_user_id || "",
+              seller_url: fresh.seller_url || lot.seller_url || "",
               active: true,
               last_seen: live.last_poll_at || lot.last_seen
             };
