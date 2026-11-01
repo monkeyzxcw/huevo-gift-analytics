@@ -183,8 +183,6 @@
     const usernameMode = document.body.dataset.marketWorkspace === "usernames";
     gifts.classList.toggle("hide", usernameMode);
     usernames.classList.toggle("hide", !usernameMode);
-    if (pollHandle) clearInterval(pollHandle);
-    pollHandle = null;
   }
   button.addEventListener("click", () => active ? closeChat() : openChat());
   $("communityRefresh").addEventListener("click", () => loadMessages(!lastId));
@@ -232,4 +230,5 @@
   document.addEventListener("keydown", event => {
     if (event.key === "Escape" && active && !event.target.closest("dialog")) closeChat();
   });
+  establishUnreadBaseline();
 })();
