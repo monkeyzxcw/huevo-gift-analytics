@@ -586,7 +586,7 @@ async function storeFullSnapshot(request, env, ctx) {
     const writeResult = await env.DB.prepare(
       "INSERT INTO full_snapshot (id, data_json, generated_at, updated_at) VALUES (1, ?, ?, ?) " +
       "ON CONFLICT(id) DO UPDATE SET data_json=excluded.data_json, generated_at=excluded.generated_at, updated_at=excluded.updated_at " +
-      "WHERE excluded.generated_at >= full_snapshot.generated_at"
+      "WHERE julianday(excluded.generated_at) >= julianday(full_snapshot.generated_at)"
     ).bind(storedValue, data.generated_at, writtenAt).run();
     if (Number(writeResult.meta?.changes) === 0) {
       const latest = await env.DB.prepare(
