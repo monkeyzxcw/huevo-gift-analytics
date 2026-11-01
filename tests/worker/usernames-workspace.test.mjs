@@ -19,10 +19,10 @@ test("gifts and usernames are separate market workspaces with independent eight-
   assert.equal((giftTabs.match(/role="tab"/g) || []).length, 8, "gift navigation must preserve its eight existing tabs");
   assert.equal((usernameTabs.match(/data-username-view=/g) || []).length, 8, "username market has its own eight tabs");
   assert.match(html, /https:\/\/huevo\.su\/market/);
-  assert.match(html, /usernames\.js\?v=amnyam-usernames-v1/);
+  assert.match(html, /usernames\.js\?v=amnyam-usernames-v2/);
 });
 
-test("username workspace imports JSON and CSV locally without scraping Huevo or exposing credentials", async () => {
+test("username workspace accepts automatic Cloudflare snapshots and keeps JSON/CSV as a manual fallback", async () => {
   const html = await read("cloudflare-site/index.html");
   const script = await read("cloudflare-site/usernames.js");
   assert.match(html, /id="usernameImportFile"/);
@@ -32,7 +32,11 @@ test("username workspace imports JSON and CSV locally without scraping Huevo or 
   assert.match(script, /localStorage/);
   assert.match(script, /AMNYAM_MARKET/);
   assert.match(script, /BASE_KEY/);
-  assert.doesNotMatch(script, /\bfetch\s*\(|XMLHttpRequest|WebSocket/i, "username module must not attempt unapproved Huevo scraping");
+  assert.match(script, /fetch\("\/data\.json\?_username_sync="/);
+  assert.match(script, /syncRemoteMarket/);
+  assert.match(script, /syncRemoteMarket\(\);\s*\}/);
+  assert.match(script, /usernameMarket/);
+  assert.match(script, /0 РАСПОЗНАННЫХ ЗАПИСЕЙ/);
   assert.doesNotMatch(script, /document\.cookie|localStorage\.getItem\(["'](?:huevo|cookie|session)/i);
   assert.match(html, /https:\/\/huevo\.su\/market/);
 });
@@ -41,7 +45,7 @@ test("username prices are treated as asking prices and signals require five comp
   const html = await read("cloudflare-site/index.html");
   const script = await read("cloudflare-site/usernames.js");
   assert.match(html, /Цена объявления ≠ подтверждённая цена продажи/);
-  assert.match(html, /не подключена к локальному HuevoDualScan/);
+  assert.match(html, /HuevoDualScan v13 автоматически собирает этот рынок/);
   assert.match(script, /if \(peers\.length < 5\) return/);
   assert.match(script, /Медиана/);
   assert.match(html, /минимум 5 аналогов/);
