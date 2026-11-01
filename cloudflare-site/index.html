@@ -33,6 +33,7 @@
 
     <span class="badge" role="status"><i class="dot" id="stateDot"></i><span id="stateText">Загружаю данные…</span></span>
     <button class="btn secondary account-trigger" id="accountButton" type="button">Войти в профиль</button>
+    <button class="btn community-open-btn" id="communityOpen" type="button" aria-controls="communityWorkspace" aria-expanded="false">Общий чат <span id="communityUnread" class="community-unread" hidden>0</span></button>
     <a class="btn secondary" href="https://huevo.su/market/gifts" target="_blank" rel="noopener noreferrer">Войти в рынок ↗</a>
   </div>
 </header>
@@ -41,6 +42,18 @@
   <button type="button" role="tab" aria-selected="true" data-market-type="gifts"><span>01</span><b>ПОДАРКИ</b><small>GIFT MARKET</small></button>
   <button type="button" role="tab" aria-selected="false" data-market-type="usernames"><span>02</span><b>ЮЗЕРНЕЙМЫ</b><small>USERNAME MARKET</small></button>
 </nav>
+<section id="communityWorkspace" class="community-workspace hide" aria-labelledby="communityTitle">
+  <div class="community-heading"><div><span class="section-index">/ AMNYAM COMMUNITY</span><h2 id="communityTitle">Общий чат</h2><p>Общайся с другими пользователями AMNYAM. Сообщения видны всем вошедшим участникам.</p></div><div class="community-live"><i></i> ОБЩИЙ КАНАЛ</div></div>
+  <div class="community-chat-panel panel">
+    <div class="community-chat-toolbar"><span id="communityConnection" role="status" aria-live="polite">Подключаемся к чату…</span><button class="btn secondary" id="communityRefresh" type="button">Обновить</button></div>
+    <div class="community-messages" id="communityMessages" role="log" aria-live="polite" aria-relevant="additions text"><div class="community-empty">Загружаем сообщения…</div></div>
+    <div id="communityGuest" class="community-guest hide"><b>Нужен вход через huEVO</b><p>Открой AMNYAM из huEVO, чтобы читать и отправлять сообщения под своим подтверждённым аккаунтом.</p><button class="btn" id="communityLogin" type="button">Проверить профиль</button></div>
+    <form id="communityComposer" class="community-composer">
+      <label class="sr" for="communityInput">Твоё сообщение</label><textarea id="communityInput" maxlength="500" rows="2" placeholder="Напиши сообщение… (Enter — отправить, Shift+Enter — новая строка)" disabled></textarea>
+      <div class="community-compose-foot"><small><span id="communityCharCount">0</span>/500 · Не публикуй личные данные</small><button class="btn" id="communitySend" type="submit" disabled>Отправить ↗</button></div>
+    </form>
+  </div>
+</section>
 <div id="giftsWorkspace">
 <nav class="main-nav" id="mainNav" role="tablist" aria-label="Основные разделы AMNYAM MODE">
   <button role="tab" aria-selected="true" data-view="overview" data-main="overview" type="button"><span>01</span> Обзор</button>
