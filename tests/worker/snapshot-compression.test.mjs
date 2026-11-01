@@ -294,11 +294,11 @@ test("Live ingest retains validated Huevo seller identity and rejects spoofed va
         async run() {
           if (sql.includes("INSERT INTO live_page_state")) {
             liveRow = {
-              items_json: params[1],
-              fingerprint: params[2],
-              last_poll_at: params[3],
-              item_count: params[4],
-              source: params[5],
+              items_json: params[0],
+              fingerprint: params[1],
+              last_poll_at: params[2],
+              item_count: params[3],
+              source: params[4],
             };
           }
           return { meta: { changes: 1 } };
