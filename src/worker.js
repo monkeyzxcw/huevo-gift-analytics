@@ -1,4 +1,4 @@
-import { authenticateHuevoLaunch, currentAccount, saveAccountProfile, purgeAuthRecords, isHuevoOwner } from "./auth.js";
+import { authenticateHuevoLaunch, currentAccount, saveAccountProfile, listCommunityMessages, sendCommunityMessage, purgeAuthRecords, isHuevoOwner } from "./auth.js";
 import { verifyHuevoLaunch } from "./huevo_launch.js";
 
 const HUEVO_HOSTS = new Set(["huevo.su", "huevo.departament.site"]);
@@ -915,6 +915,8 @@ async function fetchHandler(request, env, ctx) {
   if (request.method === "POST" && path === "/api/auth/launch") return authenticateHuevoLaunch(request, env, jsonResponse);
   if (request.method === "GET" && path === "/api/me") return currentAccount(request, env, jsonResponse);
   if (request.method === "PUT" && path === "/api/me/profile") return saveAccountProfile(request, env, jsonResponse);
+  if (request.method === "GET" && path === "/api/community/messages") return listCommunityMessages(request, env, jsonResponse);
+  if (request.method === "POST" && path === "/api/community/messages") return sendCommunityMessage(request, env, jsonResponse);
   if (request.method === "GET" && path === "/api/health") {
     return jsonResponse(request, env, { ok: true, ...(await getStorageHealth(env)) });
   }
