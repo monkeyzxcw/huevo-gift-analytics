@@ -583,11 +583,23 @@ async function storeFullSnapshot(request, env, ctx) {
         max_stored_bytes: MAX_STORED_SNAPSHOT_BYTES,
       }, 413);
     }
-    await env.DB.prepare(
+    const writeResult = await env.DB.prepare(
       "INSERT INTO full_snapshot (id, data_json, generated_at, updated_at) VALUES (1, ?, ?, ?) " +
       "ON CONFLICT(id) DO UPDATE SET data_json=excluded.data_json, generated_at=excluded.generated_at, updated_at=excluded.updated_at " +
       "WHERE excluded.generated_at >= full_snapshot.generated_at"
     ).bind(storedValue, data.generated_at, writtenAt).run();
+    if (Number(writeResult.meta?.changes) === 0) {
+      const latest = await env.DB.prepare(
+        "SELECT generated_at FROM full_snapshot WHERE id = 1"
+      ).first();
+      return jsonResponse(request, env, {
+        ok: false,
+        error: "stale_snapshot",
+        detail: "A newer catalogue snapshot was published while this upload was in progress.",
+        current_generated_at: latest ? latest.generated_at : null,
+        rejected_generated_at: data.generated_at,
+      }, 409);
+    }
   } catch (_) {
     return jsonResponse(request, env, { ok: false, error: "could not store snapshot; check D1 migrations" }, 503);
   }
