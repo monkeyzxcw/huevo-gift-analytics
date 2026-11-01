@@ -22,7 +22,7 @@ if ($LASTEXITCODE -ne 0) { throw "D1 export failed; do not proceed with maintena
 Get-Item ".\backups\huevo-live-data-$stamp.sql" | Select-Object FullName, Length, LastWriteTime
 ```
 
-Keep the file in a private, access-controlled location. Confirm the export command completed successfully and the file is non-empty. Do not upload it to a public issue, paste its contents into chat, or add it to a commit.
+Keep the file in a private, access-controlled location. Confirm the export command completed successfully and the file is non-empty. Do not upload it to a public issue, paste its contents into chat, or add it to a commit.\n\nImmediately verify that the export can be restored locally into an isolated in-memory SQLite database:\n\n```powershell\npython .\\scripts\\verify_d1_backup.py ".\\backups\\huevo-live-data-$stamp.sql"\nif ($LASTEXITCODE -ne 0) { throw "Backup failed local restore verification; do not rely on it." }\n```\n\nThe verifier checks SQLite integrity, foreign keys, required current tables, and absence of retired Push tables, and prints row counts without exposing row contents. This is a local SQL restore check, not a Cloudflare D1 restore drill. For a full rehearsal, create a separate temporary D1 database, import a sanitized copy of the export, verify it there, and delete the temporary database only after recording the result.
 
 Cloudflare reference: https://developers.cloudflare.com/d1/best-practices/import-export-data/
 
