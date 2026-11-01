@@ -1883,9 +1883,13 @@
     if (exactCatalog) return exactCatalog;
     if (exactRarity) return exactRarity;
 
-    // Retain legacy / title-only sales only when no narrower match exists;
-    // the caller marks this broad benchmark as low confidence.
-    return titleProfiles.find(item => normaliseSaleTitle(item.title) === title && valid(item)) || null;
+    // Never use title-only sales as a price benchmark for an individual lot.
+    // A title can contain different catalog editions / serial tiers / rarities;
+    // pooling them can make an ordinary 288k listing look like a bargain while
+    // a directly comparable 150k listing is missed. If exact catalog+rarity or
+    // title+rarity evidence is unavailable, the caller must fall back to the
+    // robust active-offer distribution (or show no recommendation).
+    return null;
   }
 
   function robustOfferReference(prices) {
