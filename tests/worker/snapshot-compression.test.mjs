@@ -7,6 +7,7 @@ function createD1Mock() {
   let snapshotRow = null;
   return {
     get snapshotRow() { return snapshotRow; },
+    setSnapshotRow(value) { snapshotRow = value; },
     prepare(sql) {
       let params = [];
       return {
@@ -208,11 +209,11 @@ test("a delayed full scan cannot overwrite a newer published snapshot", async ()
     generated_at: "2026-11-01T12:00:00.000Z",
     lots: [{ lot_id: "newer", title: "Newer catalogue" }],
   };
-  env.DB.snapshotRow = {
+  env.DB.setSnapshotRow({
     data_json: JSON.stringify(current),
     generated_at: current.generated_at,
     updated_at: current.generated_at,
-  };
+  });
 
   const stale = {
     generated_at: "2026-11-01T11:55:00.000Z",
