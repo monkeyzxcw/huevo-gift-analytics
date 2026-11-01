@@ -546,8 +546,28 @@ async function storeFullSnapshot(request, env, ctx) {
       typeof data.generated_at !== "string" || !Number.isFinite(Date.parse(data.generated_at))) {
     return jsonResponse(request, env, { ok: false, error: "snapshot needs a generated_at timestamp and non-empty lots array" }, 400);
   }
-  const writtenAt = new Date().toISOString();
+  const incomingGeneratedAt = Date.parse(data.generated_at);
   let storedValue;
+  try {
+    // Never let a delayed/retried full scan replace a newer published catalogue.
+    const current = await env.DB.prepare(
+      "SELECT generated_at FROM full_snapshot WHERE id = 1"
+    ).first();
+    const currentGeneratedAt = current ? Date.parse(current.generated_at) : NaN;
+    if (Number.isFinite(currentGeneratedAt) && incomingGeneratedAt < currentGeneratedAt) {
+      return jsonResponse(request, env, {
+        ok: false,
+        error: "stale_snapshot",
+        detail: "A newer catalogue snapshot is already published.",
+        current_generated_at: current.generated_at,
+        rejected_generated_at: data.generated_at,
+      }, 409);
+    }
+  } catch (_) {
+    return jsonResponse(request, env, { ok: false, error: "could not check current snapshot; refusing to overwrite it" }, 503);
+  }
+
+  const writtenAt = new Date().toISOString();
   try {
     if (parsed.compressedBytes) {
       storedValue = COMPRESSED_SNAPSHOT_PREFIX + bytesToBase64(parsed.compressedBytes);
@@ -563,10 +583,23 @@ async function storeFullSnapshot(request, env, ctx) {
         max_stored_bytes: MAX_STORED_SNAPSHOT_BYTES,
       }, 413);
     }
-    await env.DB.prepare(
+    const writeResult = await env.DB.prepare(
       "INSERT INTO full_snapshot (id, data_json, generated_at, updated_at) VALUES (1, ?, ?, ?) " +
-      "ON CONFLICT(id) DO UPDATE SET data_json=excluded.data_json, generated_at=excluded.generated_at, updated_at=excluded.updated_at"
+      "ON CONFLICT(id) DO UPDATE SET data_json=excluded.data_json, generated_at=excluded.generated_at, updated_at=excluded.updated_at " +
+      "WHERE julianday(excluded.generated_at) >= julianday(full_snapshot.generated_at)"
     ).bind(storedValue, data.generated_at, writtenAt).run();
+    if (Number(writeResult.meta?.changes) === 0) {
+      const latest = await env.DB.prepare(
+        "SELECT generated_at FROM full_snapshot WHERE id = 1"
+      ).first();
+      return jsonResponse(request, env, {
+        ok: false,
+        error: "stale_snapshot",
+        detail: "A newer catalogue snapshot was published while this upload was in progress.",
+        current_generated_at: latest ? latest.generated_at : null,
+        rejected_generated_at: data.generated_at,
+      }, 409);
+    }
   } catch (_) {
     return jsonResponse(request, env, { ok: false, error: "could not store snapshot; check D1 migrations" }, 503);
   }
