@@ -546,8 +546,28 @@ async function storeFullSnapshot(request, env, ctx) {
       typeof data.generated_at !== "string" || !Number.isFinite(Date.parse(data.generated_at))) {
     return jsonResponse(request, env, { ok: false, error: "snapshot needs a generated_at timestamp and non-empty lots array" }, 400);
   }
-  const writtenAt = new Date().toISOString();
+  const incomingGeneratedAt = Date.parse(data.generated_at);
   let storedValue;
+  try {
+    // Never let a delayed/retried full scan replace a newer published catalogue.
+    const current = await env.DB.prepare(
+      "SELECT generated_at FROM full_snapshot WHERE id = 1"
+    ).first();
+    const currentGeneratedAt = current ? Date.parse(current.generated_at) : NaN;
+    if (Number.isFinite(currentGeneratedAt) && incomingGeneratedAt < currentGeneratedAt) {
+      return jsonResponse(request, env, {
+        ok: false,
+        error: "stale_snapshot",
+        detail: "A newer catalogue snapshot is already published.",
+        current_generated_at: current.generated_at,
+        rejected_generated_at: data.generated_at,
+      }, 409);
+    }
+  } catch (_) {
+    return jsonResponse(request, env, { ok: false, error: "could not check current snapshot; refusing to overwrite it" }, 503);
+  }
+
+  const writtenAt = new Date().toISOString();
   try {
     if (parsed.compressedBytes) {
       storedValue = COMPRESSED_SNAPSHOT_PREFIX + bytesToBase64(parsed.compressedBytes);
