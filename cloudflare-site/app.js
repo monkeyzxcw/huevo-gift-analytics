@@ -274,6 +274,7 @@
         canonical(lot.gift_details),
         canonical(lot.gift_catalog),
         canonical(lot.gift_instance),
+        lot.seller, lot.seller_user_id,
         canonical(lot.history)
       ]),
       stats: raw && raw.stats,
@@ -398,6 +399,9 @@
               status: fresh.status || lot.status,
               lot_url: fresh.lot_url || lot.lot_url,
               image_url: fresh.image_url || lot.image_url,
+              seller: fresh.seller || lot.seller || "",
+              seller_user_id: fresh.seller_user_id || lot.seller_user_id || "",
+              seller_url: fresh.seller_url || lot.seller_url || "",
               active: true,
               last_seen: live.last_poll_at || lot.last_seen
             };
@@ -1210,6 +1214,52 @@
     return rules;
   }
 
+  function lotSellerIdentity(lot) {
+    const instance = lot && lot.gift_instance && typeof lot.gift_instance === "object" ? lot.gift_instance : {};
+    const rawName = lot && (lot.seller || lot.seller_username) || instance.current_owner || "";
+    const rawId = lot && lot.seller_user_id || instance.current_owner_id || "";
+    const username = String(rawName).trim().replace(/^@+/, "");
+    const userId = String(rawId).trim();
+    return {
+      username: /^[a-z0-9_]{1,32}$/i.test(username) ? username.toLocaleLowerCase("en") : "",
+      userId: /^\d{1,20}$/.test(userId) ? userId : ""
+    };
+  }
+
+  function isOwnLot(lot) {
+    const user = accountState.user;
+    if (!user) return false;
+    const seller = lotSellerIdentity(lot);
+    const accountId = String(user.hu_user_id || "").trim();
+    const accountUsername = String(user.username || "").trim().replace(/^@+/, "").toLocaleLowerCase("en");
+    if (accountId && seller.userId) return accountId === seller.userId;
+    return Boolean(accountUsername && seller.username && accountUsername === seller.username);
+  }
+
+  function updateOwnLotFilter() {
+    const checkbox = $("ownLotsOnly");
+    const hint = $("ownLotsHint");
+    if (!checkbox) return;
+    const signedIn = Boolean(accountState.user);
+    checkbox.disabled = !signedIn;
+    if (!signedIn && checkbox.checked) checkbox.checked = false;
+    if (hint) {
+      if (!signedIn) hint.textContent = "Войди через huEVO, чтобы найти свои объявления.";
+      else {
+        const known = state.lots.filter(lot => {
+          const seller = lotSellerIdentity(lot);
+          return Boolean(seller.username || seller.userId);
+        }).length;
+        const mine = state.lots.filter(isOwnLot).length;
+        hint.textContent = mine
+          ? "Найдено твоих лотов: " + fmt(mine)
+          : known
+            ? "Продавцы найдены, совпадений с твоим профилем нет."
+            : "Сборщик постепенно получает данные владельцев подарков.";
+      }
+    }
+  }
+
   function applyFilters() {
     const rawQuery = $("search").value.trim();
     const q = parseSmartQuery(rawQuery);
@@ -1232,6 +1282,7 @@
     const wantedRarity = raritySelect || q.rarity;
     const wantedStatus = statusSelect || q.status;
     const { key, dir } = state.sort;
+    const onlyOwnLots = $("ownLotsOnly") && $("ownLotsOnly").checked;
     let rows = state.lots.filter((l) => {
       const id = String(l.lot_id);
       const textMatch = q.terms.every((term) => l._text.includes(term));
@@ -1239,6 +1290,7 @@
       const rarityMatch = !wantedRarity || String(l.rarity || "").toLocaleLowerCase("ru").includes(wantedRarity.toLocaleLowerCase("ru"));
       const statusMatch = !wantedStatus || String(l.status || "").toLocaleLowerCase("ru").includes(wantedStatus.toLocaleLowerCase("ru"));
       return textMatch && idMatch && rarityMatch && statusMatch
+        && (!onlyOwnLots || isOwnLot(l))
         && (lower === -Infinity || (l.price != null && l.price >= lower))
         && (upper === Infinity || (l.price != null && l.price <= upper));
     });
@@ -1380,12 +1432,22 @@
     $("pageInfo").textContent="Страница "+(state.page+1)+" из "+pages;
     $("prev").disabled=state.page===0;$("next").disabled=state.page>=pages-1;
     document.querySelectorAll("#lotsMode th[aria-sort]").forEach(th=>{const b=th.querySelector(".sort");th.setAttribute("aria-sort",b&&b.dataset.key===state.sort.key?(state.sort.dir>0?"ascending":"descending"):"none");});
-    if(!total){body.append(h("tr",{},[h("td",{colspan:7,class:"empty",text:"По вашим условиям лотов нет. Измените или сбросьте фильтры."})]));updateCompareButton();return;}
+    if(!total){
+      const message = $("ownLotsOnly") && $("ownLotsOnly").checked
+        ? "Свои лоты пока не найдены. Проверь, что ты вошёл в huEVO, и дождись обновления данных о владельцах."
+        : "По вашим условиям лотов нет. Измените или сбросьте фильтры.";
+      body.append(h("tr",{},[h("td",{colspan:7,class:"empty",text:message})]));updateCompareButton();return;
+    }
     state.view.slice(state.page*PAGE,(state.page+1)*PAGE).forEach(l=>{
       const img=l.image_url&&/^https:\/\//i.test(l.image_url)?h("img",{class:"thumb",src:l.image_url,alt:"",loading:"lazy",referrerpolicy:"no-referrer"}):h("span",{class:"thumb",text:"🎁","aria-hidden":"true"});
       img.addEventListener("error",()=>img.replaceWith(h("span",{class:"thumb",text:"🎁","aria-hidden":"true"})));
       const delta=l._delta==null?h("span",{class:"muted",text:"—"}):h("span",{class:l._delta<0?"good":"bad",text:(l._delta>0?"+":"")+fmt(l._delta)+"%"});
       const fav=state.favorites.includes(String(l.lot_id));
+      const ownBadge = isOwnLot(l) ? h("span", {
+        class: "own-lot-badge",
+        text: "МОЙ ЛОТ",
+        title: "Продавец совпадает с текущим профилем huEVO"
+      }) : null;
       const watch=h("button",{class:"watch-btn",type:"button","aria-pressed":String(fav),"aria-label":(fav?"Убрать из избранного ":"Добавить в избранное ")+(l.title||l.lot_id),text:fav?"★":"☆"});
       watch.addEventListener("click",()=>toggleFavorite(l.lot_id));
       const detail=h("button",{class:"btn secondary",type:"button","aria-label":"Подробнее о лоте "+(l.title||l.lot_id),text:"Подробнее"});
@@ -1395,7 +1457,11 @@
       const priceCell=h("td",{class:"price price-cell"},[h("span",{class:"price-value",text:price(l.price)})]);
       const mini=sparkline(l._history);if(mini)priceCell.append(mini);
       body.append(h("tr",{},[
-        h("td",{},[h("div",{class:"lot"},[img,h("div",{},[h("strong",{text:l.title||"Без названия"}),h("small",{text:"#"+l.lot_id+(l.serial?" · "+l.serial:"")})])])]),
+        h("td",{},[h("div",{class:"lot"},[img,h("div",{},[
+          h("strong",{text:l.title||"Без названия"}),
+          ownBadge,
+          h("small",{text:"#"+l.lot_id+(l.serial?" · "+l.serial:"")})
+        ])])]),
         priceCell,
         h("td",{},[h("span",{class:"count-pill",text:fmt(l._lotCount)}),h("div",{class:"muted count-sub",text:"той же серии"})]),
         h("td",{},[h("span",{class:"chip",text:l.rarity||"Не указана"}),h("div",{class:"muted",text:l.status||""})]),
@@ -2688,6 +2754,8 @@
       }
       setAccountStatus("Профиль huEVO подключён", "ok");
     }
+    updateOwnLotFilter();
+    if (state.data) applyFilters();
   }
 
   async function accountRequest(path, options) {
@@ -3096,6 +3164,11 @@
   document.querySelectorAll("#mainNav [data-view]").forEach(button=>button.addEventListener("click",()=>switchView(button.dataset.view,true)));
   document.querySelectorAll(".workspace-subnav [data-view]").forEach(button=>button.addEventListener("click",()=>switchView(button.dataset.view,true)));
   document.querySelectorAll("[data-go-view]").forEach(button=>button.addEventListener("click",()=>switchView(button.dataset.goView,true)));
+  $("ownLotsOnly").addEventListener("change", () => {
+    state.page = 0;
+    updateOwnLotFilter();
+    applyFilters();
+  });
   $("globalSearch").addEventListener("input",refreshGlobalSearchSuggestions);
   $("globalSearch").addEventListener("keydown",event=>{if(event.key!=="Enter")return;event.preventDefault();$("search").value=$("globalSearch").value.trim();state.page=0;switchView("market",true);applyFilters();});
   document.querySelectorAll("[data-search-token]").forEach(button=>button.addEventListener("click",()=>{
@@ -3132,7 +3205,7 @@
   ["search","pmin","pmax"].forEach(id=>$(id).addEventListener("input",()=>{state.page=0;$("globalSearch").value=$("search").value;applyFilters();}));
   ["rarity","status"].forEach(id=>$(id).addEventListener("change",()=>{state.page=0;applyFilters();}));
   $("filters").addEventListener("submit",e=>e.preventDefault());
-  $("reset").addEventListener("click",()=>{["search","pmin","pmax","rarity","status","globalSearch"].forEach(id=>{$(id).value="";});state.sort={key:"price",dir:1};state.groupSort={key:"count",dir:-1};state.page=0;setSortMenuOptions();applyFilters();renderRows();});
+  $("reset").addEventListener("click",()=>{["search","pmin","pmax","rarity","status","globalSearch"].forEach(id=>{$(id).value="";});$("ownLotsOnly").checked=false;updateOwnLotFilter();state.sort={key:"price",dir:1};state.groupSort={key:"count",dir:-1};state.page=0;setSortMenuOptions();applyFilters();renderRows();});
   $("sortBy").addEventListener("change",()=>{
     const [rawKey,rawDir]=$("sortBy").value.split(":"),dir=Number(rawDir)||1;
     if(state.catalogMode==="gifts"){state.groupSort={key:rawKey.replace(/^group_/,""),dir};renderRows();}

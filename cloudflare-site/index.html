@@ -8,7 +8,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://huevo.su; style-src 'self'; img-src 'self' https://huevo.su https://huevo.departament.site data:; connect-src 'self' https://huevo.su https://*.huevo.su; base-uri 'none'; form-action 'none'">
 <title>AMNYAM MODE — Huevo Gift Intelligence</title>
 <link rel="preload" as="image" href="./assets/amnyam-battlefield.webp" fetchpriority="high">
-<link rel="stylesheet" href="./styles.css?v=amnyam-dota2-hud-v4">
+<link rel="stylesheet" href="./styles.css?v=amnyam-own-lots-v1">
 </head>
 <body>
 <a class="skip" href="#catalog">К каталогу</a>
@@ -490,6 +490,7 @@
     <label class="f grow"><span>Поиск</span><input class="input" id="search" type="search" placeholder='Название, ID, rarity:Редкий, price<100000' autocomplete="off"></label>
     <label class="f"><span>Редкость</span><select class="select" id="rarity"><option value="">Все</option></select></label>
     <label class="f"><span>Статус</span><select class="select" id="status"><option value="">Все</option></select></label>
+    <label class="f own-lots-filter"><span>Свои объявления</span><span class="own-lots-switch"><input id="ownLotsOnly" type="checkbox" disabled><b>Только мои</b></span><small id="ownLotsHint">Войди через huEVO, чтобы найти свои объявления.</small></label>
     <label class="f num"><span>Цена от</span><input class="input" id="pmin" type="number" min="0" inputmode="numeric" placeholder="0"></label>
     <label class="f num"><span>Цена до</span><input class="input" id="pmax" type="number" min="0" inputmode="numeric" placeholder="∞"></label>
     <label class="f sort-control"><span>Сортировка</span><select class="select" id="sortBy" aria-label="Сортировка каталога">
@@ -724,7 +725,7 @@
 </main>
 <img id="customWallpaper" alt="" aria-hidden="true"><div id="ambientLayer" aria-hidden="true"></div><div id="cursorGlow" aria-hidden="true"></div>
 <div class="premium-splash" id="premiumSplash" aria-hidden="true"><div class="splash-mark">H<span>•</span></div><div class="splash-title">AMNYAM <b>MODE</b></div><div class="splash-subtitle">GIFT MARKET INTELLIGENCE</div><div class="splash-loader"><i></i></div></div>
-<script src="./app.js?v=amnyam-workspace-v25" defer></script>
+<script src="./app.js?v=amnyam-own-lots-v1" defer></script>
 <script src="./sniper.js?v=amnyam-sniper-rules-v3" defer></script>
 <script src="./desk-tools.js?v=amnyam-desk-v1" defer></script>
 <script src="./intel-lab.js?v=amnyam-intel-v2" defer></script>

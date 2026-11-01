@@ -1868,3 +1868,13 @@ body[data-market-workspace="usernames"] .market-type-switch{border-color:#66513a
 .community-guest{padding:18px;border-top:1px solid var(--line);background:#211e17}
 .community-guest p{color:var(--muted);font-size:12px;line-height:1.5}
 @media(max-width:600px){.community-messages{height:55vh;min-height:260px;padding:12px}.community-message{max-width:95%}.community-chat-toolbar{padding:10px}.community-composer{padding:10px}.community-compose-foot{align-items:flex-end}}
+
+
+/* Own Huevo market listings */
+.own-lots-filter{min-width:150px;max-width:220px;align-self:stretch;align-content:start}
+.own-lots-switch{display:flex;align-items:center;gap:8px;min-height:34px;color:var(--text);font-size:12px}
+.own-lots-switch input{width:16px;height:16px;margin:0;accent-color:#a5df62}
+.own-lots-switch input:disabled{opacity:.45;cursor:not-allowed}
+.own-lots-filter small{font-size:9px;line-height:1.35;max-width:220px}
+.own-lot-badge{display:inline-flex;align-items:center;vertical-align:middle;margin:3px 0 3px 6px;padding:3px 7px;border:1px solid rgba(157,218,96,.45);border-radius:4px;background:rgba(92,140,42,.19);color:#c8f59d;font:800 9px/1.2 ui-monospace,monospace;letter-spacing:.08em;white-space:nowrap}
+@media(max-width:650px){.own-lots-filter{width:100%;max-width:none;min-width:100%}.own-lots-filter small{max-width:none}}

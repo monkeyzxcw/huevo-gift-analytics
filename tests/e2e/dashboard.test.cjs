@@ -244,6 +244,45 @@ test("title-only sale benchmarks are rejected when catalog and rarity evidence i
   await browser.close();
 });
 
+
+test("signed Huevo user can identify and filter own market listings", async () => {
+  const data = dataV2({
+    lots: [
+      { ...makeLots(1)[0], lot_id: "owned-by-id", title: "Мой подарок по ID", seller: "different-visible-name", seller_user_id: "14188" },
+      { ...makeLots(1)[0], lot_id: "owned-by-name", title: "Мой подарок по имени", seller: "monkeyzxcw", seller_user_id: "" },
+      { ...makeLots(1)[0], lot_id: "not-mine", title: "Чужой подарок", seller: "another_user", seller_user_id: "98765" },
+      { ...makeLots(1)[0], lot_id: "same-name-wrong-id", title: "Чужой ID с похожим именем", seller: "monkeyzxcw", seller_user_id: "98765" },
+      { ...makeLots(1)[0], lot_id: "unknown-owner", title: "Пока без продавца" }
+    ],
+    stats: { n_total: 5 }
+  });
+  const { browser, page, problems } = await open(serve(data), { width: 1280, height: 900 }, {
+    supportRoutes: {
+      "/api/me": route => route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({
+          ok: true, authenticated: true, profiles_ready: true,
+          user: { id: "internal-1", hu_user_id: "14188", username: "monkeyzxcw", display_name: "Test user", avatar_url: "" },
+          profile: {}, updated_at: NOW
+        })
+      })
+    }
+  });
+  await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="market"]');
+  await page.waitForFunction(() => !document.querySelector("#ownLotsOnly").disabled);
+  assert.equal(await page.locator("#rows .own-lot-badge").count(), 2, "only exact Huevo user ID and safe username fallback are marked");
+  await page.check("#ownLotsOnly");
+  assert.match(await page.textContent("#rowCount"), /Найдено лотов: 2 из 5/);
+  assert.match(await page.textContent("#rows"), /Мой подарок по ID/);
+  assert.match(await page.textContent("#rows"), /Мой подарок по имени/);
+  assert.doesNotMatch(await page.textContent("#rows"), /Чужой подарок|Чужой ID с похожим именем|Пока без продавца/);
+  await page.uncheck("#ownLotsOnly");
+  assert.match(await page.textContent("#rowCount"), /Найдено лотов: 5 из 5/);
+  assert.deepEqual(problems, []);
+  await browser.close();
+});
+
 test("search, filters, sort, pagination and reset work", async () => {
   const { browser, page, problems } = await open(serve(dataV2()));
   await page.waitForSelector("#content:not(.hide)");

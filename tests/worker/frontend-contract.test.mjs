@@ -56,3 +56,23 @@ test("Market Intelligence Lab is shared user-facing analytics, not collector con
   assert.doesNotMatch(app, /PRIVATE FULL SCAN DETAIL/);
   assert.match(app, /function renderSourceHealth\(\)[\s\S]*Shared users see data freshness and coverage only/);
 });
+
+
+test("own market lots are matched to the signed huEVO profile and can be filtered", async () => {
+  const app = await read("cloudflare-site/app.js");
+  const html = await read("cloudflare-site/index.html");
+  assert.match(app, /function lotSellerIdentity\(lot\)/);
+  assert.match(app, /if \(accountId && seller\.userId\) return accountId === seller\.userId/);
+  assert.match(app, /accountUsername && seller\.username && accountUsername === seller\.username/);
+  assert.match(app, /ownLotsOnly[^\n]*checked|const onlyOwnLots =/);
+  assert.match(app, /class: "own-lot-badge"/);
+  assert.match(html, /id="ownLotsOnly"/);
+  assert.match(html, /id="ownLotsHint"/);
+});
+
+test("live market ingest preserves only validated seller identity fields", async () => {
+  const worker = await read("src/worker.js");
+  assert.match(worker, /const seller = \/\^\[A-Za-z0-9_\]\{1,32\}\$\/\.test\(rawSeller\) \? rawSeller : ""/);
+  assert.match(worker, /const sellerUserId = \/\^\\d\{1,20\}\$\/\.test\(rawSellerId\) \? rawSellerId : ""/);
+  assert.match(worker, /seller_user_id: sellerUserId/);
+});

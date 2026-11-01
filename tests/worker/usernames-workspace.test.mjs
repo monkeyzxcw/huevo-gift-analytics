@@ -80,7 +80,7 @@ test("username analytics uses CSP-safe CSS bars and JavaScript syntax is checked
   const css = await read("cloudflare-site/styles.css");
   const pkg = await read("package.json");
   assert.match(pkg, /node --check cloudflare-site\/usernames\.js/);
-  assert.match(html, /styles\.css\?v=amnyam-dota2-hud-v4/);
+  assert.match(html, /styles\.css\?v=amnyam-own-lots-v1/);
   assert.match(css, /\.username-bar-w-100\s*\{width:100%\}/);
   assert.match(css, /\.username-bar-h-100\s*\{height:100%\}/);
   assert.doesNotMatch(css.slice(css.indexOf("/* Separate Huevo market workspaces"), css.length), /<style/i);
