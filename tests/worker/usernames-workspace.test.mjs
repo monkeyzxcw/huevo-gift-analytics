@@ -32,7 +32,11 @@ test("username workspace accepts automatic Cloudflare snapshots and keeps JSON/C
   assert.match(script, /localStorage/);
   assert.match(script, /AMNYAM_MARKET/);
   assert.match(script, /BASE_KEY/);
-  assert.match(script, /fetch\("\/data\.json"/);\n  assert.match(script, /syncRemoteMarket/);
+  assert.match(script, /fetch\("\/data\.json\?_username_sync="/);
+  assert.match(script, /syncRemoteMarket/);
+  assert.match(script, /syncRemoteMarket\(\);\s*\}/);
+  assert.match(script, /usernameMarket/);
+  assert.match(script, /0 РАСПОЗНАННЫХ ЗАПИСЕЙ/);
   assert.doesNotMatch(script, /document\.cookie|localStorage\.getItem\(["'](?:huevo|cookie|session)/i);
   assert.match(html, /https:\/\/huevo\.su\/market/);
 });
