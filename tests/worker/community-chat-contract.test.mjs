@@ -41,7 +41,10 @@ test("chat frontend uses textContent, polls incrementally, and does not use push
   const html = await read("cloudflare-site/index.html");
   assert.match(chat, /text\.textContent = item\.message/);
   assert.match(chat, /\?after=" \+ lastId/);
-  assert.match(chat, /setInterval\(\(\) => loadMessages\(false\), 3000\)/);
+  assert.match(chat, /establishUnreadBaseline\(\)/);
+  assert.match(chat, /setInterval\(\(\) => active \? loadMessages\(false\) : pollUnread\(\), 3000\)/);
+  assert.match(chat, /if \(!item\.mine\) unreadCount \+= 1/);
+  assert.match(chat, /updateUnread\(\)/);
   assert.match(chat, /credentials: "same-origin"/);
   assert.doesNotMatch(chat, /serviceWorker|Notification\.requestPermission|new Notification/);
   assert.match(html, /community-chat\.js/);
