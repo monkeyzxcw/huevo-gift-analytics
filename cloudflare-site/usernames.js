@@ -104,7 +104,7 @@
       try {
         const url = new URL(value);
         if (url.protocol === "https:" && url.hostname === "huevo.su" &&
-            (url.pathname === "/market" || /^\/market\/lot\/[\w-]+\/?$/.test(url.pathname))) return url.href;
+            (url.pathname === "/market" || /^\/market\/(?:lot|username|name|user)\/[\w-]+\/?$/.test(url.pathname))) return url.href;
       } catch (_) {}
     }
     return lotId ? "https://huevo.su/market/lot/" + encodeURIComponent(String(lotId)) : "https://huevo.su/market";
@@ -707,6 +707,54 @@
     }
   }
 
+
+  async function syncRemoteMarket() {
+    try {
+      const response = await fetch("/data.json?_username_sync=" + Date.now(), {
+        cache: "no-store", headers: { Accept: "application/json" }
+      });
+      if (!response.ok) throw new Error("HTTP " + response.status);
+      const published = await response.json();
+      const market = published && (published.username_market || published.usernameMarket);
+      const rows = Array.isArray(market) ? market :
+        market && Array.isArray(market.items) ? market.items :
+        market && Array.isArray(market.listings) ? market.listings :
+        published && Array.isArray(published.usernames) ? published.usernames : null;
+      if (!rows) {
+        const status = $("usernameDataFreshness");
+        if (status && !state.items.length) status.textContent = "НЕТ username_market В СНИМКЕ";
+        return;
+      }
+      const marketStatus = String((market && market.status) || "").toLowerCase();
+      if (marketStatus && !["ok", "success", "complete", "completed", "ready"].includes(marketStatus)) {
+        const status = $("usernameDataFreshness");
+        if (status && !state.items.length) status.textContent = "СБОР НЕ ЗАВЕРШЁН";
+        return;
+      }
+      const remoteAt = safeDate(market && (market.updated_at || market.generated_at) || published.generated_at);
+      const localAt = safeDate(state.importedAt);
+      if (localAt && remoteAt && localAt >= remoteAt && state.items.length) return;
+      const incoming = rows.slice(0, MAX_ITEMS).map(normalizeRecord).filter(Boolean);
+      if (!incoming.length) {
+        const status = $("usernameDataFreshness");
+        if (status) status.textContent = "0 РАСПОЗНАННЫХ ЗАПИСЕЙ";
+        announce("Cloudflare содержит username_market, но поля объявлений не распознаны. Получено строк: " + rows.length + ".", "error");
+        return;
+      }
+      mergeImport(incoming);
+      state.importedAt = remoteAt ? remoteAt.toISOString() : isoNow();
+      persist();
+      renderAll();
+      announce("Автосбор Huevo обновлён: " + incoming.length.toLocaleString("ru-RU") +
+        " из " + rows.length.toLocaleString("ru-RU") + " объявлений.", "success");
+    } catch (error) {
+      const status = $("usernameDataFreshness");
+      if (status && !state.items.length) status.textContent = "ОШИБКА ЗАГРУЗКИ";
+      announce("Не удалось получить username_market из Cloudflare: " +
+        safeText(error && error.message, 100) + ".", "error");
+    }
+  }
+
   function bind() {
     document.body.dataset.marketWorkspace = "gifts";
     document.querySelectorAll("[data-market-type]").forEach(button => {
@@ -777,6 +825,7 @@
     profileKey = nextKey;
     state = readState();
     renderAll();
+    syncRemoteMarket();
   }
   window.addEventListener("amnyam:market", event => {
     const next = event.detail && event.detail.profileKey ? String(event.detail.profileKey) : "guest";
@@ -787,4 +836,6 @@
   if (window.AMNYAM_MARKET && window.AMNYAM_MARKET.profileKey) hydrateProfile(String(window.AMNYAM_MARKET.profileKey));
   renderAll();
   switchView("overview");
+  syncRemoteMarket();
+  window.setInterval(syncRemoteMarket, 60000);
 })();
