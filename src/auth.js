@@ -527,7 +527,7 @@ export async function sendCommunityMessage(request, env, jsonResponse) {
   const parsed = await readBody(request);
   if (parsed.error) return jsonResponse(request, env, { ok: false, error: parsed.error }, parsed.status);
   const message = typeof parsed.value.message === "string"
-    ? parsed.value.message.replace(/[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F]/g, "").trim()
+    ? [...parsed.value.message].filter(char => { const code = char.charCodeAt(0); return code === 9 || code === 10 || code === 13 || (code >= 32 && code !== 127); }).join("").trim()
     : "";
   if (!message) return jsonResponse(request, env, { ok: false, error: "Напиши сообщение перед отправкой." }, 400);
   if ([...message].length > 500) return jsonResponse(request, env, { ok: false, error: "Сообщение слишком длинное: максимум 500 символов." }, 413);
