@@ -105,6 +105,11 @@ function sanitizeLiveItems(value) {
     const fallbackLotUrl = "https://huevo.su/market/lot/" + encodeURIComponent(id);
     const lotUrl = isSafeHttpsHuevoUrl(raw.lot_url) ? String(raw.lot_url) : fallbackLotUrl;
     const imageUrl = isSafeHttpsHuevoUrl(raw.image_url) ? String(raw.image_url) : "";
+    const rawSeller = String(raw.seller || raw.seller_username || "").trim().replace(/^@+/, "");
+    const seller = /^[A-Za-z0-9_]{1,32}$/.test(rawSeller) ? rawSeller : "";
+    const rawSellerId = String(raw.seller_user_id || "").trim();
+    const sellerUserId = /^\d{1,20}$/.test(rawSellerId) ? rawSellerId : "";
+    const sellerUrl = isSafeHttpsHuevoUrl(raw.seller_url) ? String(raw.seller_url).slice(0, 500) : "";
     items.push({
       lot_id: id,
       title: String(raw.title || "Без названия").slice(0, 300),
@@ -114,6 +119,9 @@ function sanitizeLiveItems(value) {
       status: String(raw.status || "Неизвестно").slice(0, 80),
       lot_url: lotUrl,
       image_url: imageUrl,
+      seller,
+      seller_user_id: sellerUserId,
+      seller_url: sellerUrl,
       active: true,
     });
   }
@@ -483,6 +491,9 @@ async function loadPublishedSnapshot(request, env) {
         status: fresh.status || lot.status,
         lot_url: fresh.lot_url || lot.lot_url,
         image_url: fresh.image_url || lot.image_url,
+        seller: fresh.seller || lot.seller || "",
+        seller_user_id: fresh.seller_user_id || lot.seller_user_id || "",
+        seller_url: fresh.seller_url || lot.seller_url || "",
         active: true,
         last_seen: live.last_poll_at,
         history,
