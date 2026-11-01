@@ -18,6 +18,9 @@ function createD1Mock() {
           return {};
         },
         async first() {
+          if (sql.includes("SELECT generated_at") && sql.includes("FROM full_snapshot")) {
+            return snapshotRow ? { generated_at: snapshotRow.generated_at } : null;
+          }
           if (sql.includes("SELECT data_json") && sql.includes("FROM full_snapshot")) return snapshotRow;
           return null;
         },
@@ -198,3 +201,35 @@ test("snapshot ingest rejects declared oversized payload before attempting to st
   assert.equal(env.DB.snapshotRow, null);
 });
 
+
+test("a delayed full scan cannot overwrite a newer published snapshot", async () => {
+  const env = testEnv();
+  const current = {
+    generated_at: "2026-11-01T12:00:00.000Z",
+    lots: [{ lot_id: "newer", title: "Newer catalogue" }],
+  };
+  env.DB.snapshotRow = {
+    data_json: JSON.stringify(current),
+    generated_at: current.generated_at,
+    updated_at: current.generated_at,
+  };
+
+  const stale = {
+    generated_at: "2026-11-01T11:55:00.000Z",
+    lots: [{ lot_id: "older", title: "Delayed stale catalogue" }],
+  };
+  const response = await worker.fetch(new Request("https://amnyam.test/api/snapshot", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer test-ingest-token",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(stale),
+  }), env, {});
+
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).error, "stale_snapshot");
+  assert.equal(env.DB.snapshotRow.generated_at, current.generated_at);
+  const loaded = await (await worker.fetch(new Request("https://amnyam.test/data.json"), env, {})).json();
+  assert.equal(loaded.lots[0].lot_id, "newer");
+});
