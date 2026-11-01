@@ -104,7 +104,7 @@
       try {
         const url = new URL(value);
         if (url.protocol === "https:" && url.hostname === "huevo.su" &&
-            (url.pathname === "/market" || /^\/market\/lot\/[\w-]+\/?$/.test(url.pathname))) return url.href;
+            (url.pathname === "/market" || /^\/market\/(?:lot|username|name|user)\/[\w-]+\/?$/.test(url.pathname))) return url.href;
       } catch (_) {}
     }
     return lotId ? "https://huevo.su/market/lot/" + encodeURIComponent(String(lotId)) : "https://huevo.su/market";
@@ -707,6 +707,30 @@
     }
   }
 
+
+  async function syncRemoteMarket() {
+    try {
+      const response = await fetch("/data.json", { cache: "no-store", headers: { Accept: "application/json" } });
+      if (!response.ok) throw new Error("HTTP " + response.status);
+      const published = await response.json();
+      const market = published && published.username_market;
+      if (!market || market.status !== "ok" || !Array.isArray(market.items)) return;
+      const remoteAt = safeDate(market.updated_at);
+      const localAt = safeDate(state.importedAt);
+      if (localAt && remoteAt && localAt >= remoteAt && state.items.length) return;
+      const incoming = market.items.slice(0, MAX_ITEMS).map(normalizeRecord).filter(Boolean);
+      if (!incoming.length) return;
+      mergeImport(incoming);
+      state.importedAt = remoteAt ? remoteAt.toISOString() : isoNow();
+      persist();
+      renderAll();
+      announce("Автосбор Huevo обновлён: " + incoming.length.toLocaleString("ru-RU") + " объявлений.", "success");
+    } catch (_) {
+      const status = $("usernameDataFreshness");
+      if (status && !state.items.length) status.textContent = "ОЖИДАЕТ СБОРЩИК";
+    }
+  }
+
   function bind() {
     document.body.dataset.marketWorkspace = "gifts";
     document.querySelectorAll("[data-market-type]").forEach(button => {
@@ -787,4 +811,6 @@
   if (window.AMNYAM_MARKET && window.AMNYAM_MARKET.profileKey) hydrateProfile(String(window.AMNYAM_MARKET.profileKey));
   renderAll();
   switchView("overview");
+  syncRemoteMarket();
+  window.setInterval(syncRemoteMarket, 60000);
 })();

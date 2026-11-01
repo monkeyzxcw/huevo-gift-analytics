@@ -590,7 +590,7 @@
   </section>
 
   <section class="username-view hide" data-username-section="market">
-    <div class="username-section-heading"><div><span class="section-index">/ LIVE LISTINGS</span><h3>Маркет юзернеймов</h3><p>Локальная база загружается из JSON/CSV выгрузки. Для покупки и проверки статуса переходи в оригинальный Huevo Market.</p></div><a class="btn secondary" href="https://huevo.su/market" target="_blank" rel="noopener noreferrer">HUEVO MARKET ↗</a></div>
+    <div class="username-section-heading"><div><span class="section-index">/ LIVE LISTINGS</span><h3>Маркет юзернеймов</h3><p>Объявления автоматически поступают из локального HuevoDualScan через Cloudflare. JSON/CSV импорт остаётся резервным способом загрузки.</p></div><a class="btn secondary" href="https://huevo.su/market" target="_blank" rel="noopener noreferrer">HUEVO MARKET ↗</a></div>
     <form class="username-filters" id="usernameFilters">
       <label class="f grow"><span>Поиск юзернейма</span><input class="input" id="usernameSearch" type="search" placeholder="Например, alpha или @name" autocomplete="off"></label>
       <label class="f"><span>Длина</span><select class="select" id="usernameLength"><option value="">Любая</option><option value="3">3 символа</option><option value="4">4 символа</option><option value="5">5 символов</option><option value="6+">6 и больше</option></select></label>
@@ -629,7 +629,7 @@
     <div class="username-section-heading"><div><span class="section-index">/ DATA IMPORT STATION</span><h3>Импорт username-рынка</h3><p>Загрузи JSON или CSV из своей авторизованной выгрузки. Данные останутся в этом браузере и будут разделены по huEVO-профилю, если он доступен.</p></div><span class="view-stat" id="usernameImportStatus">LOCAL DATA</span></div>
     <div class="username-import-grid">
       <article class="panel username-import-card"><span class="section-index">/ 01 · IMPORT</span><h3>Загрузить объявления</h3><p class="muted">JSON: массив или объект с полем usernames/items. CSV: столбцы username, price, lot_id, status, url. Максимум 5 000 строк, валидные цены — положительные целые числа.</p><label class="btn username-file-label" for="usernameImportFile">ВЫБРАТЬ JSON / CSV</label><input id="usernameImportFile" type="file" accept=".json,.csv,application/json,text/csv" hidden><button class="btn secondary" id="usernameExportCsv" type="button">ЭКСПОРТ ТЕКУЩЕЙ БАЗЫ CSV</button><button class="btn secondary" id="usernameDownloadTemplate" type="button">СКАЧАТЬ ШАБЛОН JSON</button><small id="usernameImportFeedback" class="username-feedback" role="status" aria-live="polite">Ничего не загружено.</small></article>
-      <article class="panel username-import-card"><span class="section-index">/ 02 · SOURCE</span><h3>Оригинальный Huevo Market</h3><p>Открой отдельный рынок юзернеймов и выполни вход в Huevo вручную, если он потребуется. AMNYAM не запрашивает и не копирует cookies, пароли или коды входа.</p><a class="btn" href="https://huevo.su/market" target="_blank" rel="noopener noreferrer">ОТКРЫТЬ HUEVO MARKET ↗</a><p class="muted foot">Автоматическая выгрузка из авторизованного окна Huevo пока не подключена к локальному HuevoDualScan. До её интеграции импортируй фактическую выгрузку вручную.</p></article>
+      <article class="panel username-import-card"><span class="section-index">/ 02 · SOURCE</span><h3>Оригинальный Huevo Market</h3><p>Открой отдельный рынок юзернеймов и выполни вход в Huevo вручную, если он потребуется. AMNYAM не запрашивает и не копирует cookies, пароли или коды входа.</p><a class="btn" href="https://huevo.su/market" target="_blank" rel="noopener noreferrer">ОТКРЫТЬ HUEVO MARKET ↗</a><p class="muted foot">HuevoDualScan v13 автоматически собирает этот рынок во втором вручную авторизованном окне Chrome примерно раз в 5 минут. Не закрывай окно сборщика; импорт JSON/CSV оставлен как резерв.</p></article>
     </div>
     <article class="panel"><div class="panel-head"><h3>Формат импорта</h3><small class="muted">Пустой шаблон — без вымышленных объявлений и цен</small></div><pre class="username-json-example">{
   "schema_version": 1,
@@ -716,6 +716,6 @@
 <script src="./desk-tools.js?v=amnyam-desk-v1" defer></script>
 <script src="./intel-lab.js?v=amnyam-intel-v2" defer></script>
 <script src="./field-kit.js?v=amnyam-field-kit-v1" defer></script>
-<script src="./usernames.js?v=amnyam-usernames-v1" defer></script>
+<script src="./usernames.js?v=amnyam-usernames-v2" defer></script>
 </body>
 </html>
