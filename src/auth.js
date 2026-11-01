@@ -540,6 +540,7 @@ export async function sendCommunityMessage(request, env, jsonResponse) {
       "INSERT INTO community_messages (user_id, display_name, username, avatar_url, message, created_at) VALUES (?, ?, ?, ?, ?, ?)"
     ).bind(user.user_id, user.display_name || user.hu_username || "Пользователь huEVO",
       user.hu_username || "", user.avatar_url || "", message, createdAt).run();
+    await env.DB.prepare("DELETE FROM community_messages WHERE id NOT IN (SELECT id FROM community_messages ORDER BY id DESC LIMIT 10000)").run();
     return jsonResponse(request, env, {
       ok: true,
       message: { id: Number(result.meta?.last_row_id || 0), user_id: String(user.user_id),
