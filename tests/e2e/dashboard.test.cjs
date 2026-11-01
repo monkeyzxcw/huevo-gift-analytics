@@ -239,7 +239,7 @@ test("title-only sale benchmarks are rejected when catalog and rarity evidence i
   assert.equal(await page.locator("#dealsList .deal-card-rich").count(), 0,
     "title-only sale history must not be used to value a specific rarity/catalog lot");
   assert.match(await page.textContent("#dealsNote"), /устойчивой группы/);
-  assert.match(await page.textContent("#belowBestMeta"), /нет достаточных продаж/i);
+  assert.match(await page.textContent("#belowBestMeta"), /минимум 5 сопоставимых записей о продажах/i);
   assert.deepEqual(problems, []);
   await browser.close();
 });
