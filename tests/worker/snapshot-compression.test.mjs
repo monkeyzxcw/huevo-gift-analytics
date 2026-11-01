@@ -234,3 +234,48 @@ test("a delayed full scan cannot overwrite a newer published snapshot", async ()
   const loaded = await (await worker.fetch(new Request("https://amnyam.test/data.json"), env, {})).json();
   assert.equal(loaded.lots[0].lot_id, "newer");
 });
+
+test("atomic D1 freshness condition reports a concurrent newer upload instead of caching stale data", async () => {
+  let snapshotRow = null;
+  let freshnessReads = 0;
+  const DB = {
+    prepare(sql) {
+      let params = [];
+      return {
+        bind(...values) { params = values; return this; },
+        async first() {
+          if (sql.includes("SELECT generated_at") && sql.includes("FROM full_snapshot")) {
+            freshnessReads += 1;
+            return freshnessReads === 1 ? null : { generated_at: snapshotRow.generated_at };
+          }
+          return null;
+        },
+        async run() {
+          if (sql.includes("INSERT INTO full_snapshot")) {
+            assert.match(sql, /WHERE excluded\.generated_at >= full_snapshot\.generated_at/);
+            snapshotRow = {
+              data_json: JSON.stringify({ generated_at: "2026-11-01T12:00:00.000Z", lots: [{ lot_id: "winner" }] }),
+              generated_at: "2026-11-01T12:00:00.000Z",
+              updated_at: "2026-11-01T12:00:01.000Z",
+            };
+            return { meta: { changes: 0 } };
+          }
+          return { meta: { changes: 1 } };
+        },
+      };
+    },
+  };
+  const response = await worker.fetch(new Request("https://amnyam.test/api/snapshot", {
+    method: "POST",
+    headers: { Authorization: "Bearer test-ingest-token", "Content-Type": "application/json" },
+    body: JSON.stringify({
+      generated_at: "2026-11-01T11:59:00.000Z",
+      lots: [{ lot_id: "late-upload" }],
+    }),
+  }), { LIVE_INGEST_TOKEN: "test-ingest-token", DB }, {});
+
+  assert.equal(response.status, 409);
+  const result = await response.json();
+  assert.equal(result.error, "stale_snapshot");
+  assert.equal(result.current_generated_at, snapshotRow.generated_at);
+});
