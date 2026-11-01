@@ -19,7 +19,7 @@ jobs:
           python-version: "3.12"
       - name: Validate published snapshot and migration helpers
         run: |
-          python -m unittest discover -s tests -p 'test_snapshot.py' -v
+          python -m unittest discover -s tests -p 'test_snapshot.py' -v\n          python -m unittest discover -s tests -p 'test_d1_backup.py' -v
           python - <<'PY'
           import json, sys
           import snapshot
