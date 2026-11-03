@@ -1311,7 +1311,7 @@ test("support payment status failures do not invite duplicate intents and can be
   await page.waitForFunction(() => document.querySelector("#supportRetryStatus") && !document.querySelector("#supportRetryStatus").hidden);
   assert.match(await page.textContent("#supportMsgText"), /ранее созданный платёж/i);
 
-  await page.click('#supportAmounts [data-amount="5000"]');
+  await page.click('#supportAmounts [data-amount="5"]');
   assert.equal(intentCalls, 1, "a pending intent blocks creation of a duplicate");
   await page.click("#supportRetryStatus");
   await page.waitForFunction(() => document.querySelector("#supportMsgText").textContent.includes("Тестовый платёж подтверждён"));
