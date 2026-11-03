@@ -1948,7 +1948,7 @@ body[data-market-workspace="usernames"] .market-type-switch{border-color:#66513a
 }
 @media (max-width: 760px) {
   #mainNav { top: 0; }
-  #workspaceSubnav { top: 88px; }
+  #workspaceSubnav { top: 52px; }
   .market-results-viewport {
     height: clamp(240px, 52vh, 560px);
     max-height: calc(100dvh - 280px);
