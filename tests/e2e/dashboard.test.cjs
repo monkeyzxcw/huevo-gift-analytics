@@ -737,7 +737,7 @@ test("new catalogue, market events, date range, portfolio and Sniper rule profil
   }
 });
 
-test("AMNYAM navigation renders all views and author support shows five levels", async () => {
+test("AMNYAM navigation renders all views and author support shows six coin levels", async () => {
   const { browser, page, problems } = await open(serve(dataV2()), { width: 1280, height: 900 });
   await page.waitForSelector("#content:not(.hide)");
   const routes = [
@@ -752,8 +752,8 @@ test("AMNYAM navigation renders all views and author support shows five levels",
     if (view !== parent) await page.click('#workspaceSubnav [data-view="' + view + '"]');
     assert.equal(await page.locator('[data-view-section="' + view + '"]:not(.view-hidden)').count() > 0, true, view + " view visible");
   }
-  assert.equal(await page.locator("#supportAmounts [data-amount]").count(), 5);
-  assert.deepEqual(await page.locator("#supportAmounts [data-amount]").evaluateAll(nodes => nodes.map(n => n.dataset.amount)), ["5000", "10000", "25000", "50000", "100000"]);
+  assert.equal(await page.locator("#supportAmounts [data-amount]").count(), 6);
+  assert.deepEqual(await page.locator("#supportAmounts [data-amount]").evaluateAll(nodes => nodes.map(n => n.dataset.amount)), ["5", "50", "100", "10000", "50000", "100000"]);
   assert.deepEqual(problems, []);
   await browser.close();
 });
@@ -1267,7 +1267,7 @@ test("support payment status failures do not invite duplicate intents and can be
     supportRoutes: {
       "/api/support/config": ok({
         enabled: true,
-        amounts: [5000, 10000, 25000, 50000, 100000],
+        amounts: [5, 50, 100, 10000, 50000, 100000],
         sdk_url: "https://huevo.su/static/js/huevo-apps-v1.js",
         origins: ["huevo.su", "huevo.departament.site"]
       }),
@@ -1277,7 +1277,7 @@ test("support payment status failures do not invite duplicate intents and can be
         return route.fulfill({
           status: 200,
           contentType: "application/json",
-          body: JSON.stringify({ ok: true, intent_id: "pi_test_retry_1", amount: 5000, test: true })
+          body: JSON.stringify({ ok: true, intent_id: "pi_test_retry_1", amount: 5, test: true })
         });
       },
       "/api/support/status/pi_test_retry_1": (route) => {
@@ -1288,7 +1288,7 @@ test("support payment status failures do not invite duplicate intents and can be
         return route.fulfill({
           status: 200,
           contentType: "application/json",
-          body: JSON.stringify({ intent_id: "pi_test_retry_1", amount: 5000, status: "succeeded", test: true })
+          body: JSON.stringify({ intent_id: "pi_test_retry_1", amount: 5, status: "succeeded", test: true })
         });
       }
     }
@@ -1297,7 +1297,7 @@ test("support payment status failures do not invite duplicate intents and can be
   await page.click('#mainNav [data-view="appearance"]');
   await page.click('#workspaceSubnav [data-view="support"]');
   await page.waitForFunction(() => document.querySelector("#supportHint").textContent.includes("Платёж будет создан"));
-  await page.click('#supportAmounts [data-amount="5000"]');
+  await page.click('#supportAmounts [data-amount="5"]');
   await page.waitForFunction(() => document.querySelector("#supportRetryStatus") && !document.querySelector("#supportRetryStatus").hidden);
   assert.match(await page.textContent("#supportMsgText"), /не создавай повторный/i);
   assert.match(await page.textContent("#supportMsgText"), /pi_test_retry_1/);
