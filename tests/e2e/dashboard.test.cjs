@@ -250,11 +250,13 @@ test("signed Huevo user can identify and filter own market listings", async () =
     lots: [
       { ...makeLots(1)[0], lot_id: "owned-by-id", title: "Мой подарок по ID", seller: "different-visible-name", seller_user_id: "14188" },
       { ...makeLots(1)[0], lot_id: "owned-by-name", title: "Мой подарок по имени", seller: "monkeyzxcw", seller_user_id: "" },
+      { ...makeLots(1)[0], lot_id: "owned-by-profile-url", title: "Мой подарок по ссылке профиля", seller_url: "https://huevo.su/profile/14188" },
       { ...makeLots(1)[0], lot_id: "not-mine", title: "Чужой подарок", seller: "another_user", seller_user_id: "98765" },
       { ...makeLots(1)[0], lot_id: "same-name-wrong-id", title: "Чужой ID с похожим именем", seller: "monkeyzxcw", seller_user_id: "98765" },
-      { ...makeLots(1)[0], lot_id: "unknown-owner", title: "Пока без продавца" }
+      { ...makeLots(1)[0], lot_id: "unknown-owner", title: "Пока без продавца" },
+      { ...makeLots(1)[0], lot_id: "spoofed-profile-url", title: "Поддельная ссылка продавца", seller_url: "https://huevo.su.attacker.example/profile/14188" }
     ],
-    stats: { n_total: 5 }
+    stats: { n_total: 7 }
   });
   const { browser, page, problems } = await open(serve(data), { width: 1280, height: 900 }, {
     supportRoutes: {
@@ -271,14 +273,15 @@ test("signed Huevo user can identify and filter own market listings", async () =
   await page.waitForSelector("#content:not(.hide)");
   await page.click('#mainNav [data-view="market"]');
   await page.waitForFunction(() => !document.querySelector("#ownLotsOnly").disabled);
-  assert.equal(await page.locator("#rows .own-lot-badge").count(), 2, "only exact Huevo user ID and safe username fallback are marked");
+  assert.equal(await page.locator("#rows .own-lot-badge").count(), 3, "Huevo user ID, safe username fallback and trusted profile URL are marked");
   await page.check("#ownLotsOnly");
-  assert.match(await page.textContent("#rowCount"), /Найдено лотов: 2 из 5/);
+  assert.match(await page.textContent("#rowCount"), /Найдено лотов: 3 из 7/);
   assert.match(await page.textContent("#rows"), /Мой подарок по ID/);
   assert.match(await page.textContent("#rows"), /Мой подарок по имени/);
-  assert.doesNotMatch(await page.textContent("#rows"), /Чужой подарок|Чужой ID с похожим именем|Пока без продавца/);
+  assert.match(await page.textContent("#rows"), /Мой подарок по ссылке профиля/);
+  assert.doesNotMatch(await page.textContent("#rows"), /Чужой подарок|Чужой ID с похожим именем|Пока без продавца|Поддельная ссылка продавца/);
   await page.uncheck("#ownLotsOnly");
-  assert.match(await page.textContent("#rowCount"), /Найдено лотов: 5 из 5/);
+  assert.match(await page.textContent("#rowCount"), /Найдено лотов: 7 из 7/);
   assert.deepEqual(problems, []);
   await browser.close();
 });
