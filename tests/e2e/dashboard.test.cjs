@@ -1757,3 +1757,53 @@ test("AMNYAM Aurora interface refresh keeps navigation usable, responsive and mo
     await browser.close();
   }
 });
+
+test("AMNYAM Studio widgets can be reordered, hidden and saved with compact market mode", async () => {
+  const { browser, page, problems } = await open(serve(dataV2()), { width: 1440, height: 960 });
+  try {
+    await page.waitForSelector("#content:not(.hide)");
+    const studio = page.locator("#amnyamStudio");
+    await studio.waitFor();
+    await page.waitForFunction(() => document.querySelectorAll("#studioWidgets .studio-widget").length === 5);
+    assert.equal(await page.locator("#studioWidgets .studio-widget").count(), 5);
+    assert.match(await page.textContent("#studioMarketStatus"), /LIVE|СНИМОК/);
+
+    await page.click("#studioCustomize");
+    assert.equal(await page.locator("#studioCustomize").getAttribute("aria-expanded"), "true");
+    const firstWidget = await page.locator("#studioWidgets .studio-widget").first().getAttribute("data-studio-widget");
+    await page.locator("#studioWidgetControls .studio-control-row").first().locator(".studio-move").nth(1).click();
+    const movedWidget = await page.locator("#studioWidgets .studio-widget").nth(1).getAttribute("data-studio-widget");
+    assert.equal(movedWidget, firstWidget, "down action moves the first widget into the second position");
+
+    await page.locator("#studioWidgetControls .studio-control-row").first().locator("input[type=checkbox]").uncheck();
+    assert.equal(await page.locator("#studioWidgets .studio-widget").count(), 4);
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("amnyam.studio.v1.guest")));
+    assert.ok(stored.hidden.includes(stored.order[0]) || stored.hidden.length === 1, "hidden widgets persist in the guest profile");
+
+    await page.locator("#studioCompactMarket").check();
+    assert.equal(await page.locator("body.market-compact").count(), 1);
+    assert.equal(await page.locator("#studioMarketDensityButton").getAttribute("aria-pressed"), "true");
+    await page.reload();
+    await page.waitForSelector("#content:not(.hide)");
+    await page.waitForFunction(() => document.querySelectorAll("#studioWidgets .studio-widget").length === 4);
+    assert.equal(await page.locator("body.market-compact").count(), 1, "compact market mode survives reload");
+    assert.equal(await page.locator("#studioCustomize").count(), 1);
+    assert.deepEqual(problems, []);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("AMNYAM Studio quick filters navigate to the requested market view without a page reload", async () => {
+  const { browser, page, problems } = await open(serve(dataV2()));
+  try {
+    await page.waitForSelector("#content:not(.hide)");
+    await page.click('#studioQuickFilters [data-studio-filter="drops"]');
+    assert.equal(await page.locator('#mainNav [data-view="market"]').getAttribute("aria-selected"), "true");
+    assert.equal(await page.locator("#marketResultsViewport").count(), 1);
+    assert.equal(await page.locator("#marketResultsViewport").evaluate(el => getComputedStyle(el).overflowY), "auto");
+    assert.deepEqual(problems, []);
+  } finally {
+    await browser.close();
+  }
+});
