@@ -65,7 +65,7 @@ test("own market lots are matched to the signed huEVO profile and can be filtere
   assert.match(app, /if \(accountId && seller\.userId\) return accountId === seller\.userId/);
   assert.match(app, /accountUsername && seller\.username && accountUsername === seller\.username/);
   assert.match(app, /ownLotsOnly[^\n]*checked|const onlyOwnLots =/);
-  assert.match(app, /class: "own-lot-badge"/);
+  assert.doesNotMatch(app, /own-lot-badge|МОЙ ЛОТ/i, "market listings must not display own-lot labels");
   assert.match(html, /id="ownLotsOnly"/);
   assert.match(html, /id="ownLotsHint"/);
 });
