@@ -184,34 +184,34 @@ test("server aborts a stalled huEVO Apps API request and returns a stable timeou
 
 
 
-test("custom contribution accepts arbitrary whole amounts in the configured range", async () => {
-  const db = mockD1();
+test("support accepts any whole coin amount from 5 through 100000", async () => {
   const originalFetch = globalThis.fetch;
-  const providerCalls = [];
-  globalThis.fetch = async (url, options = {}) => {
-    providerCalls.push({ path: new URL(String(url)).pathname, body: options.body ? JSON.parse(options.body) : null });
-    return new Response(JSON.stringify({ ok: true, intent_id: "pi_custom_amount_1" }), {
-      status: 200, headers: { "Content-Type": "application/json" }
-    });
-  };
   try {
-    const result = await invokeIntent(
-      { DB: db, HU_CLIENT_ID: CLIENT_ID, HU_SECRET: SECRET },
-      signedQuery(),
-      55555
-    );
-    assert.equal(result.status, 200);
-    assert.equal(result.body.ok, true);
-    assert.equal(result.body.amount, 55555);
-    assert.equal(providerCalls.length, 1);
-    assert.equal(providerCalls[0].body.amount, 55555);
-    assert.equal(db.state.payment.amount, 55555);
+    for (const amount of [5, 50, 100, 10000, 50000, 100000, 55555]) {
+      const db = mockD1();
+      let providerAmount = null;
+      globalThis.fetch = async (_url, options = {}) => {
+        providerAmount = JSON.parse(options.body).amount;
+        return new Response(JSON.stringify({ ok: true, intent_id: "pi_custom_amount_" + amount }), {
+          status: 200, headers: { "Content-Type": "application/json" }
+        });
+      };
+      const result = await invokeIntent(
+        { DB: db, HU_CLIENT_ID: CLIENT_ID, HU_SECRET: SECRET },
+        signedQuery(),
+        amount
+      );
+      assert.equal(result.status, 200, "amount " + amount);
+      assert.equal(result.body.amount, amount);
+      assert.equal(providerAmount, amount);
+      assert.equal(db.state.payment.amount, amount);
+    }
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test("custom contribution rejects amounts outside the inclusive 5000-100000 range", async () => {
+test("support rejects values below 5 coins, above 100000, and fractions", async () => {
   const originalFetch = globalThis.fetch;
   let providerCalls = 0;
   globalThis.fetch = async () => {
@@ -219,14 +219,14 @@ test("custom contribution rejects amounts outside the inclusive 5000-100000 rang
     throw new Error("must not call provider for invalid amount");
   };
   try {
-    for (const amount of [4999, 100001, 5000.5, NaN]) {
+    for (const amount of [4, 100001, 5.5, NaN]) {
       const result = await invokeIntent(
         { DB: mockD1(), HU_CLIENT_ID: CLIENT_ID, HU_SECRET: SECRET },
         signedQuery(),
         amount
       );
       assert.equal(result.status, 400, String(amount));
-      assert.match(result.body.detail, /5000.*100000/);
+      assert.match(result.body.detail, /5.*100000/);
     }
     assert.equal(providerCalls, 0);
   } finally {
