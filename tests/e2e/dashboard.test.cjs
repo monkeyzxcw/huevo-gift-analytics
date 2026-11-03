@@ -788,6 +788,16 @@ test("value hunt compares similar gifts; smart search supports price, rarity and
   await page.fill("#search", "#1007");
   assert.match(await page.textContent("#rowCount"), /1 из 120/);
   assert.match(await page.textContent("#rows"), /Звезда/);
+
+  await page.click('#mainNav [data-view="overview"]');
+  await page.fill("#studioNaturalQuery", "редкие подарки дешевле 200");
+  await page.click("#studioNaturalSearch button[type=submit]");
+  assert.match(await page.textContent("#studioNaturalStatus"), /Применены фильтры/);
+  assert.equal(await page.locator('#mainNav [data-view="market"]').getAttribute("aria-selected"), "true");
+  assert.match(await page.locator("#search").inputValue(), /rarity:"Редкий"/);
+  assert.match(await page.locator("#search").inputValue(), /price<200/);
+  assert.match(await page.textContent("#rowCount"), /5 из 120/);
+  assert.doesNotMatch(await page.textContent("#rows"), /Обычный/);
   assert.deepEqual(problems, []);
   await browser.close();
 });
