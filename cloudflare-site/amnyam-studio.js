@@ -57,11 +57,14 @@ function parseNaturalQuery(raw){
     if(index>=0)rest=rest.slice(0,index)+" "+rest.slice(index+String(value).length);
   };
   const findFacet=(options)=>{
+    const words=lower.split(" ").filter(Boolean);
     for(const option of options){
       const phrases=[option.textContent,option.value].map(value=>String(value||"").toLocaleLowerCase("ru")).filter(Boolean);
       for(const phrase of phrases)if(lower.includes(phrase))return{option,matched:phrase};
-      const stem=phrases[0]&&phrases[0].split(/\\s+/)[0].slice(0,4);
-      if(stem){const matched=lower.split(/\\s+/).find(word=>word.startsWith(stem));if(matched)return{option,matched};}
+      for(const phrase of phrases){
+        const stem=phrase.split(" ")[0].slice(0,4);
+        if(stem.length>=3){const matched=words.find(word=>word.startsWith(stem));if(matched)return{option,matched};}
+      }
     }
     return null;
   };
