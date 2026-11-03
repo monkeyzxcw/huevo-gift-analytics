@@ -19,7 +19,8 @@ test("profile validator drops invalid lot IDs, targets and unsupported preferenc
       sniperDealSound: false,
       appearance: { background: "not-a-theme", mascot: "none", motion: "off", glass: false },
       seasonTheme: "unknown",
-      overviewWidgets: { hero: false, dayPicks: true, charts: false }
+      overviewWidgets: { hero: false, dayPicks: true, charts: false },
+      studio: { order: ["radar", "pulse", "radar", "unknown"], hidden: ["saved", "nope", "saved"], compactMarket: true }
     },
     portfolio: [
       { id: "p1", title: "Подарок А", rarity: "Редкий", quantity: 2, purchase_price: 1000, added_at: "2026-10-31T10:00:00Z" },
@@ -48,6 +49,11 @@ test("profile validator drops invalid lot IDs, targets and unsupported preferenc
   assert.equal(profile.preferences.appearance.glass, false);
   assert.equal(profile.preferences.seasonTheme, "default");
   assert.deepEqual(profile.preferences.overviewWidgets, { hero: false, dayPicks: true, charts: false });
+  assert.deepEqual(profile.preferences.studio, {
+    order: ["radar", "pulse", "movement", "watchlist", "saved"],
+    hidden: ["saved"],
+    compactMarket: true
+  });
   assert.equal(profile.portfolio.length, 1);
   assert.deepEqual(profile.portfolio[0], {
     id: "p1", title: "Подарок А", rarity: "Редкий", quantity: 2,
@@ -73,4 +79,9 @@ test("profile validator returns isolated empty defaults for absent data", () => 
   assert.deepEqual(second.portfolio, []);
   assert.deepEqual(second.sniperRuleProfiles, []);
   assert.deepEqual(second.preferences.overviewWidgets, { hero: true, dayPicks: true, charts: true });
+  assert.deepEqual(second.preferences.studio, {
+    order: ["pulse", "radar", "movement", "watchlist", "saved"],
+    hidden: [],
+    compactMarket: false
+  });
 });
