@@ -1894,3 +1894,63 @@ body[data-market-workspace="usernames"] .market-type-switch{border-color:#66513a
 .support-custom-submit:disabled, .support-custom-controls input:disabled { opacity: .55; cursor: wait; }
 .support-custom > small { color: #a9b49b; font-size: 10px; line-height: 1.5; }
 @media (max-width: 640px) { .main-nav .support-nav-cta { margin-left: 0; } .support-custom-controls { flex-direction: column; } .support-custom-controls input { width: 100%; } }
+
+
+/* Focused market workspace: keep navigation and catalogue browsing within the viewport. */
+#mainNav {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  margin-top: 0;
+  backdrop-filter: blur(16px);
+}
+#workspaceSubnav {
+  position: sticky;
+  top: 52px;
+  z-index: 39;
+  background: rgba(11, 15, 20, .96);
+  backdrop-filter: blur(14px);
+}
+.command-strip { position: relative; top: auto; z-index: auto; }
+.market-results-viewport {
+  height: clamp(260px, 58vh, 660px);
+  max-height: calc(100dvh - 300px);
+  min-height: 240px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  border: 1px solid rgba(190, 153, 105, .24);
+  border-radius: 7px;
+  background: rgba(7, 10, 15, .32);
+}
+.market-results-viewport .table-wrap {
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+}
+.market-results-viewport table { min-width: 820px; }
+.market-results-viewport thead th {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: linear-gradient(180deg, #343946, #222936);
+  box-shadow: 0 1px 0 rgba(224, 177, 113, .24);
+}
+.market-results-viewport .pager {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  padding: 9px;
+  margin: 0;
+  border-top: 1px solid rgba(190, 153, 105, .24);
+  background: rgba(12, 17, 25, .97);
+  backdrop-filter: blur(12px);
+}
+@media (max-width: 760px) {
+  #mainNav { top: 0; }
+  #workspaceSubnav { top: 88px; }
+  .market-results-viewport {
+    height: clamp(240px, 52vh, 560px);
+    max-height: calc(100dvh - 280px);
+  }
+}
