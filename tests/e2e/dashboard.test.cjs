@@ -69,7 +69,7 @@ async function open(handler, viewport = { width: 1280, height: 900 }, options = 
       }) });
     }
     if (u.pathname === "/api/support/config") {
-      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ enabled: false, amounts: [5000, 10000, 25000, 50000, 100000], sdk_url: "https://huevo.su/static/js/huevo-apps-v1.js", origins: ["huevo.su", "huevo.departament.site"] }) });
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ enabled: false, amounts: [5, 50, 100, 10000, 50000, 100000], sdk_url: "https://huevo.su/static/js/huevo-apps-v1.js", origins: ["huevo.su", "huevo.departament.site"] }) });
     }
     if (u.pathname === "/api/support/stats") {
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ enabled: false, supporters: 0, total: 0 }) });
@@ -1643,8 +1643,12 @@ test("support quick access and custom amount input are available", async () => {
   assert.match(await cta.textContent(), /Поддержать автора/);
   await cta.click();
   assert.equal(await page.locator("#supportPanel.view-hidden").count(), 0, "CTA opens the support page directly");
-  assert.equal(await page.locator("#supportCustomAmount").getAttribute("min"), "5000");
+  assert.equal(await page.locator("#supportCustomAmount").getAttribute("min"), "5");
   assert.equal(await page.locator("#supportCustomAmount").getAttribute("max"), "100000");
+  assert.deepEqual(
+    await page.locator("#supportAmounts [data-amount]").evaluateAll(nodes => nodes.map(node => Number(node.dataset.amount))),
+    [5, 50, 100, 10000, 50000, 100000]
+  );
   assert.equal(await page.locator("#supportCustomAmount").getAttribute("step"), "1");
   assert.ok(await page.locator("#supportCustomSubmit").isVisible());
   assert.deepEqual(problems, []);
