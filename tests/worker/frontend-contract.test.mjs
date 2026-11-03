@@ -76,3 +76,18 @@ test("live market ingest preserves only validated seller identity fields", async
   assert.match(worker, /const sellerUserId = \/\^\\d\{1,20\}\$\/\.test\(rawSellerId\) \? rawSellerId : ""/);
   assert.match(worker, /seller_user_id: sellerUserId/);
 });
+
+test("AMNYAM Aurora visual system remains decorative, responsive and reduced-motion aware", async () => {
+  const css = await read("cloudflare-site/styles.css");
+  const app = await read("cloudflare-site/app.js");
+  assert.match(css, /AMNYAM AURORA INTERFACE — 2026 visual system refresh/);
+  assert.match(css, /@keyframes amnyam-status-sheen/);
+  assert.match(css, /@keyframes amnyam-live-pulse/);
+  assert.match(css, /@media\s*\(prefers-reduced-motion:\s*reduce\)/);
+  assert.match(css, /#mainNav\s*\{[\s\S]*?position:\s*sticky/);
+  assert.match(css, /\.market-results-viewport\s*\{/);
+  assert.match(css, /body\[data-motion="off"\]/);
+  assert.match(app, /window\.setInterval\(pollLive,\s*3000\)/);
+  assert.match(app, /window\.setInterval\(pollFullSnapshot,\s*5\s*\*\s*60\s*\*\s*1000\)/);
+  assert.doesNotMatch(app, /(?:window\.)?location\.reload\s*\(/);
+});
