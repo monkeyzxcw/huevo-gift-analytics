@@ -166,7 +166,7 @@
   let livePollFailureCount = 0;
   let livePollBackoffUntil = 0;
   let lastSnapshotSignature = "";
-  let supportConfig = { enabled: false, amounts: [5000, 10000, 25000, 50000, 100000] };
+  let supportConfig = { enabled: false, amounts: [5, 50, 100, 10000, 50000, 100000] };
   let supportSdkReady = false;
   let supportInitRunning = false;
   const SUPPORT_INTENT_STORAGE_PREFIX = "amnyam.pending-support.v1";
@@ -2416,13 +2416,14 @@
   function renderSupportLevels() {
     const box = clear($("supportAmounts"));
     const labels = {
-      5000: "SCOUT",
-      10000: "BUILDER",
-      25000: "WORKER",
+      5: "TIP",
+      50: "BOOST",
+      100: "CHEER",
+      10000: "SCOUT",
       50000: "HARD MODE",
       100000: "AMNYAM OG"
     };
-    (supportConfig.amounts || [5000, 10000, 25000, 50000, 100000]).forEach((amount, index) => {
+    (supportConfig.amounts || [5, 50, 100, 10000, 50000, 100000]).forEach((amount, index) => {
       const button = h("button", { class: "support-level", type: "button", "data-amount": String(amount) }, [
         h("span", { class: "support-tier-num", text: "LEVEL / 0" + (index + 1) }),
         h("b", { text: fmt(amount) + " ◉" }),
@@ -2440,7 +2441,7 @@
     try {
       supportConfig = await requestSupportApi("./api/support/config");
     } catch (_) {
-      supportConfig = { enabled: false, amounts: [5000, 10000, 25000, 50000, 100000], origins: ["https://huevo.su", "https://huevo.departament.site"] };
+      supportConfig = { enabled: false, amounts: [5, 50, 100, 10000, 50000, 100000], origins: ["https://huevo.su", "https://huevo.departament.site"] };
     }
     renderSupportLevels();
     try {
@@ -2496,8 +2497,8 @@
     buttons.forEach((button) => { button.disabled = true; button.setAttribute("aria-busy", "true"); });
     try {
       const numericAmount = Number(amount);
-      if (!Number.isSafeInteger(numericAmount) || numericAmount < 5000 || numericAmount > 100000) {
-        throw new Error("Сумма должна быть целым числом от 5 000 до 100 000.");
+      if (!Number.isSafeInteger(numericAmount) || numericAmount < 5 || numericAmount > 100000) {
+        throw new Error("Сумма должна быть целым числом от 5 до 100 000 монет.");
       }
       supportMessage("Создаём запрос на поддержку…");
       const intent = await requestSupportApi("./api/support/intent", {
