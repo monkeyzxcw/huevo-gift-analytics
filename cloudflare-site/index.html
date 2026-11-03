@@ -64,6 +64,7 @@
   <button role="tab" aria-selected="false" data-view="data" data-main="data" type="button"><span>06</span> Данные</button>
   <button role="tab" aria-selected="false" data-view="favorites" data-main="portfolio" type="button"><span>07</span> Портфель <small id="navFavoritesCount">0</small></button>
   <button role="tab" aria-selected="false" data-view="appearance" data-main="settings" type="button"><span>08</span> Настройки</button>
+  <button class="support-nav-cta" type="button" data-go-view="support" aria-label="Открыть страницу поддержки AMNYAM"><span aria-hidden="true">♥</span> Поддержать автора <small>5K–100K</small></button>
 </nav>
 <nav class="workspace-subnav" id="workspaceSubnav" aria-label="Подразделы">
   <div class="workspace-subnav-group" data-subnav-group="data">
@@ -474,6 +475,14 @@
 <section class="panel support-panel" id="supportPanel" data-view-section="support">
   <div class="support-header"><div><span class="section-index">/ SUPPORT THE BUILDER</span><h2>Поддержать автора</h2><p>Для тех, кто хочет, чтобы AMNYAM MODE продолжал расти.</p></div><div class="support-mark" aria-hidden="true">◈</div></div>
   <div class="support-levels" id="supportAmounts" aria-label="Уровень поддержки"></div>
+  <div class="support-custom" aria-label="Произвольная сумма поддержки">
+    <label for="supportCustomAmount">Своя сумма · от 5 000 до 100 000</label>
+    <div class="support-custom-controls">
+      <input id="supportCustomAmount" type="number" min="5000" max="100000" step="1" inputmode="numeric" placeholder="Например, 15 000" aria-describedby="supportCustomHint">
+      <button class="support-custom-submit" id="supportCustomSubmit" type="button">Поддержать эту сумму ↗</button>
+    </div>
+    <small id="supportCustomHint">Можно указать любую целую сумму в заданном диапазоне, не только уровни выше.</small>
+  </div>
   <div class="support-message" id="supportMsg" role="status" aria-live="polite" hidden><span id="supportMsgText"></span><button class="btn secondary hide" id="supportRetryStatus" type="button" hidden>Проверить статус</button></div>
   <p class="support-hint" id="supportHint">Проверяем доступность huEVO Apps…</p>
   <div class="support-total"><span><small>Поддержали</small><b id="supporters">—</b></span><span><small>Собрано без тестовых платежей</small><b><i id="supportTotal">—</i> ◉</b></span></div>
