@@ -1,3 +1,19 @@
+// GIFTRACK intro controller (external script allowed by CSP script-src 'self').
+(function(){
+  const root=document.documentElement;
+  const intro=document.getElementById("gtIntro");
+  if(!intro)return;
+  const dismiss=()=>{
+    intro.classList.add("is-out");
+    root.classList.remove("gt-boot");
+    window.setTimeout(()=>intro.remove(),700);
+  };
+  root.classList.add("gt-boot");
+  // Never let a loading overlay trap the user, even if app initialization fails.
+  window.setTimeout(dismiss,2600);
+  if(document.readyState==="complete") window.setTimeout(dismiss,1700);
+  else window.addEventListener("load",()=>window.setTimeout(dismiss,1500),{once:true});
+})();
 "use strict";
 (function () {
   const $ = (id) => document.getElementById(id);
