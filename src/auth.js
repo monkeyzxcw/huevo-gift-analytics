@@ -216,6 +216,17 @@ export function sanitiseProfile(value) {
   const preferences = raw.preferences && typeof raw.preferences === "object" ? raw.preferences : {};
   const appearance = preferences.appearance && typeof preferences.appearance === "object" ? preferences.appearance : {};
   const overviewWidgets = preferences.overviewWidgets && typeof preferences.overviewWidgets === "object" ? preferences.overviewWidgets : {};
+  const studioRaw = preferences.studio && typeof preferences.studio === "object" && !Array.isArray(preferences.studio) ? preferences.studio : {};
+  const studioWidgets = new Set(["pulse", "radar", "movement", "watchlist", "saved"]);
+  const studioOrder = Array.isArray(studioRaw.order)
+    ? studioRaw.order.filter((id, index, values) => studioWidgets.has(id) && values.indexOf(id) === index)
+    : [];
+  ["pulse", "radar", "movement", "watchlist", "saved"].forEach(id => {
+    if (!studioOrder.includes(id)) studioOrder.push(id);
+  });
+  const studioHidden = Array.isArray(studioRaw.hidden)
+    ? [...new Set(studioRaw.hidden.filter(id => studioWidgets.has(id)))]
+    : [];
   profile.preferences = {
     alertSound: preferences.alertSound === true,
     soundVolume: Number.isInteger(preferences.soundVolume) && preferences.soundVolume >= 0 && preferences.soundVolume <= 100 ? preferences.soundVolume : 100,
@@ -233,6 +244,11 @@ export function sanitiseProfile(value) {
       hero: overviewWidgets.hero !== false,
       dayPicks: overviewWidgets.dayPicks !== false,
       charts: overviewWidgets.charts !== false
+    },
+    studio: {
+      order: studioOrder.slice(0, 5),
+      hidden: studioHidden,
+      compactMarket: studioRaw.compactMarket === true
     }
   };
   return profile;
