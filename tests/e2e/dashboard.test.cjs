@@ -1618,6 +1618,7 @@ test("username workspace imports real rows, calculates peer signals and keeps gi
     assert.match(await page.textContent("#usernameCompareBody"), /Аналоги той же длины и типа/);
     await page.click("#usernameCompareClose");
 
+    await page.click('#usernameTabs [data-username-view="deals"]');
     await page.fill("#usernameSimilarQuery", "alfae");
     await page.click("#usernameSimilarRun");
     assert.match(await page.textContent("#usernameSimilarResults"), /@alfaee/);
