@@ -2739,3 +2739,9 @@ body[data-motion="off"] .studio-widget,body.amnyam-calm .studio-widget{animation
 @keyframes gtMascotFloat{to{transform:translateY(-9px) rotate(2deg)}}@keyframes gtHeroFloat{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-13px) rotate(2deg)}}
 @media(max-width:760px){.hero-amnyam{right:0;bottom:-8px;width:150px;opacity:.28}.hero-copy{position:relative}.gt-intro-mascot{height:155px}}
 @media(prefers-reduced-motion:reduce){.gt-intro-mascot,.hero-amnyam{animation:none!important}}
+
+/* Uploaded transparent PNG artwork */
+.gt-intro-mascot{display:block;object-fit:contain;width:min(300px,48vw);height:min(260px,42vh);background:none;border:0;box-shadow:none;border-radius:0}
+.gt-intro-mascot svg{display:none}
+.hero-amnyam{display:block;object-fit:contain;height:auto;max-height:90%;filter:drop-shadow(0 0 24px #9cff3d45)}
+.hero-amnyam:after{display:none}
