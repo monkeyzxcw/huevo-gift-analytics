@@ -2706,3 +2706,22 @@ body[data-motion="off"] .studio-widget,body.amnyam-calm .studio-widget{animation
 .portfolio-add-form{align-items:end}
 @media(max-width:640px){.studio-natural-search{grid-template-columns:1fr}.studio-natural-search .btn{width:100%}}
 
+
+
+/* GIFTRACK cinematic launch */
+.gt-intro{position:fixed;inset:0;z-index:99999;display:grid;place-content:center;justify-items:center;gap:15px;overflow:hidden;background:radial-gradient(ellipse at 50% 48%,#20320d 0%,#0b1008 48%,#050705 100%);color:#efffe0;transition:opacity .65s ease,visibility .65s}
+.gt-intro:before,.gt-intro:after{content:"";position:absolute;width:70vmin;height:70vmin;border:1px solid #9bff3440;border-radius:50%;box-shadow:0 0 70px #7cff2012,inset 0 0 70px #7cff2010;animation:gtOrbit 9s linear infinite}
+.gt-intro:after{width:95vmin;height:95vmin;border-color:#d4ff2418;animation-direction:reverse;animation-duration:15s}
+.gt-intro-orbit{position:absolute;width:45vmin;height:45vmin;border:1px dashed #b6ff2d40;border-radius:50%;animation:gtOrbit 5s linear infinite}
+.gt-intro-mark{position:relative;width:86px;height:86px;display:grid;place-items:center;border-radius:25px;background:linear-gradient(145deg,#d9ff78,#76bd20);color:#102000;box-shadow:0 0 38px #a5ff3b60,0 10px 35px #0008;transform:rotate(-8deg);animation:gtMark 1.7s ease-in-out infinite alternate}
+.gt-intro-mark span{font-weight:1000;font-size:32px;letter-spacing:-5px;font-style:italic}.gt-intro-mark i{position:absolute;right:-10px;top:-13px;font-style:normal;color:#f0c56e;font-size:24px;text-shadow:0 2px 10px #000}
+.gt-intro-word{position:relative;font-size:clamp(32px,7vw,64px);font-weight:1000;letter-spacing:-.055em;text-shadow:0 0 35px #b4ff3840;animation:gtReveal .8s both}.gt-intro-word span{color:#baff45}
+.gt-intro-sub{position:relative;color:#94a77c;font-size:10px;letter-spacing:.28em;font-weight:800;text-align:center}
+.gt-intro-loader{position:relative;width:190px;height:3px;margin-top:18px;background:#29351d;overflow:hidden;border-radius:10px}.gt-intro-loader i{display:block;width:38%;height:100%;background:#c6ff54;box-shadow:0 0 12px #baff45;animation:gtLoad 1.3s ease-in-out infinite}
+.gt-intro small{position:relative;color:#7d9067;font-size:9px;letter-spacing:.2em}
+.gt-intro.is-out{opacity:0;visibility:hidden;pointer-events:none}
+.gt-boot body{overflow:hidden}
+.gt-logo{display:grid!important;place-items:center;position:relative;background:linear-gradient(145deg,#d9ff79,#7fc52b)!important;color:#102000!important;box-shadow:0 0 20px #a4ff3b40,inset 0 1px #fff8!important;transform:rotate(-5deg)}
+.gt-logo span{font-size:20px!important;font-weight:1000!important;letter-spacing:-3px!important;font-style:italic}.gt-logo i{position:absolute;right:-7px;top:-8px;font-style:normal;font-size:14px;color:#efc56e;text-shadow:0 1px 3px #000}
+@keyframes gtOrbit{to{transform:rotate(360deg)}}@keyframes gtMark{to{transform:rotate(4deg) translateY(-5px);box-shadow:0 0 55px #a5ff3b80,0 15px 40px #0009}}@keyframes gtReveal{from{opacity:0;transform:translateY(16px) scale(.94);filter:blur(8px)}to{opacity:1;transform:none;filter:none}}@keyframes gtLoad{0%{transform:translateX(-110%)}100%{transform:translateX(280%)}}
+@media(prefers-reduced-motion:reduce){.gt-intro-orbit,.gt-intro:before,.gt-intro:after,.gt-intro-mark,.gt-intro-word,.gt-intro-loader i{animation:none!important}.gt-intro{transition:none}}

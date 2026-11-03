@@ -8,13 +8,14 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://huevo.su; style-src 'self'; img-src 'self' https://huevo.su https://huevo.departament.site data:; connect-src 'self' https://huevo.su https://*.huevo.su; base-uri 'none'; form-action 'none'">
 <title>AMNYAM MODE — Huevo Gift Intelligence</title>
 <link rel="preload" as="image" href="./assets/amnyam-battlefield.webp" fetchpriority="high">
-<link rel="stylesheet" href="./styles.css?v=amnyam-studio-v2">
+<link rel="stylesheet" href="./styles.css?v=gifttrack-launch-v1">
 </head>
 <body>
 <a class="skip" href="#catalog">К каталогу</a>
+<div class="gt-intro" id="gtIntro" aria-label="GIFTRACK"><div class="gt-intro-orbit"></div><div class="gt-intro-mark"><span>GT</span><i>♛</i></div><div class="gt-intro-word">GIF<span>TRACK</span></div><div class="gt-intro-sub">AMNYAM MODE · GIFT MARKET INTELLIGENCE</div><div class="gt-intro-loader"><i></i></div><small>ЗАГРУЖАЕМ АРЕНУ…</small></div>
 <main class="wrap">
 <header class="top">
-  <div class="brand"><div class="logo" aria-hidden="true"><span>H</span><i></i></div><div><h1>AMNYAM <span>MODE</span></h1><p>WORKER EDITION · GIFT MARKET INTELLIGENCE</p></div></div>
+  <div class="brand"><div class="logo gt-logo" aria-label="GIFTRACK"><span>GT</span><i>♛</i></div><div><h1>AMNYAM <span>MODE</span></h1><p>WORKER EDITION · GIFT MARKET INTELLIGENCE</p></div></div>
   <div class="top-right">
     <div class="mascot-dock" id="amnyamMascot" data-mood="neutral" aria-label="AMNYAM mascot">
       <svg class="mascot-svg" viewBox="0 0 64 64" role="img" aria-label="Кот-страж AMNYAM">
@@ -779,7 +780,7 @@
 </main>
 <img id="customWallpaper" alt="" aria-hidden="true"><div id="ambientLayer" aria-hidden="true"></div><div id="cursorGlow" aria-hidden="true"></div>
 <div class="premium-splash" id="premiumSplash" aria-hidden="true"><div class="splash-mark">H<span>•</span></div><div class="splash-title">AMNYAM <b>MODE</b></div><div class="splash-subtitle">GIFT MARKET INTELLIGENCE</div><div class="splash-loader"><i></i></div></div>
-<script src="./app.js?v=amnyam-studio-v2" defer></script>
+<script src="./app.js?v=gifttrack-launch-v1" defer></script>
 <script src="./amnyam-studio.js?v=amnyam-studio-v1" defer></script>
 <script src="./sniper.js?v=amnyam-sniper-rules-v3" defer></script>
 <script src="./desk-tools.js?v=amnyam-desk-v1" defer></script>
@@ -787,5 +788,6 @@
 <script src="./field-kit.js?v=amnyam-field-kit-v1" defer></script>
 <script src="./usernames.js?v=amnyam-usernames-v4" defer></script>
 <script src="./community-chat.js?v=amnyam-community-v1" defer></script>
+<script>document.documentElement.classList.add("gt-boot");window.addEventListener("load",()=>{const intro=document.getElementById("gtIntro");setTimeout(()=>{intro?.classList.add("is-out");document.documentElement.classList.remove("gt-boot");},1900);setTimeout(()=>intro?.remove(),2700);});</script>
 </body>
 </html>
