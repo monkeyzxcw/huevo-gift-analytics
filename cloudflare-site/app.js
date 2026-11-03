@@ -3137,6 +3137,29 @@
     $("savedFilterSelect").value = String(index);
     applyFilterPreset();
   });
+  window.addEventListener("amnyam:studio-query", event => {
+    const detail = event.detail || {};
+    if (detail.view === "deals") {
+      switchView("deals", true);
+      return;
+    }
+    const query = String(detail.query || "").trim();
+    if (!query) return;
+    switchView("market", true);
+    state.catalogMode = "lots";
+    document.querySelectorAll("[data-catalog-mode]").forEach(button => {
+      const active = button.dataset.catalogMode === "lots";
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    ["pmin", "pmax", "rarity", "status"].forEach(id => { $(id).value = ""; });
+    $("search").value = query;
+    $("globalSearch").value = query;
+    state.page = 0;
+    setSortMenuOptions();
+    applyFilters();
+    renderRows();
+  });
   window.addEventListener("amnyam:studio-filter", event => {
     const key = String(event.detail && event.detail.key || "");
     const allowed = {
