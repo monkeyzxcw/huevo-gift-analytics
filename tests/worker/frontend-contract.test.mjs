@@ -143,6 +143,11 @@ test("portfolio purchase dates and notes are persisted, sanitized and exported",
 test("Intelligence Lab saves screeners inline without blocking browser prompts", async () => {
   const html = await read("cloudflare-site/index.html");
   const intel = await read("cloudflare-site/intel-lab.js");
+  assert.match(html, /id="intelPeriod"/);
+  assert.match(intel, /"24h":86400000/);
+  assert.match(intel, /"7d":604800000/);
+  assert.match(intel, /"30d":2592000000/);
+  assert.match(intel, /change_period:periodLabel\(selectedPeriod\(\)\)/);
   assert.match(html, /id="intelFilterName"/);
   assert.match(intel, /\$\("intelFilterName"\)/);
   assert.doesNotMatch(intel, /prompt\(/, "screeners use inline controls rather than a system prompt");
