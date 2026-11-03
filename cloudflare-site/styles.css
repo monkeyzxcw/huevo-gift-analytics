@@ -179,7 +179,7 @@ tbody tr:hover td{background:#1a2115}
 .support-header h2{font-size:clamp(24px,3vw,35px);letter-spacing:-.06em;text-transform:uppercase;margin:7px 0}
 .support-header p{margin:0;color:var(--muted);font-size:12px}
 .support-mark{height:62px;width:62px;display:grid;place-items:center;border:1px solid #607c37;background:#1f2a12;color:var(--amnyam-acid);font-size:31px;transform:rotate(8deg)}
-.support-levels{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px;margin:20px 0 14px}
+.support-levels{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:9px;margin:20px 0 14px}
 .support-level{border:1px solid #3a442e;border-radius:8px;background:#0b0e09;color:#eff4e7;min-height:115px;text-align:left;padding:13px;cursor:pointer;display:flex;flex-direction:column;justify-content:space-between;gap:8px;transition:border-color .12s,transform .12s}
 .support-level:hover{border-color:var(--amnyam-acid);transform:translateY(-2px)}
 .support-level b{font:950 18px ui-monospace,monospace;color:var(--amnyam-acid)}
