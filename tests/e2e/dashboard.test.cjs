@@ -1848,3 +1848,28 @@ test("AMNYAM Studio settings are partitioned by full huEVO internal user ID", as
     await browser.close();
   }
 });
+
+test("AMNYAM Studio radar ranks evidence confidence and confirmed sales above raw discount size", async () => {
+  const { browser, page, problems } = await open(serve(dataV2()));
+  try {
+    await page.waitForSelector("#content:not(.hide)");
+    await page.evaluate(() => {
+      window.dispatchEvent(new CustomEvent("amnyam:market", { detail: {
+        profileKey: "guest",
+        data: { live: { enabled: true, fresh: true, last_poll_at: new Date().toISOString() }, generated_at: new Date().toISOString() },
+        lots: [], favorites: [], targets: {}, savedFilters: [],
+        deals: [
+          { lot_id: "active-high-discount", title: "Сильная скидка, слабые доказательства", price: 100, discount_pct: 55, sample_size: 80, confidence: "low", basis: "active", reference_price: 222 },
+          { lot_id: "confirmed-sale", title: "Ниже скидка, но подтверждённые продажи", price: 160, discount_pct: 20, sample_size: 8, confidence: "high", basis: "sales", reference_price: 200 }
+        ]
+      } }));
+    });
+    await page.waitForFunction(() => document.querySelector("#studioWidgets .studio-widget-radar .studio-opportunity-main b")?.textContent.includes("подтверждённые продажи"));
+    assert.equal(await page.locator("#studioWidgets .studio-widget-radar .studio-opportunity-main b").first().textContent(), "Ниже скидка, но подтверждённые продажи");
+    assert.match(await page.textContent("#studioWidgets .studio-widget-radar"), /надёжность высокая/);
+    assert.match(await page.textContent("#studioWidgets .studio-widget-radar"), /подтверждённые продажи/);
+    assert.deepEqual(problems, []);
+  } finally {
+    await browser.close();
+  }
+});
