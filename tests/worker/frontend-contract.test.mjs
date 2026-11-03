@@ -100,6 +100,8 @@ test("AMNYAM Studio dashboard, natural search and per-user layout preferences ar
   assert.match(html, /id="amnyamStudio" data-view-section="overview"/);
   assert.match(html, /amnyam-studio\.js\?v=amnyam-studio-v1/);
   assert.match(html, /id="studioNaturalSearch"/);
+  assert.match(studio, /confidence\(b\.confidence\) - confidence\(a\.confidence\)/, "deal radar ranks evidence confidence before discount");
+  assert.match(studio, /a\.basis === "sales" \? -1 : 1/, "confirmed sale evidence outranks asking-price-only evidence");
   assert.match(studio, /function parseNaturalQuery/);
   assert.match(studio, /function submitNaturalQuery/);
   assert.match(studio, /data-studio-filter/);
