@@ -91,3 +91,64 @@ test("AMNYAM Aurora visual system remains decorative, responsive and reduced-mot
   assert.match(app, /window\.setInterval\(pollFullSnapshot,\s*5\s*\*\s*60\s*\*\s*1000\)/);
   assert.doesNotMatch(app, /(?:window\.)?location\.reload\s*\(/);
 });
+
+test("AMNYAM Studio dashboard, natural search and per-user layout preferences are wired end to end", async () => {
+  const html = await read("cloudflare-site/index.html");
+  const app = await read("cloudflare-site/app.js");
+  const studio = await read("cloudflare-site/amnyam-studio.js");
+  const auth = await read("src/auth.js");
+  assert.match(html, /id="amnyamStudio" data-view-section="overview"/);
+  assert.match(html, /amnyam-studio\.js\?v=amnyam-studio-v1/);
+  assert.match(html, /id="studioNaturalSearch"/);
+  assert.match(studio, /confidence\(b\.confidence\) - confidence\(a\.confidence\)/, "deal radar ranks evidence confidence before discount");
+  assert.match(studio, /a\.basis === "sales" \? -1 : 1/, "confirmed sale evidence outranks asking-price-only evidence");
+  assert.match(studio, /function parseNaturalQuery/);
+  assert.match(studio, /function submitNaturalQuery/);
+  assert.match(studio, /data-studio-filter/);
+  assert.match(studio, /function move\(/);
+  assert.match(studio, /studioCompactMarket/);
+  assert.match(app, /amnyam:studio-change/);
+  assert.match(app, /amnyam:studio-query/);
+  assert.match(app, /AMNYAM_STUDIO_SETTINGS\.get/);
+  assert.match(auth, /studioWidgets = new Set\(\["pulse", "radar", "movement", "watchlist", "saved"\]\)/);
+  assert.match(auth, /compactMarket: studioRaw\.compactMarket === true/);
+});
+
+test("username market comparison and similar-handle search are local, bounded and safe", async () => {
+  const html = await read("cloudflare-site/index.html");
+  const module = await read("cloudflare-site/usernames.js");
+  assert.match(html, /id="usernameCompareSelected"/);
+  assert.match(html, /id="usernameCompareDialog"/);
+  assert.match(html, /id="usernameSimilarQuery"/);
+  assert.match(module, /usernameCompareKeys\.size < 4/);
+  assert.match(module, /function openUsernameComparison/);
+  assert.match(module, /function levenshtein/);
+  assert.match(module, /function runSimilarUsernames/);
+  assert.match(module, /не проверка доступности/i);
+  assert.doesNotMatch(module, /\.innerHTML\s*=/, "username comparisons must use safe DOM text nodes");
+});
+
+test("portfolio purchase dates and notes are persisted, sanitized and exported", async () => {
+  const html = await read("cloudflare-site/index.html");
+  const app = await read("cloudflare-site/app.js");
+  const auth = await read("src/auth.js");
+  assert.match(html, /id="portfolioPurchaseDate"/);
+  assert.match(html, /id="portfolioNotes"/);
+  assert.match(app, /purchase_date: purchaseDate, notes/);
+  assert.match(app, /\["Заметка", item => item\.notes/);
+  assert.match(auth, /purchase_date: validPurchaseDate \? purchaseDate : ""/);
+  assert.match(auth, /notes: cleanString\(item\.notes, 300\)/);
+});
+
+test("Intelligence Lab saves screeners inline without blocking browser prompts", async () => {
+  const html = await read("cloudflare-site/index.html");
+  const intel = await read("cloudflare-site/intel-lab.js");
+  assert.match(html, /id="intelPeriod"/);
+  assert.match(intel, /"24h":86400000/);
+  assert.match(intel, /"7d":604800000/);
+  assert.match(intel, /"30d":2592000000/);
+  assert.match(intel, /change_period:periodLabel\(selectedPeriod\(\)\)/);
+  assert.match(html, /id="intelFilterName"/);
+  assert.match(intel, /\$\("intelFilterName"\)/);
+  assert.doesNotMatch(intel, /prompt\(/, "screeners use inline controls rather than a system prompt");
+});

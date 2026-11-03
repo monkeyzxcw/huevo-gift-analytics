@@ -203,6 +203,37 @@
 
 <div id="content" class="hide">
 
+
+<section class="panel studio-panel" id="amnyamStudio" data-view-section="overview" aria-labelledby="studioTitle">
+  <div class="section-heading studio-heading">
+    <div><span class="section-index">/ AMNYAM PERSONAL COMMAND DECK</span><h2 id="studioTitle">Твоя рыночная станция</h2><p>Персональные сигналы, быстрые фильтры и рабочие виджеты. Переставляй блоки и скрывай ненужные.</p></div>
+    <div class="studio-heading-actions"><span class="view-stat" id="studioMarketStatus">ОЖИДАЕМ РЫНОК</span><button class="btn secondary" id="studioCustomize" type="button" aria-expanded="false">Настроить станцию</button></div>
+  </div>
+  <div class="studio-customize hide" id="studioCustomizePanel">
+    <div class="studio-customize-title"><b>Моя компоновка</b><small>Изменения сохраняются в профиле huEVO.</small></div>
+    <div id="studioWidgetControls" class="studio-widget-controls"></div>
+    <label class="studio-density-toggle"><input type="checkbox" id="studioCompactMarket"> Компактный режим таблиц маркета</label>
+    <button class="btn secondary" id="studioResetLayout" type="button">Вернуть стандартную компоновку</button>
+  </div>
+  <div class="studio-quick-filters" id="studioQuickFilters" aria-label="Быстрые действия рынка">
+    <button type="button" data-studio-filter="deals"><span>↘</span> Выгодные лоты</button>
+    <button type="button" data-studio-filter="new"><span>✦</span> Новые</button>
+    <button type="button" data-studio-filter="drops"><span>⌁</span> Цена снижается</button>
+    <button type="button" data-studio-filter="cheap"><span>◉</span> Дешёвые</button>
+    <button type="button" data-studio-filter="favorites"><span>☆</span> Мой список</button>
+    <button type="button" data-studio-filter="usernames"><span>@</span> Юзернеймы</button>
+  </div>
+  <form class="studio-natural-search" id="studioNaturalSearch">
+    <label class="studio-natural-input"><span>Быстрый запрос по-русски</span><input class="input" id="studioNaturalQuery" maxlength="180" placeholder="Например: редкие подарки дешевле 3000"></label>
+    <button class="btn" type="submit">Разобрать запрос ↗</button>
+    <small id="studioNaturalStatus" role="status" aria-live="polite">Запрос обрабатывается локально и превращается в фильтры AMNYAM.</small>
+  </form>
+  <div class="studio-widgets" id="studioWidgets" aria-live="polite"><div class="studio-loading">Собираем персональную панель…</div></div>
+  <div class="studio-foot"><span><i></i> РЫНОЧНЫЕ ДАННЫЕ ИЗ ТЕКУЩЕГО СНИМКА</span><span id="studioUpdatedAt">Ожидаем обновление</span></div>
+</section>
+
+
+
 <section class="panel overview-pick" id="overviewPick" data-view-section="overview">
   <div class="pick-stamp" aria-hidden="true">AM<br>NYAM</div>
   <div class="pick-copy"><span class="section-index">/ BEST RELIABLE DISCOUNT</span><h2>Лучший надёжный <span>дисконт</span></h2><p id="overviewPickHint">Сравниваем дисконт с аналогами и отдельно отмечаем подозрительно экстремальные цены.</p></div>
@@ -258,9 +289,10 @@
 <label><span>Цена от</span><input class="input" id="intelMin" type="number" min="0" step="1" placeholder="Мин."></label>
 <label><span>Цена до</span><input class="input" id="intelMax" type="number" min="0" step="1" placeholder="Макс."></label>
 <label><span>Сигнал</span><select class="select" id="intelSignal"><option value="all">Все лоты</option><option value="discount">Ниже ориентира</option><option value="drop">Цена падает</option><option value="rise">Цена растёт</option><option value="new">Новые за 24 ч</option><option value="scarce">Мало аналогов</option><option value="crowded">Много аналогов</option><option value="wide">Широкий разброс</option><option value="stale">Данные старше 24 ч</option></select></label>
+<label><span>Период динамики</span><select class="select" id="intelPeriod"><option value="24h">24 часа</option><option value="7d" selected>7 дней</option><option value="30d">30 дней</option><option value="all">Вся доступная история</option></select></label>
 <label><span>Сортировка</span><select class="select" id="intelSort"><option value="discount">Скидка к ориентиру</option><option value="price">Цена: дороже → дешевле</option><option value="delta">Изменение цены</option><option value="supply">Количество аналогов</option><option value="confidence">Надёжность выборки</option><option value="fresh">Дата появления</option><option value="volatility">Разброс цен</option></select></label>
 </div>
-<div class="intel-actions"><button class="btn" id="intelSaveFilter" type="button">Сохранить скринер</button><button class="btn secondary" id="intelReset" type="button">Сбросить фильтры</button><button class="btn secondary" id="intelExportCsv" type="button">Экспорт CSV</button><button class="btn secondary" id="intelExportJson" type="button">Экспорт JSON</button><button class="btn secondary" id="intelCopyBrief" type="button">Скопировать сводку</button></div>
+<div class="intel-actions"><label class="intel-save-name"><span class="sr">Название скринера</span><input class="input" id="intelFilterName" maxlength="60" placeholder="Название скринера"></label><button class="btn" id="intelSaveFilter" type="button">Сохранить скринер</button><button class="btn secondary" id="intelReset" type="button">Сбросить фильтры</button><button class="btn secondary" id="intelExportCsv" type="button">Экспорт CSV</button><button class="btn secondary" id="intelExportJson" type="button">Экспорт JSON</button><button class="btn secondary" id="intelCopyBrief" type="button">Скопировать сводку</button></div>
 <div class="intel-layout"><div><div class="intel-table-wrap"><table class="intel-table"><thead><tr><th>Подарок</th><th>Цена / динамика</th><th>Ориентир</th><th>Аналоги</th><th>Сигнал / выборка</th><th>Разброс</th><th>Лот</th></tr></thead><tbody id="intelRows"><tr><td colspan="7" class="empty">Загрузка рынка…</td></tr></tbody></table></div><p class="muted">Показаны первые 100 строк; экспорт включает все отфильтрованные результаты.</p></div><aside class="intel-side"><section class="intel-side-card"><h3>Сравнение по редкости</h3><div id="intelRarityStats"></div></section><section class="intel-side-card"><h3>Сохранённые скринеры</h3><div id="intelSaved"></div><p class="muted">Скринеры локальны для текущего профиля и браузера.</p></section></aside></div><p class="intel-status" id="intelStatus" role="status" aria-live="polite"></p>
 </section>
 
@@ -377,6 +409,8 @@
     <label class="f"><span>Редкость</span><input class="input" id="portfolioRarity" maxlength="80" placeholder="Редкость"></label>
     <label class="f"><span>Количество</span><input class="input" id="portfolioQuantity" type="number" min="1" max="1000" step="1" value="1" required></label>
     <label class="f"><span>Цена покупки за шт.</span><input class="input" id="portfolioCost" type="number" min="1" step="1" placeholder="Цена" required></label>
+    <label class="f"><span>Дата покупки</span><input class="input" id="portfolioPurchaseDate" type="date"></label>
+    <label class="f grow"><span>Заметка</span><input class="input" id="portfolioNotes" type="text" maxlength="300" placeholder="Например: серия, номер экземпляра, условия"></label>
     <button class="btn" type="submit">Добавить покупку</button>
   </form>
   <div class="cards portfolio-summary" id="portfolioSummary"></div>
@@ -526,6 +560,7 @@
     <div class="catalog-modes" role="group" aria-label="Режим каталога"><button class="mode-btn active" type="button" data-catalog-mode="lots" aria-pressed="true">Отдельные лоты</button><button class="mode-btn" type="button" data-catalog-mode="gifts" aria-pressed="false">По типам подарков</button></div>
     <span class="muted mode-note">Группировка объединяет название подарка и редкость</span>
     <div class="market-export"><button class="btn secondary" id="exportCsv" type="button">Экспорт CSV</button><small id="exportCsvStatus" role="status"></small></div>
+    <button class="btn secondary studio-density-button" id="studioMarketDensityButton" type="button" aria-pressed="false">Компактный вид</button>
   </div>
   <div class="saved-filters">
     <label class="f preset-name"><span>Название набора</span><input class="input" id="presetName" type="text" maxlength="40" placeholder="Например, редкие до 100k"></label>
@@ -626,6 +661,7 @@
       <button class="btn secondary" id="usernameResetFilters" type="button">СБРОСИТЬ</button>
     </form>
     <div class="username-market-toolbar"><span id="usernameMarketCount" class="view-stat">0 объявлений</span><small>Цена объявления ≠ подтверждённая цена продажи.</small></div>
+    <div class="username-compare-toolbar"><span id="usernameCompareCount" class="muted">Выбрано: 0/4</span><button class="btn secondary" id="usernameCompareSelected" type="button" disabled>Сравнить выбранные</button><button class="btn secondary" id="usernameCompareClear" type="button" disabled>Очистить</button><small>Выбери до четырёх имён для сравнения.</small></div>
     <div class="table-wrap username-table-wrap"><table class="username-table"><caption class="sr">Импортированные объявления username market</caption><thead><tr><th>Юзернейм</th><th>Длина</th><th>Цена объявления</th><th>Изменение в импортах</th><th>Статус</th><th>Действия</th></tr></thead><tbody id="usernameRows"><tr><td colspan="6" class="empty">Импортируй данные в разделе «Данные».</td></tr></tbody></table></div>
   </section>
 
@@ -637,6 +673,11 @@
   <section class="username-view hide" data-username-section="deals">
     <div class="username-section-heading"><div><span class="section-index">/ COMPARABLE ASKING PRICES</span><h3>Возможности ниже ориентира</h3><p>Ориентир — медиана объявлений с тем же количеством символов и типом строки, минимум 5 аналогов. Это не медиана завершённых сделок.</p></div><span class="view-stat" id="usernameDealsMeta">НЕТ ВЫБОРКИ</span></div>
     <div id="usernameDealsList" class="username-deal-grid"></div>
+    <article class="panel username-similar-panel">
+      <div class="panel-head"><div><span class="section-index">/ HANDLE DISCOVERY</span><h3>Похожие юзернеймы</h3><p class="muted">Подбор близких имён только среди текущей импортированной базы. Результат не подтверждает доступность имени на Huevo.</p></div></div>
+      <div class="username-similar-controls"><label class="f grow"><span>Исходное имя</span><input class="input" id="usernameSimilarQuery" maxlength="32" placeholder="Например, alpha"></label><label class="f"><span>Сходство</span><select class="select" id="usernameSimilarMode"><option value="strict">Очень близкие</option><option value="wide">Похожие по форме</option></select></label><button class="btn secondary" id="usernameSimilarRun" type="button">Найти похожие</button></div>
+      <div class="username-similar-results" id="usernameSimilarResults"><p class="muted">Введи имя, чтобы найти похожие варианты в загруженной базе.</p></div>
+    </article>
   </section>
 
   <section class="username-view hide" data-username-section="analytics">
@@ -671,6 +712,8 @@
     </div>
   </section>
 </section>
+
+<dialog id="usernameCompareDialog" class="username-compare-dialog" aria-labelledby="usernameCompareTitle"><div class="dlg-head"><div><span class="section-index">/ HANDLE COMPARISON</span><h3 id="usernameCompareTitle">Сравнение юзернеймов</h3></div><button class="btn secondary" id="usernameCompareClose" type="button" aria-label="Закрыть сравнение">✕</button></div><div id="usernameCompareBody"></div></dialog>
 
 <dialog id="usernameTargetDialog" class="username-target-dialog" aria-labelledby="usernameTargetTitle">
   <div class="dlg-head"><div><span class="section-index">/ PRICE ALERT</span><h3 id="usernameTargetTitle">Целевая цена</h3></div><button type="button" class="btn secondary" id="usernameTargetClose">✕</button></div>
@@ -737,6 +780,7 @@
 <img id="customWallpaper" alt="" aria-hidden="true"><div id="ambientLayer" aria-hidden="true"></div><div id="cursorGlow" aria-hidden="true"></div>
 <div class="premium-splash" id="premiumSplash" aria-hidden="true"><div class="splash-mark">H<span>•</span></div><div class="splash-title">AMNYAM <b>MODE</b></div><div class="splash-subtitle">GIFT MARKET INTELLIGENCE</div><div class="splash-loader"><i></i></div></div>
 <script src="./app.js?v=amnyam-own-lots-v1" defer></script>
+<script src="./amnyam-studio.js?v=amnyam-studio-v1" defer></script>
 <script src="./sniper.js?v=amnyam-sniper-rules-v3" defer></script>
 <script src="./desk-tools.js?v=amnyam-desk-v1" defer></script>
 <script src="./intel-lab.js?v=amnyam-intel-v2" defer></script>

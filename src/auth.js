@@ -182,12 +182,18 @@ export function sanitiseProfile(value) {
       const purchasePrice = Number(item.purchase_price);
       if (!title || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 1000 ||
           !Number.isSafeInteger(purchasePrice) || purchasePrice < 1 || purchasePrice > 1e15) return null;
+      const purchaseDate = cleanString(item.purchase_date, 10);
+      const validPurchaseDate = /^\d{4}-\d{2}-\d{2}$/.test(purchaseDate) &&
+        Number.isFinite(Date.parse(purchaseDate + "T00:00:00Z")) &&
+        new Date(purchaseDate + "T00:00:00Z").toISOString().slice(0, 10) === purchaseDate;
       return {
         id: cleanString(item.id, 80) || "portfolio-" + index,
         title,
         rarity: cleanString(item.rarity, 80),
         quantity,
         purchase_price: purchasePrice,
+        purchase_date: validPurchaseDate ? purchaseDate : "",
+        notes: cleanString(item.notes, 300).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, ""),
         added_at: cleanString(item.added_at, 40)
       };
     }).filter(Boolean);
@@ -216,6 +222,17 @@ export function sanitiseProfile(value) {
   const preferences = raw.preferences && typeof raw.preferences === "object" ? raw.preferences : {};
   const appearance = preferences.appearance && typeof preferences.appearance === "object" ? preferences.appearance : {};
   const overviewWidgets = preferences.overviewWidgets && typeof preferences.overviewWidgets === "object" ? preferences.overviewWidgets : {};
+  const studioRaw = preferences.studio && typeof preferences.studio === "object" && !Array.isArray(preferences.studio) ? preferences.studio : {};
+  const studioWidgets = new Set(["pulse", "radar", "movement", "watchlist", "saved"]);
+  const studioOrder = Array.isArray(studioRaw.order)
+    ? studioRaw.order.filter((id, index, values) => studioWidgets.has(id) && values.indexOf(id) === index)
+    : [];
+  ["pulse", "radar", "movement", "watchlist", "saved"].forEach(id => {
+    if (!studioOrder.includes(id)) studioOrder.push(id);
+  });
+  const studioHidden = Array.isArray(studioRaw.hidden)
+    ? [...new Set(studioRaw.hidden.filter(id => studioWidgets.has(id)))]
+    : [];
   profile.preferences = {
     alertSound: preferences.alertSound === true,
     soundVolume: Number.isInteger(preferences.soundVolume) && preferences.soundVolume >= 0 && preferences.soundVolume <= 100 ? preferences.soundVolume : 100,
@@ -233,6 +250,11 @@ export function sanitiseProfile(value) {
       hero: overviewWidgets.hero !== false,
       dayPicks: overviewWidgets.dayPicks !== false,
       charts: overviewWidgets.charts !== false
+    },
+    studio: {
+      order: studioOrder.slice(0, 5),
+      hidden: studioHidden,
+      compactMarket: studioRaw.compactMarket === true
     }
   };
   return profile;

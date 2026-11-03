@@ -19,10 +19,11 @@ test("profile validator drops invalid lot IDs, targets and unsupported preferenc
       sniperDealSound: false,
       appearance: { background: "not-a-theme", mascot: "none", motion: "off", glass: false },
       seasonTheme: "unknown",
-      overviewWidgets: { hero: false, dayPicks: true, charts: false }
+      overviewWidgets: { hero: false, dayPicks: true, charts: false },
+      studio: { order: ["radar", "pulse", "radar", "unknown"], hidden: ["saved", "nope", "saved"], compactMarket: true }
     },
     portfolio: [
-      { id: "p1", title: "Подарок А", rarity: "Редкий", quantity: 2, purchase_price: 1000, added_at: "2026-10-31T10:00:00Z" },
+      { id: "p1", title: "Подарок А", rarity: "Редкий", quantity: 2, purchase_price: 1000, purchase_date: "2026-10-30", notes: "Серийный номер проверен", added_at: "2026-10-31T10:00:00Z" },
       { id: "p2", title: "", rarity: "", quantity: 0, purchase_price: -1 },
       { id: "p3", title: "Подарок Б", rarity: "", quantity: 1001, purchase_price: 500 }
     ],
@@ -48,10 +49,16 @@ test("profile validator drops invalid lot IDs, targets and unsupported preferenc
   assert.equal(profile.preferences.appearance.glass, false);
   assert.equal(profile.preferences.seasonTheme, "default");
   assert.deepEqual(profile.preferences.overviewWidgets, { hero: false, dayPicks: true, charts: false });
+  assert.deepEqual(profile.preferences.studio, {
+    order: ["radar", "pulse", "movement", "watchlist", "saved"],
+    hidden: ["saved"],
+    compactMarket: true
+  });
   assert.equal(profile.portfolio.length, 1);
   assert.deepEqual(profile.portfolio[0], {
     id: "p1", title: "Подарок А", rarity: "Редкий", quantity: 2,
-    purchase_price: 1000, added_at: "2026-10-31T10:00:00Z"
+    purchase_price: 1000, purchase_date: "2026-10-30", notes: "Серийный номер проверен",
+    added_at: "2026-10-31T10:00:00Z"
   });
   assert.equal(profile.sniperRuleProfiles.length, 1);
   assert.deepEqual(profile.sniperRuleProfiles[0].filter, {
@@ -73,4 +80,22 @@ test("profile validator returns isolated empty defaults for absent data", () => 
   assert.deepEqual(second.portfolio, []);
   assert.deepEqual(second.sniperRuleProfiles, []);
   assert.deepEqual(second.preferences.overviewWidgets, { hero: true, dayPicks: true, charts: true });
+  assert.deepEqual(second.preferences.studio, {
+    order: ["pulse", "radar", "movement", "watchlist", "saved"],
+    hidden: [],
+    compactMarket: false
+  });
+});
+
+test("portfolio sanitizer keeps valid purchase date and bounded notes, rejects malformed dates", () => {
+  const profile = sanitiseProfile({
+    portfolio: [
+      { title: "Gift A", quantity: 1, purchase_price: 100, purchase_date: "2026-10-30", notes: "Проверено" },
+      { title: "Gift B", quantity: 1, purchase_price: 100, purchase_date: "2026-02-30", notes: "x".repeat(450) }
+    ]
+  });
+  assert.equal(profile.portfolio[0].purchase_date, "2026-10-30");
+  assert.equal(profile.portfolio[0].notes, "Проверено");
+  assert.equal(profile.portfolio[1].purchase_date, "");
+  assert.equal(profile.portfolio[1].notes.length, 300);
 });

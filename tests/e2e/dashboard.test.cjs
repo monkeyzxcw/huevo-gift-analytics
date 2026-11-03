@@ -714,10 +714,14 @@ test("new catalogue, market events, date range, portfolio and Sniper rule profil
     await page.fill("#portfolioRarity", "Редкий");
     await page.fill("#portfolioQuantity", "2");
     await page.fill("#portfolioCost", "300");
+    await page.fill("#portfolioPurchaseDate", "2026-10-30");
+    await page.fill("#portfolioNotes", "Серийный номер проверен");
     await page.click('#portfolioForm button[type="submit"]');
     assert.equal(await page.locator("#portfolioList .portfolio-row").count(), 1);
     assert.match(await page.textContent("#portfolioList"), /подтверждённые продажи/);
     assert.match(await page.textContent("#portfolioList"), /900/);
+    assert.match(await page.textContent("#portfolioList"), /2026-10-30/);
+    assert.match(await page.textContent("#portfolioList"), /Серийный номер проверен/);
     const portfolioDownload = page.waitForEvent("download");
     await page.click("#exportPortfolioCsv");
     assert.match((await portfolioDownload).suggestedFilename(), /amnyam-portfolio/);
@@ -784,6 +788,16 @@ test("value hunt compares similar gifts; smart search supports price, rarity and
   await page.fill("#search", "#1007");
   assert.match(await page.textContent("#rowCount"), /1 из 120/);
   assert.match(await page.textContent("#rows"), /Звезда/);
+
+  await page.click('#mainNav [data-view="overview"]');
+  await page.fill("#studioNaturalQuery", "редкие подарки дешевле 200");
+  await page.click("#studioNaturalSearch button[type=submit]");
+  assert.match(await page.textContent("#studioNaturalStatus"), /Применены фильтры/);
+  assert.equal(await page.locator('#mainNav [data-view="market"]').getAttribute("aria-selected"), "true");
+  assert.match(await page.locator("#search").inputValue(), /rarity:"Редкий"/);
+  assert.match(await page.locator("#search").inputValue(), /price<200/);
+  assert.match(await page.textContent("#rowCount"), /5 из 120/);
+  assert.doesNotMatch(await page.textContent("#rows"), /Обычный/);
   assert.deepEqual(problems, []);
   await browser.close();
 });
@@ -1505,6 +1519,18 @@ test("AMNYAM Intelligence Lab filters market lots and exports safe analytics", a
   assert.ok(await page.locator("#intelKpis .intel-kpi").count() >= 8, "market KPI cards should render");
   assert.ok(await page.locator("#intelRows tr").count() > 0, "analytics table should render market rows");
 
+  await page.selectOption("#intelPeriod", "24h");
+  await page.waitForTimeout(80);
+  assert.match(await page.textContent("#intelKpis"), /за 24 часа/);
+  assert.equal(await page.locator("#intelPeriod").inputValue(), "24h");
+  await page.selectOption("#intelPeriod", "30d");
+  await page.waitForTimeout(80);
+  assert.match(await page.textContent("#intelKpis"), /за 30 дней/);
+  await page.selectOption("#intelPeriod", "7d");
+  await page.waitForTimeout(80);
+  const persistedPeriod = await page.evaluate(() => JSON.parse(localStorage.getItem("amnyam.intel.v2") || "{}").guest?.filters?.period);
+  assert.equal(persistedPeriod, "7d", "selected analysis period is profile-scoped and persisted");
+
   await page.fill("#intelQuery", "Подарок 1");
   await page.waitForTimeout(100);
   const filteredCount = await page.locator("#intelRows tr").count();
@@ -1516,12 +1542,16 @@ test("AMNYAM Intelligence Lab filters market lots and exports safe analytics", a
   await page.fill("#intelQuery", "");
 
   await page.evaluate(() => {
-    const saved = { guest: { filters: { q: "", rarity: "", min: "", max: "", signal: "all", sort: "discount" },
-      saved: [{ name: "QA скринер", filters: { q: "Подарок", rarity: "", min: "", max: "", signal: "all", sort: "discount" } }] } };
+    const saved = { guest: { filters: { q: "", rarity: "", min: "", max: "", signal: "all", period: "7d", sort: "discount" },
+      saved: [{ name: "QA скринер", filters: { q: "Подарок", rarity: "", min: "", max: "", signal: "all", period: "7d", sort: "discount" } }] } };
     localStorage.setItem("amnyam.intel.v2", JSON.stringify(saved));
     document.querySelector("#intelQuery").dispatchEvent(new Event("input", { bubbles: true }));
   });
   assert.ok(await page.locator("#intelSaved").textContent().then(x => x.includes("QA скринер")));
+  await page.fill("#intelFilterName", "Мои скидки");
+  await page.click("#intelSaveFilter");
+  assert.match(await page.textContent("#intelSaved"), /Мои скидки/);
+  assert.equal(await page.inputValue("#intelFilterName"), "", "the inline screener name clears after saving");
   const downloadPromise = page.waitForEvent("download");
   await page.click("#intelExportJson");
   const download = await downloadPromise;
@@ -1529,6 +1559,7 @@ test("AMNYAM Intelligence Lab filters market lots and exports safe analytics", a
   const payload = JSON.parse(require("node:fs").readFileSync(await download.path(), "utf8"));
   assert.equal(payload.schema, "amnyam-intel-v2");
   assert.ok(Array.isArray(payload.rows));
+  assert.ok(payload.rows.every(row => row.change_period === "7 дней"), "analytics export labels the selected calculation period");
   assert.doesNotMatch(JSON.stringify(payload), /cookie|password|bearer|token/i);
   assert.equal(await page.locator('[data-desk-check="collector"]').count(), 0, "shared workspace must not expose collector-start checklist");
   assert.deepEqual(problems, []);
@@ -1589,6 +1620,24 @@ test("username workspace imports real rows, calculates peer signals and keeps gi
     assert.match(await page.textContent("#usernameKpis"), /7/);
     assert.equal(await page.locator("#usernameRows a[href^='https://huevo.su/']").count(), 0, "market rows use button actions, never arbitrary embedded links");
 
+    await page.locator("#usernameRows .username-compare-check").nth(0).check();
+    await page.locator("#usernameRows .username-compare-check").nth(1).check();
+    assert.match(await page.textContent("#usernameCompareCount"), /2\/4/);
+    assert.equal(await page.locator("#usernameCompareSelected").isEnabled(), true);
+    await page.click("#usernameCompareSelected");
+    assert.equal(await page.locator("#usernameCompareDialog[open]").count(), 1);
+    assert.match(await page.textContent("#usernameCompareBody"), /@alfaee/);
+    assert.match(await page.textContent("#usernameCompareBody"), /@bravoo/);
+    assert.match(await page.textContent("#usernameCompareBody"), /Аналоги той же длины и типа/);
+    await page.click("#usernameCompareClose");
+
+    await page.click('#usernameTabs [data-username-view="deals"]');
+    await page.fill("#usernameSimilarQuery", "alfae");
+    await page.click("#usernameSimilarRun");
+    assert.match(await page.textContent("#usernameSimilarResults"), /@alfaee/);
+    assert.match(await page.textContent("#usernameSimilarResults"), /Отличается на 1 символ/);
+
+    await page.click('#usernameTabs [data-username-view="market"]');
     await page.fill("#usernameSearch", "alfa");
     assert.equal(await page.locator("#usernameRows tr").count(), 1);
     assert.match(await page.textContent("#usernameRows"), /@alfaee/);
@@ -1736,6 +1785,103 @@ test("AMNYAM Aurora interface refresh keeps navigation usable, responsive and mo
       "none",
       "system reduced-motion preference disables decorative pulse animation"
     );
+    assert.deepEqual(problems, []);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("AMNYAM Studio widgets can be reordered, hidden and saved with compact market mode", async () => {
+  const { browser, page, problems } = await open(serve(dataV2()), { width: 1440, height: 960 });
+  try {
+    await page.waitForSelector("#content:not(.hide)");
+    const studio = page.locator("#amnyamStudio");
+    await studio.waitFor();
+    await page.waitForFunction(() => document.querySelectorAll("#studioWidgets .studio-widget").length === 5);
+    assert.equal(await page.locator("#studioWidgets .studio-widget").count(), 5);
+    assert.match(await page.textContent("#studioMarketStatus"), /LIVE|СНИМОК/);
+
+    await page.click("#studioCustomize");
+    assert.equal(await page.locator("#studioCustomize").getAttribute("aria-expanded"), "true");
+    const firstWidget = await page.locator("#studioWidgets .studio-widget").first().getAttribute("data-studio-widget");
+    await page.locator("#studioWidgetControls .studio-control-row").first().locator(".studio-move").nth(1).click();
+    const movedWidget = await page.locator("#studioWidgets .studio-widget").nth(1).getAttribute("data-studio-widget");
+    assert.equal(movedWidget, firstWidget, "down action moves the first widget into the second position");
+
+    await page.locator("#studioWidgetControls .studio-control-row").first().locator("input[type=checkbox]").uncheck();
+    assert.equal(await page.locator("#studioWidgets .studio-widget").count(), 4);
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("amnyam.studio.v1.guest")));
+    assert.ok(stored.hidden.includes(stored.order[0]) || stored.hidden.length === 1, "hidden widgets persist in the guest profile");
+
+    await page.locator("#studioCompactMarket").check();
+    assert.equal(await page.locator("body.market-compact").count(), 1);
+    assert.equal(await page.locator("#studioMarketDensityButton").getAttribute("aria-pressed"), "true");
+    await page.reload();
+    await page.waitForSelector("#content:not(.hide)");
+    await page.waitForFunction(() => document.querySelectorAll("#studioWidgets .studio-widget").length === 4);
+    assert.equal(await page.locator("body.market-compact").count(), 1, "compact market mode survives reload");
+    assert.equal(await page.locator("#studioCustomize").count(), 1);
+    assert.deepEqual(problems, []);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("AMNYAM Studio quick filters navigate to the requested market view without a page reload", async () => {
+  const { browser, page, problems } = await open(serve(dataV2()));
+  try {
+    await page.waitForSelector("#content:not(.hide)");
+    await page.click('#studioQuickFilters [data-studio-filter="drops"]');
+    assert.equal(await page.locator('#mainNav [data-view="market"]').getAttribute("aria-selected"), "true");
+    assert.equal(await page.locator("#marketResultsViewport").count(), 1);
+    assert.equal(await page.locator("#marketResultsViewport").evaluate(el => getComputedStyle(el).overflowY), "auto");
+    assert.deepEqual(problems, []);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("AMNYAM Studio settings are partitioned by full huEVO internal user ID", async () => {
+  const { browser, page, problems } = await open(serve(dataV2()));
+  try {
+    await page.waitForSelector("#content:not(.hide)");
+    const userId = "a1b2c3d4-55aa-4c11-8eef-1234567890ab";
+    await page.evaluate(id => window.dispatchEvent(new CustomEvent("amnyam:studio-profile", {
+      detail: { profileKey: id, settings: { order: ["radar", "pulse", "movement", "watchlist", "saved"], hidden: ["saved"], compactMarket: true } }
+    })), userId);
+    const saved = await page.evaluate(id => localStorage.getItem("amnyam.studio.v1." + id), userId);
+    assert.ok(saved, "UUID-backed profile gets its own settings key");
+    assert.deepEqual(JSON.parse(saved), {
+      order: ["radar", "pulse", "movement", "watchlist", "saved"],
+      hidden: ["saved"],
+      compactMarket: true
+    });
+    assert.equal(await page.locator("body.market-compact").count(), 1);
+    assert.deepEqual(problems, []);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("AMNYAM Studio radar ranks evidence confidence and confirmed sales above raw discount size", async () => {
+  const { browser, page, problems } = await open(serve(dataV2()));
+  try {
+    await page.waitForSelector("#content:not(.hide)");
+    await page.evaluate(() => {
+      window.dispatchEvent(new CustomEvent("amnyam:market", { detail: {
+        profileKey: "guest",
+        data: { live: { enabled: true, fresh: true, last_poll_at: new Date().toISOString() }, generated_at: new Date().toISOString() },
+        lots: [], favorites: [], targets: {}, savedFilters: [],
+        deals: [
+          { lot_id: "active-high-discount", title: "Сильная скидка, слабые доказательства", price: 100, discount_pct: 55, sample_size: 80, confidence: "low", basis: "active", reference_price: 222 },
+          { lot_id: "confirmed-sale", title: "Ниже скидка, но подтверждённые продажи", price: 160, discount_pct: 20, sample_size: 8, confidence: "high", basis: "sales", reference_price: 200 }
+        ]
+      } }));
+    });
+    await page.waitForFunction(() => document.querySelector("#studioWidgets .studio-widget-radar .studio-opportunity-main b")?.textContent.includes("подтверждённые продажи"));
+    assert.equal(await page.locator("#studioWidgets .studio-widget-radar .studio-opportunity-main b").first().textContent(), "Ниже скидка, но подтверждённые продажи");
+    assert.match(await page.textContent("#studioWidgets .studio-widget-radar"), /надёжность высокая/);
+    assert.match(await page.textContent("#studioWidgets .studio-widget-radar"), /подтверждённые продажи/);
     assert.deepEqual(problems, []);
   } finally {
     await browser.close();

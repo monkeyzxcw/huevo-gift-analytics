@@ -150,6 +150,7 @@
   function publishMarketData() {
     const detail = {
       data: state.data, lots: state.lots, targets: { ...state.targets }, deals: buildDealSignals(),
+      favorites: state.favorites.slice(), savedFilters: state.savedFilters.slice(0, 25),
       profileKey: accountState.user && accountState.user.id ? String(accountState.user.id) : "guest"
     };
     window.AMNYAM_MARKET = detail;
@@ -950,7 +951,9 @@
       const row = h("article", { class: "portfolio-row" }, [
         h("div", {}, [
           h("b", { text: item.title }),
-          h("small", { text: (item.rarity || "Редкость не указана") + " · " + fmt(item.quantity) + " шт." })
+          h("small", { text: (item.rarity || "Редкость не указана") + " · " + fmt(item.quantity) + " шт." }),
+          h("small", { text: "Покупка: " + (item.purchase_date || (item.added_at ? new Date(item.added_at).toLocaleDateString("ru-RU") : "дата не указана")) }),
+          item.notes ? h("small", { class: "portfolio-note", text: item.notes }) : null
         ]),
         h("div", { class: "portfolio-metric" }, [
           h("small", { text: "ВЛОЖЕНО" }), h("b", { text: price(cost) })
@@ -986,6 +989,11 @@
     const rarity = $("portfolioRarity").value.trim();
     const quantity = Number($("portfolioQuantity").value);
     const cost = Number($("portfolioCost").value);
+    const rawPurchaseDate = String($("portfolioPurchaseDate").value || "").trim();
+    const parsedPurchaseDate = rawPurchaseDate ? new Date(rawPurchaseDate + "T00:00:00Z") : null;
+    const purchaseDate = parsedPurchaseDate && Number.isFinite(parsedPurchaseDate.getTime()) &&
+      parsedPurchaseDate.toISOString().slice(0, 10) === rawPurchaseDate ? rawPurchaseDate : new Date().toISOString().slice(0, 10);
+    const notes = String($("portfolioNotes").value || "").trim().slice(0, 300);
     if (!title || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 1000 ||
         !Number.isSafeInteger(cost) || cost < 1 || cost > TARGET_PRICE_MAX) {
       $("portfolioForm").reportValidity();
@@ -994,7 +1002,7 @@
     const id = String(Date.now()) + "-" + Math.random().toString(36).slice(2, 8);
     state.portfolio.unshift({
       id, title: title.slice(0, 120), rarity: rarity.slice(0, 80),
-      quantity, purchase_price: cost, added_at: new Date().toISOString()
+      quantity, purchase_price: cost, purchase_date: purchaseDate, notes, added_at: new Date().toISOString()
     });
     state.portfolio = state.portfolio.slice(0, 100);
     $("portfolioForm").reset();
@@ -1370,6 +1378,8 @@
       ["Подарок", item => item.title], ["Редкость", item => item.rarity],
       ["Количество", item => item.quantity], ["Цена покупки", item => item.purchase_price],
       ["Всего вложено", item => item.quantity * item.purchase_price],
+      ["Дата покупки", item => item.purchase_date || item.added_at],
+      ["Заметка", item => item.notes || ""],
       ["Добавлено", item => item.added_at]
     ], state.portfolio);
     if (!ok) $("portfolioCount").textContent = "Нет позиций для экспорта";
@@ -2660,6 +2670,8 @@
         sniperDealSound: Boolean(sniperSoundPrefs.deal),
         appearance: { ...appearance },
         overviewWidgets: { ...overviewWidgets },
+        studio: window.AMNYAM_STUDIO_SETTINGS && window.AMNYAM_STUDIO_SETTINGS.get
+          ? window.AMNYAM_STUDIO_SETTINGS.get() : undefined,
         seasonTheme: document.body.dataset.season || "default"
       }
     };
@@ -2691,6 +2703,9 @@
     applyAppearance();
     overviewWidgets = sanitizeOverviewWidgets(prefs.overviewWidgets);
     applyOverviewWidgets(false);
+    window.dispatchEvent(new CustomEvent("amnyam:studio-profile", {
+      detail: { profileKey: accountState.user && accountState.user.id ? String(accountState.user.id) : "guest", settings: prefs.studio || null }
+    }));
     applySeasonTheme(["default","newyear","halloween","spring","summer"].includes(prefs.seasonTheme) ? prefs.seasonTheme : "default", false);
     updateAlertSoundControls();
     accountState.hydrating = false;
@@ -2726,6 +2741,7 @@
     applyAppearance();
     overviewWidgets = readOverviewWidgets();
     applyOverviewWidgets(false);
+    window.dispatchEvent(new CustomEvent("amnyam:studio-profile", { detail: { profileKey: "guest", settings: null } }));
     let theme = "default";
     try { theme = localStorage.getItem(seasonKey) || "default"; } catch (_) {}
     applySeasonTheme(theme, false);
@@ -3102,6 +3118,75 @@
     $("appearanceGlass").addEventListener("change", e => { appearance.glass = e.target.checked; applyAppearance(); });
     $("resetAppearance").addEventListener("click", () => { appearance = { ...DEFAULT_APPEARANCE }; applyAppearance(); });
   }
+
+  // ---------- AMNYAM Studio integrations ----------
+  window.addEventListener("amnyam:studio-change", () => {
+    if (accountState.user && !accountState.hydrating) queueProfileSave();
+  });
+  window.addEventListener("amnyam:studio-open-lot", event => {
+    const id = event.detail && String(event.detail.lotId || "");
+    if (!id) return;
+    switchView("market", true);
+    const lot = state.lots.find(item => String(item.lot_id) === id);
+    if (lot) openDetail(lot, null);
+  });
+  window.addEventListener("amnyam:studio-apply-preset", event => {
+    const name = String(event.detail && event.detail.name || "");
+    const index = state.savedFilters.findIndex(item => item.name === name);
+    if (index < 0) return;
+    $("savedFilterSelect").value = String(index);
+    applyFilterPreset();
+  });
+  window.addEventListener("amnyam:studio-query", event => {
+    const detail = event.detail || {};
+    if (detail.view === "deals") {
+      switchView("deals", true);
+      return;
+    }
+    const query = String(detail.query || "").trim();
+    if (!query) return;
+    switchView("market", true);
+    state.catalogMode = "lots";
+    document.querySelectorAll("[data-catalog-mode]").forEach(button => {
+      const active = button.dataset.catalogMode === "lots";
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    ["pmin", "pmax", "rarity", "status"].forEach(id => { $(id).value = ""; });
+    $("search").value = query;
+    $("globalSearch").value = query;
+    state.page = 0;
+    setSortMenuOptions();
+    applyFilters();
+    renderRows();
+  });
+  window.addEventListener("amnyam:studio-filter", event => {
+    const key = String(event.detail && event.detail.key || "");
+    const allowed = {
+      new: { key: "first_seen", dir: -1 },
+      drops: { key: "delta", dir: 1 },
+      cheap: { key: "price", dir: 1 }
+    };
+    if (!allowed[key]) return;
+    switchView("market", true);
+    state.catalogMode = "lots";
+    document.querySelectorAll("[data-catalog-mode]").forEach(button => {
+      const active = button.dataset.catalogMode === "lots";
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    state.sort = { ...allowed[key] };
+    state.page = 0;
+    $("search").value = "";
+    $("globalSearch").value = "";
+    $("pmin").value = "";
+    $("pmax").value = "";
+    $("rarity").value = "";
+    $("status").value = "";
+    setSortMenuOptions();
+    applyFilters();
+    renderRows();
+  });
 
   // ---------- events ----------
   initAccountUI();
