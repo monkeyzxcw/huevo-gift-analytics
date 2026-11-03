@@ -1654,3 +1654,26 @@ test("support quick access and custom amount input are available", async () => {
   assert.deepEqual(problems, []);
   await browser.close();
 });
+
+test("market lot list scrolls inside its own viewport while top navigation stays sticky", async () => {
+  const { browser, page, problems } = await open(serve(dataV2()), { width: 1280, height: 900 });
+  await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="market"]');
+  const pane = page.locator("#marketResultsViewport");
+  await pane.waitFor();
+  const metrics = await pane.evaluate(el => ({
+    height: el.clientHeight,
+    scrollHeight: el.scrollHeight,
+    overflowY: getComputedStyle(el).overflowY
+  }));
+  assert.ok(metrics.height > 0);
+  assert.ok(metrics.scrollHeight > metrics.height, "the list must have an internal scroll range");
+  assert.equal(metrics.overflowY, "auto");
+  const before = await page.evaluate(() => window.scrollY);
+  await pane.evaluate(el => { el.scrollTop = Math.min(200, el.scrollHeight); });
+  const after = await page.evaluate(() => window.scrollY);
+  assert.equal(after, before, "scrolling the market list must not scroll the whole document");
+  assert.equal(await page.locator("#mainNav").evaluate(el => getComputedStyle(el).position), "sticky");
+  assert.deepEqual(problems, []);
+  await browser.close();
+});
