@@ -1528,6 +1528,8 @@ test("AMNYAM Intelligence Lab filters market lots and exports safe analytics", a
   assert.match(await page.textContent("#intelKpis"), /за 30 дней/);
   await page.selectOption("#intelPeriod", "7d");
   await page.waitForTimeout(80);
+  const persistedPeriod = await page.evaluate(() => JSON.parse(localStorage.getItem("amnyam.intel.v2") || "{}").guest?.filters?.period);
+  assert.equal(persistedPeriod, "7d", "selected analysis period is profile-scoped and persisted");
 
   await page.fill("#intelQuery", "Подарок 1");
   await page.waitForTimeout(100);
@@ -1540,8 +1542,8 @@ test("AMNYAM Intelligence Lab filters market lots and exports safe analytics", a
   await page.fill("#intelQuery", "");
 
   await page.evaluate(() => {
-    const saved = { guest: { filters: { q: "", rarity: "", min: "", max: "", signal: "all", sort: "discount" },
-      saved: [{ name: "QA скринер", filters: { q: "Подарок", rarity: "", min: "", max: "", signal: "all", sort: "discount" } }] } };
+    const saved = { guest: { filters: { q: "", rarity: "", min: "", max: "", signal: "all", period: "7d", sort: "discount" },
+      saved: [{ name: "QA скринер", filters: { q: "Подарок", rarity: "", min: "", max: "", signal: "all", period: "7d", sort: "discount" } }] } };
     localStorage.setItem("amnyam.intel.v2", JSON.stringify(saved));
     document.querySelector("#intelQuery").dispatchEvent(new Event("input", { bubbles: true }));
   });
@@ -1557,6 +1559,7 @@ test("AMNYAM Intelligence Lab filters market lots and exports safe analytics", a
   const payload = JSON.parse(require("node:fs").readFileSync(await download.path(), "utf8"));
   assert.equal(payload.schema, "amnyam-intel-v2");
   assert.ok(Array.isArray(payload.rows));
+  assert.ok(payload.rows.every(row => row.change_period === "7 дней"), "analytics export labels the selected calculation period");
   assert.doesNotMatch(JSON.stringify(payload), /cookie|password|bearer|token/i);
   assert.equal(await page.locator('[data-desk-check="collector"]').count(), 0, "shared workspace must not expose collector-start checklist");
   assert.deepEqual(problems, []);
