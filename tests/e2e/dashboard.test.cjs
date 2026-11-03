@@ -1687,3 +1687,57 @@ test("market lot list scrolls inside its own viewport while top navigation stays
   assert.deepEqual(problems, []);
   await browser.close();
 });
+
+test("AMNYAM Aurora interface refresh keeps navigation usable, responsive and motion-aware", async () => {
+  const { browser, page, problems } = await open(serve(dataV2()), { width: 1440, height: 960 });
+  try {
+    await page.waitForSelector("#content:not(.hide)");
+    const desktop = await page.evaluate(() => {
+      const style = (selector) => getComputedStyle(document.querySelector(selector));
+      return {
+        accent: getComputedStyle(document.documentElement).getPropertyValue("--amnyam-acid").trim(),
+        navPosition: style("#mainNav").position,
+        navRadius: style("#mainNav").borderRadius,
+        subnavPosition: style("#workspaceSubnav").position,
+        heroRadius: style("#hero").borderRadius,
+        metricRadius: style(".cc-metric").borderRadius,
+        liveAnimation: style(".hero-live-pulse").animationName
+      };
+    });
+    assert.equal(desktop.accent, "#c9f36b");
+    assert.equal(desktop.navPosition, "sticky");
+    assert.ok(parseFloat(desktop.navRadius) >= 10);
+    assert.equal(desktop.subnavPosition, "sticky");
+    assert.ok(parseFloat(desktop.heroRadius) >= 14);
+    assert.ok(parseFloat(desktop.metricRadius) >= 10);
+    assert.notEqual(desktop.liveAnimation, "none", "live indicator gets a subtle ambient pulse");
+
+    await page.click('#mainNav [data-view="market"]');
+    assert.equal(await page.locator('#mainNav [data-view="market"]').getAttribute("aria-selected"), "true");
+    assert.equal(await page.locator("#marketResultsViewport").isVisible(), true);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    const mobile = await page.locator("#mainNav").evaluate(el => ({
+      overflowX: getComputedStyle(el).overflowX,
+      clientWidth: el.clientWidth,
+      scrollWidth: el.scrollWidth,
+      subnavTop: getComputedStyle(document.querySelector("#workspaceSubnav")).top,
+      documentWidth: document.documentElement.clientWidth,
+      bodyWidth: document.body.scrollWidth
+    }));
+    assert.equal(mobile.overflowX, "auto");
+    assert.ok(mobile.scrollWidth > mobile.clientWidth, "small screens can scroll the navigation strip horizontally");
+    assert.ok(parseFloat(mobile.subnavTop) >= 0);
+    assert.ok(mobile.bodyWidth <= mobile.documentWidth + 1, "the redesign does not introduce horizontal page overflow");
+
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    assert.equal(
+      await page.locator(".hero-live-pulse").evaluate(el => getComputedStyle(el).animationName),
+      "none",
+      "system reduced-motion preference disables decorative pulse animation"
+    );
+    assert.deepEqual(problems, []);
+  } finally {
+    await browser.close();
+  }
+});
