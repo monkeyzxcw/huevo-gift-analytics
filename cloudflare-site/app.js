@@ -150,6 +150,7 @@
   function publishMarketData() {
     const detail = {
       data: state.data, lots: state.lots, targets: { ...state.targets }, deals: buildDealSignals(),
+      favorites: state.favorites.slice(), savedFilters: state.savedFilters.slice(0, 25),
       profileKey: accountState.user && accountState.user.id ? String(accountState.user.id) : "guest"
     };
     window.AMNYAM_MARKET = detail;
@@ -2660,6 +2661,8 @@
         sniperDealSound: Boolean(sniperSoundPrefs.deal),
         appearance: { ...appearance },
         overviewWidgets: { ...overviewWidgets },
+        studio: window.AMNYAM_STUDIO_SETTINGS && window.AMNYAM_STUDIO_SETTINGS.get
+          ? window.AMNYAM_STUDIO_SETTINGS.get() : undefined,
         seasonTheme: document.body.dataset.season || "default"
       }
     };
@@ -2691,6 +2694,9 @@
     applyAppearance();
     overviewWidgets = sanitizeOverviewWidgets(prefs.overviewWidgets);
     applyOverviewWidgets(false);
+    window.dispatchEvent(new CustomEvent("amnyam:studio-profile", {
+      detail: { profileKey: accountState.user && accountState.user.id ? String(accountState.user.id) : "guest", settings: prefs.studio || null }
+    }));
     applySeasonTheme(["default","newyear","halloween","spring","summer"].includes(prefs.seasonTheme) ? prefs.seasonTheme : "default", false);
     updateAlertSoundControls();
     accountState.hydrating = false;
@@ -2726,6 +2732,7 @@
     applyAppearance();
     overviewWidgets = readOverviewWidgets();
     applyOverviewWidgets(false);
+    window.dispatchEvent(new CustomEvent("amnyam:studio-profile", { detail: { profileKey: "guest", settings: null } }));
     let theme = "default";
     try { theme = localStorage.getItem(seasonKey) || "default"; } catch (_) {}
     applySeasonTheme(theme, false);
@@ -3102,6 +3109,52 @@
     $("appearanceGlass").addEventListener("change", e => { appearance.glass = e.target.checked; applyAppearance(); });
     $("resetAppearance").addEventListener("click", () => { appearance = { ...DEFAULT_APPEARANCE }; applyAppearance(); });
   }
+
+  // ---------- AMNYAM Studio integrations ----------
+  window.addEventListener("amnyam:studio-change", () => {
+    if (accountState.user && !accountState.hydrating) queueProfileSave();
+  });
+  window.addEventListener("amnyam:studio-open-lot", event => {
+    const id = event.detail && String(event.detail.lotId || "");
+    if (!id) return;
+    switchView("market", true);
+    const lot = state.lots.find(item => String(item.lot_id) === id);
+    if (lot) openDetail(lot, null);
+  });
+  window.addEventListener("amnyam:studio-apply-preset", event => {
+    const name = String(event.detail && event.detail.name || "");
+    const index = state.savedFilters.findIndex(item => item.name === name);
+    if (index < 0) return;
+    $("savedFilterSelect").value = String(index);
+    applyFilterPreset();
+  });
+  window.addEventListener("amnyam:studio-filter", event => {
+    const key = String(event.detail && event.detail.key || "");
+    const allowed = {
+      new: { key: "first_seen", dir: -1 },
+      drops: { key: "delta", dir: 1 },
+      cheap: { key: "price", dir: 1 }
+    };
+    if (!allowed[key]) return;
+    switchView("market", true);
+    state.catalogMode = "lots";
+    document.querySelectorAll("[data-catalog-mode]").forEach(button => {
+      const active = button.dataset.catalogMode === "lots";
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    state.sort = { ...allowed[key] };
+    state.page = 0;
+    $("search").value = "";
+    $("globalSearch").value = "";
+    $("pmin").value = "";
+    $("pmax").value = "";
+    $("rarity").value = "";
+    $("status").value = "";
+    setSortMenuOptions();
+    applyFilters();
+    renderRows();
+  });
 
   // ---------- events ----------
   initAccountUI();
