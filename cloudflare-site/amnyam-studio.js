@@ -35,7 +35,48 @@ function render(){const root=$("studioWidgets");if(!root)return;root.replaceChil
 function controls(){const root=$("studioWidgetControls");if(!root)return;root.replaceChildren();settings.order.forEach((id,i)=>{const row=el("div","studio-control-row"),label=el("label","studio-control-label"),check=el("input",""),meta=W.find(x=>x[0]===id);check.type="checkbox";check.checked=!settings.hidden.includes(id);check.addEventListener("change",()=>{settings.hidden=check.checked?settings.hidden.filter(x=>x!==id):[...settings.hidden.filter(x=>x!==id),id];save()});label.append(check,el("span","",meta?.[1]||id));const up=btn("↑",()=>move(id,-1),"studio-move"),down=btn("↓",()=>move(id,1),"studio-move");up.disabled=i===0;down.disabled=i===settings.order.length-1;row.append(label,up,down);root.append(row)})}
 function move(id,dir){const i=settings.order.indexOf(id),j=i+dir;if(j<0||j>=settings.order.length)return;const a=settings.order.slice();[a[i],a[j]]=[a[j],a[i]];settings.order=a;save()}
 function setProfile(value){settings=clean(value);save(false)}
-function init(){settings=read();setDensity();$("studioCustomize").addEventListener("click",()=>{const panel=$("studioCustomizePanel"),open=panel.classList.toggle("hide")===false;$("studioCustomize").setAttribute("aria-expanded",String(open))});$("studioResetLayout").addEventListener("click",()=>{settings=clean(DEFAULT);save()});$("studioCompactMarket").addEventListener("change",e=>{settings.compactMarket=e.target.checked;save()});$("studioMarketDensityButton").addEventListener("click",()=>{settings.compactMarket=!settings.compactMarket;save()});$("studioQuickFilters").addEventListener("click",e=>{const b=e.target.closest("[data-studio-filter]");if(b)quick(b.dataset.studioFilter)});window.addEventListener("amnyam:market",e=>{market=e.detail||null;if(market.profileKey)profileKeySet(market.profileKey);render()});window.addEventListener("amnyam:studio-profile",e=>{if(e.detail?.profileKey)profileKeySet(e.detail.profileKey);if(e.detail?.settings)setProfile(e.detail.settings)});if(window.AMNYAM_MARKET){market=window.AMNYAM_MARKET;if(market.profileKey)profileKeySet(market.profileKey)}controls();render()}
+function parseNaturalQuery(raw){
+  let rest=String(raw||"").trim(), lower=rest.toLocaleLowerCase("ru");
+  if(/скидк|ниже рынка|выгодн|лучшие возможности/.test(lower))return{view:"deals",message:"Открываю возможности с текущими правилами проверки аналогов."};
+  const parts=[];
+  const money=rawValue=>{
+    const compact=String(rawValue||"").toLowerCase().replace(/\s/g,"").replace(",",".");
+    const match=compact.match(/^(\d+(?:\.\d+)?)([кkmм]?)$/i);
+    if(!match)return null;
+    let value=Number(match[1]);
+    if(/[кk]/.test(match[2]))value*=1000;
+    if(/[мm]/.test(match[2]))value*=1000000;
+    return Number.isSafeInteger(Math.round(value))?Math.round(value):null;
+  };
+  const under=rest.match(/(?:дешевле|не дороже|меньше|до)\s*(\d[\d\s]*(?:[,.]\d+)?\s*[кkmм]?)/i);
+  if(under){const value=money(under[1]);if(value!=null){parts.push("price<"+(value+0.0000001));rest=rest.replace(under[0]," ");}}
+  const over=rest.match(/(?:дороже|не дешевле|больше|выше|от)\s*(\d[\d\s]*(?:[,.]\d+)?\s*[кkmм]?)/i);
+  if(over){const value=money(over[1]);if(value!=null){parts.push("price>"+(value-0.0000001));rest=rest.replace(over[0]," ");}}
+  const removeText=(value)=>{
+    const index=rest.toLocaleLowerCase("ru").indexOf(String(value).toLocaleLowerCase("ru"));
+    if(index>=0)rest=rest.slice(0,index)+" "+rest.slice(index+String(value).length);
+  };
+  const rarityOptions=Array.from(document.querySelectorAll("#rarity option")).filter(option=>option.value);
+  const rarity=rarityOptions.find(option=>lower.includes(option.textContent.toLocaleLowerCase("ru"))||lower.includes(option.value.toLocaleLowerCase("ru")));
+  if(rarity){parts.push('rarity:"'+rarity.value.replace(/"/g,"")+'"');removeText(rarity.textContent);}
+  const statusOptions=Array.from(document.querySelectorAll("#status option")).filter(option=>option.value);
+  const status=statusOptions.find(option=>lower.includes(option.textContent.toLocaleLowerCase("ru"))||lower.includes(option.value.toLocaleLowerCase("ru")));
+  if(status){parts.push('status:"'+status.value.replace(/"/g,"")+'"');removeText(status.textContent);}
+  const ignored=new Set(["найди","покажи","подарки","подарок","лоты","лот","среди","дешевле","меньше","до","дороже","больше","выше","от","не","рынку","цена","ценой","стоимостью","и","с","по","в","на","для","мне","мои","новые"]);
+  const terms=rest.toLocaleLowerCase("ru").replace(/[^\p{L}\p{N}_-]+/gu," ").split(/\s+/).filter(word=>word&&!ignored.has(word));
+  parts.push(...terms);
+  const dsl=parts.join(" ").trim();
+  return dsl?{query:dsl,message:"Применены фильтры: "+dsl}:{error:"Не понял запрос. Пример: «редкие подарки дешевле 3000» или «подарки дороже 5000»."};
+}
+function submitNaturalQuery(){
+  const field=$("studioNaturalQuery"),status=$("studioNaturalStatus");
+  const parsed=parseNaturalQuery(field.value);
+  if(parsed.error){status.textContent=parsed.error;status.dataset.tone="error";return;}
+  dispatch("amnyam:studio-query",parsed);
+  status.textContent=parsed.message;
+  status.dataset.tone="success";
+}
+function init(){settings=read();setDensity();$("studioCustomize").addEventListener("click",()=>{const panel=$("studioCustomizePanel"),open=panel.classList.toggle("hide")===false;$("studioCustomize").setAttribute("aria-expanded",String(open))});$("studioResetLayout").addEventListener("click",()=>{settings=clean(DEFAULT);save()});$("studioCompactMarket").addEventListener("change",e=>{settings.compactMarket=e.target.checked;save()});$("studioMarketDensityButton").addEventListener("click",()=>{settings.compactMarket=!settings.compactMarket;save()});$("studioQuickFilters").addEventListener("click",e=>{const b=e.target.closest("[data-studio-filter]");if(b)quick(b.dataset.studioFilter)});$("studioNaturalSearch").addEventListener("submit",e=>{e.preventDefault();submitNaturalQuery()});window.addEventListener("amnyam:market",e=>{market=e.detail||null;if(market.profileKey)profileKeySet(market.profileKey);render()});window.addEventListener("amnyam:studio-profile",e=>{if(e.detail?.profileKey)profileKeySet(e.detail.profileKey);if(e.detail?.settings)setProfile(e.detail.settings)});if(window.AMNYAM_MARKET){market=window.AMNYAM_MARKET;if(market.profileKey)profileKeySet(market.profileKey)}controls();render()}
 window.AMNYAM_STUDIO_SETTINGS={get:copy,set:setProfile};
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});else init();
 })();
