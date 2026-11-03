@@ -5,7 +5,7 @@
   const PAGE = 50;
   const STALE_HOURS = 24;
   const HUEVO_HOSTS = /^https:\/\/(huevo\.su|huevo\.departament\.site)\//i;
-  const TARGET_PRICE_MAX = 1e15;
+  const TARGET_PRICE_MAX = 100000;
 
   function unregisterLegacyServiceWorker() {
     if (!("serviceWorker" in navigator)) return;
@@ -166,7 +166,7 @@
   let livePollFailureCount = 0;
   let livePollBackoffUntil = 0;
   let lastSnapshotSignature = "";
-  let supportConfig = { enabled: false, amounts: [5000, 10000, 25000, 50000, 100000] };
+  let supportConfig = { enabled: false, amounts: [5, 50, 100, 10000, 50000, 100000] };
   let supportSdkReady = false;
   let supportInitRunning = false;
   const SUPPORT_INTENT_STORAGE_PREFIX = "amnyam.pending-support.v1";
@@ -1769,7 +1769,7 @@
     const watch=h("div",{class:"detail-watch"});
     const fav=h("button",{class:"btn secondary",type:"button",text:state.favorites.includes(String(l.lot_id))?"★ В избранном":"☆ В избранное"});
     fav.addEventListener("click",()=>{toggleFavorite(l.lot_id);fav.textContent=state.favorites.includes(String(l.lot_id))?"★ В избранном":"☆ В избранное";});
-    const target=h("input",{class:"input target-input",type:"number",min:"1",step:"1",inputmode:"numeric",placeholder:"Целевая цена","aria-label":"Целевая цена для "+(l.title||l.lot_id)});
+    const target=h("input",{class:"input target-input",type:"number",min:"1",max:String(TARGET_PRICE_MAX),step:"1",inputmode:"numeric",placeholder:"Целевая цена","aria-label":"Целевая цена для "+(l.title||l.lot_id)});
     target.value=state.targets[String(l.lot_id)]?String(state.targets[String(l.lot_id)]):"";
     const save=h("button",{class:"btn",type:"button",text:"Сохранить цену-цель"});
     const targetError=h("small",{class:"target-error","role":"alert","aria-live":"polite"});
@@ -2111,7 +2111,7 @@
     row.children[1].append(metrics);
     if(lot.suspicious)row.children[1].append(h("p",{class:"deal-warning",text:"Экстремальный дисконт более 80%. Не выбран верхним сигналом: проверь совпадение подарка, редкость, статус и возможную ошибку цены."}));
     if(lot.basis==="sales" && lot.reference_scope==="title")row.children[1].append(h("p",{class:"deal-warning",text:"Исторические сделки пока не связаны с точным каталогом и редкостью. Это широкий ориентир по названию, уверенность снижена."}));
-    const target=h("input",{class:"input target-input deal-target-input",type:"number",min:"1",step:"1",inputmode:"numeric",placeholder:"Желаемая цена","aria-label":"Цена-цель для "+(lot.title||id)});
+    const target=h("input",{class:"input target-input deal-target-input",type:"number",min:"1",max:String(TARGET_PRICE_MAX),step:"1",inputmode:"numeric",placeholder:"Желаемая цена","aria-label":"Цена-цель для "+(lot.title||id)});
     target.value=state.targets[id]?String(state.targets[id]):"";
     const save=h("button",{class:"btn target-save",type:"button",text:state.targets[id]?"Обновить цену-цель":"Задать цену-цель"});
     save.addEventListener("click",()=>{saveTarget(lot.lot_id,target.value);});
@@ -2232,7 +2232,7 @@
       ]);
       actions.querySelector("button").addEventListener("click",()=>toggleFavorite(lot.lot_id));
       const row=lotItem(lot,actions,"#"+lot.lot_id+(lot.rarity?" · "+lot.rarity:""));row.classList.add("deal-row");
-      const input=h("input",{class:"input target-input",type:"number",min:"1",step:"1",inputmode:"numeric",placeholder:"Цена-цель","aria-label":"Целевая цена для "+(lot.title||lot.lot_id)});
+      const input=h("input",{class:"input target-input",type:"number",min:"1",max:String(TARGET_PRICE_MAX),step:"1",inputmode:"numeric",placeholder:"Цена-цель","aria-label":"Целевая цена для "+(lot.title||lot.lot_id)});
       input.value=target?String(target):"";
       const save=h("button",{class:"btn secondary target-save",type:"button",text:target?"Обновить цель":"Задать цель"});
       save.addEventListener("click",()=>saveTarget(lot.lot_id,input.value));
@@ -2416,13 +2416,14 @@
   function renderSupportLevels() {
     const box = clear($("supportAmounts"));
     const labels = {
-      5000: "SCOUT",
-      10000: "BUILDER",
-      25000: "WORKER",
+      5: "TIP",
+      50: "BOOST",
+      100: "CHEER",
+      10000: "SCOUT",
       50000: "HARD MODE",
       100000: "AMNYAM OG"
     };
-    (supportConfig.amounts || [5000, 10000, 25000, 50000, 100000]).forEach((amount, index) => {
+    (supportConfig.amounts || [5, 50, 100, 10000, 50000, 100000]).forEach((amount, index) => {
       const button = h("button", { class: "support-level", type: "button", "data-amount": String(amount) }, [
         h("span", { class: "support-tier-num", text: "LEVEL / 0" + (index + 1) }),
         h("b", { text: fmt(amount) + " ◉" }),
@@ -2440,7 +2441,7 @@
     try {
       supportConfig = await requestSupportApi("./api/support/config");
     } catch (_) {
-      supportConfig = { enabled: false, amounts: [5000, 10000, 25000, 50000, 100000], origins: ["https://huevo.su", "https://huevo.departament.site"] };
+      supportConfig = { enabled: false, amounts: [5, 50, 100, 10000, 50000, 100000], origins: ["https://huevo.su", "https://huevo.departament.site"] };
     }
     renderSupportLevels();
     try {
@@ -2496,8 +2497,8 @@
     buttons.forEach((button) => { button.disabled = true; button.setAttribute("aria-busy", "true"); });
     try {
       const numericAmount = Number(amount);
-      if (!Number.isSafeInteger(numericAmount) || numericAmount < 5000 || numericAmount > 100000) {
-        throw new Error("Сумма должна быть целым числом от 5 000 до 100 000.");
+      if (!Number.isSafeInteger(numericAmount) || numericAmount < 5 || numericAmount > 100000) {
+        throw new Error("Сумма должна быть целым числом от 5 до 100 000 монет.");
       }
       supportMessage("Создаём запрос на поддержку…");
       const intent = await requestSupportApi("./api/support/intent", {

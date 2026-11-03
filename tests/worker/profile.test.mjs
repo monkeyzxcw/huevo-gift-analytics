@@ -5,7 +5,7 @@ import { sanitiseProfile } from "../../src/auth.js";
 test("profile validator drops invalid lot IDs, targets and unsupported preferences", () => {
   const profile = sanitiseProfile({
     favorites: ["123", "bad-id", "456", "123", 7],
-    targets: { "123": 1000, "bad": 20, "456": -10, "789": "500", "111": 1.5, "222": "2.75", "333": 1000000000000001 },
+    targets: { "123": 1000, "bad": 20, "456": -10, "789": "500", "111": 1.5, "222": "2.75", "333": 100001, "444": 100000 },
     alertedTargets: ["123", "invalid"],
     savedFilters: [
       { name: "Rare under 1k", filters: { search: "rare", mode: "gifts", sort: { key: "price", dir: -1 } } },
@@ -32,7 +32,7 @@ test("profile validator drops invalid lot IDs, targets and unsupported preferenc
     ]
   });
   assert.deepEqual(profile.favorites, ["123", "456", "7"]);
-  assert.deepEqual(profile.targets, { "123": 1000, "789": 500 });
+  assert.deepEqual(profile.targets, { "123": 1000, "789": 500, "444": 100000 });
   assert.deepEqual(profile.alertedTargets, ["123"]);
   assert.equal(profile.savedFilters.length, 2);
   assert.equal(profile.savedFilters[0].filters.mode, "gifts");

@@ -64,7 +64,7 @@
   <button role="tab" aria-selected="false" data-view="data" data-main="data" type="button"><span>06</span> Данные</button>
   <button role="tab" aria-selected="false" data-view="favorites" data-main="portfolio" type="button"><span>07</span> Портфель <small id="navFavoritesCount">0</small></button>
   <button role="tab" aria-selected="false" data-view="appearance" data-main="settings" type="button"><span>08</span> Настройки</button>
-  <button class="support-nav-cta" type="button" data-go-view="support" aria-label="Открыть страницу поддержки AMNYAM"><span aria-hidden="true">♥</span> Поддержать автора <small>5K–100K</small></button>
+  <button class="support-nav-cta" type="button" data-go-view="support" aria-label="Открыть страницу поддержки AMNYAM"><span aria-hidden="true">♥</span> Поддержать автора <small>5–100K</small></button>
 </nav>
 <nav class="workspace-subnav" id="workspaceSubnav" aria-label="Подразделы">
   <div class="workspace-subnav-group" data-subnav-group="data">
@@ -289,7 +289,7 @@
     <div class="deal-hero-stamp">AMNYAM<br>SELECT</div>
     <div class="deal-hero-art" id="belowBestArt"><img id="belowBestImage" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer"><span aria-hidden="true">🎁</span></div>
     <div class="deal-hero-content"><span class="eyebrow">BEST DISCOUNT VS COMPARABLES</span><h3 id="belowBestTitle">Сканируем каталог…</h3><strong id="belowBestPrice">—</strong><p id="belowBestMeta">Сравнение появится после загрузки рынка.</p><a id="belowBestOpen" class="btn" href="https://huevo.su/market/gifts" target="_blank" rel="noopener noreferrer">Открыть лот ↗</a>
-      <div class="best-target-tools"><label class="f"><span>Желаемая цена</span><input class="input target-input" id="belowBestTarget" type="number" min="1" max="1000000000000000" step="1" inputmode="numeric" placeholder="Цена-цель"></label><button class="btn secondary" id="saveBelowBestTarget" type="button">Сохранить цену-цель</button><button class="btn secondary" id="belowBestMinus10" type="button">Цель −10%</button></div>
+      <div class="best-target-tools"><label class="f"><span>Желаемая цена</span><input class="input target-input" id="belowBestTarget" type="number" min="1" max="100000" step="1" inputmode="numeric" placeholder="Цена-цель"></label><button class="btn secondary" id="saveBelowBestTarget" type="button">Сохранить цену-цель</button><button class="btn secondary" id="belowBestMinus10" type="button">Цель −10%</button></div>
     </div>
   </article>
   <div class="deal-list-toolbar"><span class="muted">Цена лота, медиана похожих предложений, разница, исторический минимум и цена-цель — прямо в карточке.</span><label class="f"><span>Сортировать</span><select class="select" id="dealSort"><option value="score">Лучший сигнал · рейтинг 0–100</option><option value="discount">Самый большой дисконт</option><option value="price">Самая низкая цена</option><option value="savings">Максимальная разница с медианой</option><option value="sample">Больше аналогов</option><option value="historical">Ближе к историческому минимуму</option></select></label></div>
@@ -476,12 +476,12 @@
   <div class="support-header"><div><span class="section-index">/ SUPPORT THE BUILDER</span><h2>Поддержать автора</h2><p>Для тех, кто хочет, чтобы AMNYAM MODE продолжал расти.</p></div><div class="support-mark" aria-hidden="true">◈</div></div>
   <div class="support-levels" id="supportAmounts" aria-label="Уровень поддержки"></div>
   <div class="support-custom" aria-label="Произвольная сумма поддержки">
-    <label for="supportCustomAmount">Своя сумма · от 5 000 до 100 000</label>
+    <label for="supportCustomAmount">Своя сумма · от 5 до 100 000 монет</label>
     <div class="support-custom-controls">
-      <input id="supportCustomAmount" type="number" min="5000" max="100000" step="1" inputmode="numeric" placeholder="Например, 15 000" aria-describedby="supportCustomHint">
+      <input id="supportCustomAmount" type="number" min="5" max="100000" step="1" inputmode="numeric" placeholder="Например, 50" aria-describedby="supportCustomHint">
       <button class="support-custom-submit" id="supportCustomSubmit" type="button">Поддержать эту сумму ↗</button>
     </div>
-    <small id="supportCustomHint">Можно указать любую целую сумму в заданном диапазоне, не только уровни выше.</small>
+    <small id="supportCustomHint">Можно указать любое целое количество монет от 5 до 100 000, а не только быстрые варианты выше.</small>
   </div>
   <div class="support-message" id="supportMsg" role="status" aria-live="polite" hidden><span id="supportMsgText"></span><button class="btn secondary hide" id="supportRetryStatus" type="button" hidden>Проверить статус</button></div>
   <p class="support-hint" id="supportHint">Проверяем доступность huEVO Apps…</p>
@@ -533,6 +533,7 @@
     <label class="f preset-select"><span>Мои фильтры</span><select class="select" id="savedFilterSelect" aria-label="Сохранённые фильтры"><option value="">Нет сохранённых наборов</option></select></label>
     <button class="btn secondary" id="applyPreset" type="button" disabled>Применить</button><button class="btn secondary" id="deletePreset" type="button" disabled>Удалить</button><span class="preset-status" id="presetStatus" role="status"></span>
   </div>
+  <div class="market-results-viewport" id="marketResultsViewport" tabindex="0" aria-label="Прокручиваемый список лотов">
   <div id="lotsMode">
   <div class="table-wrap">
     <table>
@@ -559,6 +560,7 @@
         <th scope="col" aria-sort="none"><button class="group-sort" data-group-key="title" type="button">Подарок</button></th><th scope="col" aria-sort="descending"><button class="group-sort" data-group-key="count" type="button">Лотов</button></th><th scope="col" aria-sort="none"><button class="group-sort" data-group-key="min" type="button">Минимум</button></th><th scope="col" aria-sort="none"><button class="group-sort" data-group-key="median" type="button">Медиана</button></th><th scope="col" aria-sort="none"><button class="group-sort" data-group-key="max" type="button">Максимум</button></th><th scope="col" aria-sort="none"><button class="group-sort" data-group-key="rarity" type="button">Редкость</button></th><th scope="col"><span class="sr">Действия</span></th>
       </tr></thead><tbody id="groupsRows"></tbody>
     </table></div>
+  </div>
   </div>
 </section>
 
@@ -672,7 +674,7 @@
 
 <dialog id="usernameTargetDialog" class="username-target-dialog" aria-labelledby="usernameTargetTitle">
   <div class="dlg-head"><div><span class="section-index">/ PRICE ALERT</span><h3 id="usernameTargetTitle">Целевая цена</h3></div><button type="button" class="btn secondary" id="usernameTargetClose">✕</button></div>
-  <form id="usernameTargetForm"><input type="hidden" id="usernameTargetKey"><label class="f"><span>Целевая цена в ◉</span><input class="input" id="usernameTargetPrice" type="number" min="1" max="1000000000000000" step="1" required></label><div class="username-target-actions"><button type="submit" class="btn">СОХРАНИТЬ ЦЕЛЬ</button><button type="button" class="btn secondary" id="usernameTargetRemove">УБРАТЬ ЦЕЛЬ</button></div></form>
+  <form id="usernameTargetForm"><input type="hidden" id="usernameTargetKey"><label class="f"><span>Целевая цена в ◉</span><input class="input" id="usernameTargetPrice" type="number" min="1" max="100000" step="1" required></label><div class="username-target-actions"><button type="submit" class="btn">СОХРАНИТЬ ЦЕЛЬ</button><button type="button" class="btn secondary" id="usernameTargetRemove">УБРАТЬ ЦЕЛЬ</button></div></form>
 </dialog>
 
 

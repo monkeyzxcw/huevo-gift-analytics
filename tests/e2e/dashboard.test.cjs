@@ -69,7 +69,7 @@ async function open(handler, viewport = { width: 1280, height: 900 }, options = 
       }) });
     }
     if (u.pathname === "/api/support/config") {
-      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ enabled: false, amounts: [5000, 10000, 25000, 50000, 100000], sdk_url: "https://huevo.su/static/js/huevo-apps-v1.js", origins: ["huevo.su", "huevo.departament.site"] }) });
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ enabled: false, amounts: [5, 50, 100, 10000, 50000, 100000], sdk_url: "https://huevo.su/static/js/huevo-apps-v1.js", origins: ["huevo.su", "huevo.departament.site"] }) });
     }
     if (u.pathname === "/api/support/stats") {
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ enabled: false, supporters: 0, total: 0 }) });
@@ -737,7 +737,7 @@ test("new catalogue, market events, date range, portfolio and Sniper rule profil
   }
 });
 
-test("AMNYAM navigation renders all views and author support shows five levels", async () => {
+test("AMNYAM navigation renders all views and author support shows six coin levels", async () => {
   const { browser, page, problems } = await open(serve(dataV2()), { width: 1280, height: 900 });
   await page.waitForSelector("#content:not(.hide)");
   const routes = [
@@ -752,8 +752,8 @@ test("AMNYAM navigation renders all views and author support shows five levels",
     if (view !== parent) await page.click('#workspaceSubnav [data-view="' + view + '"]');
     assert.equal(await page.locator('[data-view-section="' + view + '"]:not(.view-hidden)').count() > 0, true, view + " view visible");
   }
-  assert.equal(await page.locator("#supportAmounts [data-amount]").count(), 5);
-  assert.deepEqual(await page.locator("#supportAmounts [data-amount]").evaluateAll(nodes => nodes.map(n => n.dataset.amount)), ["5000", "10000", "25000", "50000", "100000"]);
+  assert.equal(await page.locator("#supportAmounts [data-amount]").count(), 6);
+  assert.deepEqual(await page.locator("#supportAmounts [data-amount]").evaluateAll(nodes => nodes.map(n => n.dataset.amount)), ["5", "50", "100", "10000", "50000", "100000"]);
   assert.deepEqual(problems, []);
   await browser.close();
 });
@@ -1232,10 +1232,16 @@ test("target prices reject fractions and values above the safe limit; blank inpu
   assert.match(await page.textContent("#dBody .target-error"), /целую целевую цену/);
   assert.equal(await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem("amnyam.targets") || "{}")).length), 0);
 
-  await input.fill("1000000000000001");
+  assert.equal(await input.getAttribute("max"), "100000");
+
+  await input.fill("100001");
   await save.click();
   assert.match(await page.textContent("#dBody .target-error"), /целую целевую цену/);
   assert.equal(await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem("amnyam.targets") || "{}")).length), 0);
+
+  await input.fill("100000");
+  await save.click();
+  assert.equal(await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem("amnyam.targets") || "{}")).includes(100000)), true);
 
   await input.fill("1000");
   await save.click();
@@ -1267,7 +1273,7 @@ test("support payment status failures do not invite duplicate intents and can be
     supportRoutes: {
       "/api/support/config": ok({
         enabled: true,
-        amounts: [5000, 10000, 25000, 50000, 100000],
+        amounts: [5, 50, 100, 10000, 50000, 100000],
         sdk_url: "https://huevo.su/static/js/huevo-apps-v1.js",
         origins: ["huevo.su", "huevo.departament.site"]
       }),
@@ -1277,7 +1283,7 @@ test("support payment status failures do not invite duplicate intents and can be
         return route.fulfill({
           status: 200,
           contentType: "application/json",
-          body: JSON.stringify({ ok: true, intent_id: "pi_test_retry_1", amount: 5000, test: true })
+          body: JSON.stringify({ ok: true, intent_id: "pi_test_retry_1", amount: 5, test: true })
         });
       },
       "/api/support/status/pi_test_retry_1": (route) => {
@@ -1288,7 +1294,7 @@ test("support payment status failures do not invite duplicate intents and can be
         return route.fulfill({
           status: 200,
           contentType: "application/json",
-          body: JSON.stringify({ intent_id: "pi_test_retry_1", amount: 5000, status: "succeeded", test: true })
+          body: JSON.stringify({ intent_id: "pi_test_retry_1", amount: 5, status: "succeeded", test: true })
         });
       }
     }
@@ -1297,7 +1303,7 @@ test("support payment status failures do not invite duplicate intents and can be
   await page.click('#mainNav [data-view="appearance"]');
   await page.click('#workspaceSubnav [data-view="support"]');
   await page.waitForFunction(() => document.querySelector("#supportHint").textContent.includes("Платёж будет создан"));
-  await page.click('#supportAmounts [data-amount="5000"]');
+  await page.click('#supportAmounts [data-amount="5"]');
   await page.waitForFunction(() => document.querySelector("#supportRetryStatus") && !document.querySelector("#supportRetryStatus").hidden);
   assert.match(await page.textContent("#supportMsgText"), /не создавай повторный/i);
   assert.match(await page.textContent("#supportMsgText"), /pi_test_retry_1/);
@@ -1311,7 +1317,7 @@ test("support payment status failures do not invite duplicate intents and can be
   await page.waitForFunction(() => document.querySelector("#supportRetryStatus") && !document.querySelector("#supportRetryStatus").hidden);
   assert.match(await page.textContent("#supportMsgText"), /ранее созданный платёж/i);
 
-  await page.click('#supportAmounts [data-amount="5000"]');
+  await page.click('#supportAmounts [data-amount="5"]');
   assert.equal(intentCalls, 1, "a pending intent blocks creation of a duplicate");
   await page.click("#supportRetryStatus");
   await page.waitForFunction(() => document.querySelector("#supportMsgText").textContent.includes("Тестовый платёж подтверждён"));
@@ -1643,10 +1649,37 @@ test("support quick access and custom amount input are available", async () => {
   assert.match(await cta.textContent(), /Поддержать автора/);
   await cta.click();
   assert.equal(await page.locator("#supportPanel.view-hidden").count(), 0, "CTA opens the support page directly");
-  assert.equal(await page.locator("#supportCustomAmount").getAttribute("min"), "5000");
+  assert.equal(await page.locator("#supportCustomAmount").getAttribute("min"), "5");
   assert.equal(await page.locator("#supportCustomAmount").getAttribute("max"), "100000");
+  assert.deepEqual(
+    await page.locator("#supportAmounts [data-amount]").evaluateAll(nodes => nodes.map(node => Number(node.dataset.amount))),
+    [5, 50, 100, 10000, 50000, 100000]
+  );
   assert.equal(await page.locator("#supportCustomAmount").getAttribute("step"), "1");
   assert.ok(await page.locator("#supportCustomSubmit").isVisible());
+  assert.deepEqual(problems, []);
+  await browser.close();
+});
+
+test("market lot list scrolls inside its own viewport while top navigation stays sticky", async () => {
+  const { browser, page, problems } = await open(serve(dataV2()), { width: 1280, height: 900 });
+  await page.waitForSelector("#content:not(.hide)");
+  await page.click('#mainNav [data-view="market"]');
+  const pane = page.locator("#marketResultsViewport");
+  await pane.waitFor();
+  const metrics = await pane.evaluate(el => ({
+    height: el.clientHeight,
+    scrollHeight: el.scrollHeight,
+    overflowY: getComputedStyle(el).overflowY
+  }));
+  assert.ok(metrics.height > 0);
+  assert.ok(metrics.scrollHeight > metrics.height, "the list must have an internal scroll range");
+  assert.equal(metrics.overflowY, "auto");
+  const before = await page.evaluate(() => window.scrollY);
+  await pane.evaluate(el => { el.scrollTop = Math.min(200, el.scrollHeight); });
+  const after = await page.evaluate(() => window.scrollY);
+  assert.equal(after, before, "scrolling the market list must not scroll the whole document");
+  assert.equal(await page.locator("#mainNav").evaluate(el => getComputedStyle(el).position), "sticky");
   assert.deepEqual(problems, []);
   await browser.close();
 });
