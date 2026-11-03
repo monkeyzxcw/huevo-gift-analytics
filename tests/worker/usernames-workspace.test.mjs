@@ -19,7 +19,7 @@ test("gifts and usernames are separate market workspaces with independent eight-
   assert.equal((giftTabs.match(/role="tab"/g) || []).length, 8, "gift navigation must preserve its eight existing tabs");
   assert.equal((usernameTabs.match(/data-username-view=/g) || []).length, 8, "username market has its own eight tabs");
   assert.match(html, /https:\/\/huevo\.su\/market/);
-  assert.match(html, /usernames\.js\?v=amnyam-usernames-v3/);
+  assert.match(html, /usernames\.js\?v=amnyam-usernames-v4/);
 });
 
 test("username workspace accepts automatic Cloudflare snapshots and keeps JSON/CSV as a manual fallback", async () => {
@@ -80,7 +80,7 @@ test("username analytics uses CSP-safe CSS bars and JavaScript syntax is checked
   const css = await read("cloudflare-site/styles.css");
   const pkg = await read("package.json");
   assert.match(pkg, /node --check cloudflare-site\/usernames\.js/);
-  assert.match(html, /styles\.css\?v=amnyam-own-lots-v1/);
+  assert.match(html, /styles\.css\?v=amnyam-studio-v2/);
   assert.match(css, /\.username-bar-w-100\s*\{width:100%\}/);
   assert.match(css, /\.username-bar-h-100\s*\{height:100%\}/);
   assert.doesNotMatch(css.slice(css.indexOf("/* Separate Huevo market workspaces"), css.length), /<style/i);
