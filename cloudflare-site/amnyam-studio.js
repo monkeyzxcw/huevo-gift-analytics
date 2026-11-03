@@ -18,7 +18,7 @@ const btn=(txt,fn,cls="btn secondary")=>{const b=el("button",cls,txt);b.type="bu
 const dispatch=(name,detail)=>window.dispatchEvent(new CustomEvent(name,{detail}));
 function setDensity(){document.body.classList.toggle("market-compact",settings.compactMarket);const c=$("studioCompactMarket"),b=$("studioMarketDensityButton");if(c)c.checked=settings.compactMarket;if(b){b.setAttribute("aria-pressed",String(settings.compactMarket));b.textContent=settings.compactMarket?"Стандартный вид":"Компактный вид"}}
 function save(notify=true){try{localStorage.setItem(storageKey(),JSON.stringify(copy()))}catch(_){}setDensity();render();controls();if(notify)dispatch("amnyam:studio-change",copy())}
-function profileKeySet(v){const next=/^(?:guest|\d{1,64})$/.test(String(v||""))?String(v):"guest";if(next===profileKey)return;profileKey=next;settings=read();save(false)}
+function profileKeySet(v){const next=/^(?:guest|[A-Za-z0-9_-]{1,64})$/.test(String(v||""))?String(v):"guest";if(next===profileKey)return;profileKey=next;settings=read();save(false)}
 function nav(view){document.querySelector('#mainNav [data-view="'+view+'"]')?.click()}
 function openLot(id){dispatch("amnyam:studio-open-lot",{lotId:String(id)})}
 function quick(id){if(["deals","cheap","favorites"].includes(id))nav(id);else if(id==="usernames")document.querySelector('#marketTypeNav [data-market-type="usernames"]')?.click();else dispatch("amnyam:studio-filter",{key:id})}
