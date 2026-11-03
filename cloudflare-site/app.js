@@ -1459,11 +1459,6 @@
       img.addEventListener("error",()=>img.replaceWith(h("span",{class:"thumb",text:"🎁","aria-hidden":"true"})));
       const delta=l._delta==null?h("span",{class:"muted",text:"—"}):h("span",{class:l._delta<0?"good":"bad",text:(l._delta>0?"+":"")+fmt(l._delta)+"%"});
       const fav=state.favorites.includes(String(l.lot_id));
-      const ownBadge = isOwnLot(l) ? h("span", {
-        class: "own-lot-badge",
-        text: "МОЙ ЛОТ",
-        title: "Продавец совпадает с текущим профилем huEVO"
-      }) : null;
       const watch=h("button",{class:"watch-btn",type:"button","aria-pressed":String(fav),"aria-label":(fav?"Убрать из избранного ":"Добавить в избранное ")+(l.title||l.lot_id),text:fav?"★":"☆"});
       watch.addEventListener("click",()=>toggleFavorite(l.lot_id));
       const detail=h("button",{class:"btn secondary",type:"button","aria-label":"Подробнее о лоте "+(l.title||l.lot_id),text:"Подробнее"});
@@ -1475,7 +1470,6 @@
       body.append(h("tr",{},[
         h("td",{},[h("div",{class:"lot"},[img,h("div",{},[
           h("strong",{text:l.title||"Без названия"}),
-          ownBadge,
           h("small",{text:"#"+l.lot_id+(l.serial?" · "+l.serial:"")})
         ])])]),
         priceCell,
