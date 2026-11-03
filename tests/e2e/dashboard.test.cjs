@@ -1624,6 +1624,7 @@ test("username workspace imports real rows, calculates peer signals and keeps gi
     assert.match(await page.textContent("#usernameSimilarResults"), /@alfaee/);
     assert.match(await page.textContent("#usernameSimilarResults"), /Отличается на 1 символ/);
 
+    await page.click('#usernameTabs [data-username-view="market"]');
     await page.fill("#usernameSearch", "alfa");
     assert.equal(await page.locator("#usernameRows tr").count(), 1);
     assert.match(await page.textContent("#usernameRows"), /@alfaee/);
