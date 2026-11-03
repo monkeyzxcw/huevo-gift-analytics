@@ -223,6 +223,11 @@
     <button type="button" data-studio-filter="favorites"><span>☆</span> Мой список</button>
     <button type="button" data-studio-filter="usernames"><span>@</span> Юзернеймы</button>
   </div>
+  <form class="studio-natural-search" id="studioNaturalSearch">
+    <label class="studio-natural-input"><span>Быстрый запрос по-русски</span><input class="input" id="studioNaturalQuery" maxlength="180" placeholder="Например: редкие подарки дешевле 3000"></label>
+    <button class="btn" type="submit">Разобрать запрос ↗</button>
+    <small id="studioNaturalStatus" role="status" aria-live="polite">Запрос обрабатывается локально и превращается в фильтры AMNYAM.</small>
+  </form>
   <div class="studio-widgets" id="studioWidgets" aria-live="polite"><div class="studio-loading">Собираем персональную панель…</div></div>
   <div class="studio-foot"><span><i></i> РЫНОЧНЫЕ ДАННЫЕ ИЗ ТЕКУЩЕГО СНИМКА</span><span id="studioUpdatedAt">Ожидаем обновление</span></div>
 </section>
