@@ -2695,3 +2695,14 @@ body[data-motion="off"] .studio-widget,body.amnyam-calm .studio-widget{animation
 .username-compare-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .username-compare-table{min-width:520px}
 
+.studio-natural-search{position:relative;z-index:1;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px 10px;align-items:end;padding:11px;margin:10px 0 14px;border:1px solid rgba(201,243,107,.16);border-radius:11px;background:rgba(5,12,8,.5)}
+.studio-natural-input{display:flex;flex-direction:column;gap:5px;min-width:0;color:#aaba9f;font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.studio-natural-input .input{min-height:38px}
+#studioNaturalStatus{grid-column:1/-1;color:#91a18a;font-size:9px}
+#studioNaturalStatus[data-tone="error"]{color:#f39a82}
+#studioNaturalStatus[data-tone="success"]{color:#c9f36b}
+.portfolio-meta{display:flex;flex-direction:column;gap:3px;min-width:0}
+.portfolio-note{max-width:100%;color:#a7b59e;font-size:10px;overflow-wrap:anywhere;white-space:normal}
+.portfolio-add-form{align-items:end}
+@media(max-width:640px){.studio-natural-search{grid-template-columns:1fr}.studio-natural-search .btn{width:100%}}
+
