@@ -1536,6 +1536,10 @@ test("AMNYAM Intelligence Lab filters market lots and exports safe analytics", a
     document.querySelector("#intelQuery").dispatchEvent(new Event("input", { bubbles: true }));
   });
   assert.ok(await page.locator("#intelSaved").textContent().then(x => x.includes("QA скринер")));
+  await page.fill("#intelFilterName", "Мои скидки");
+  await page.click("#intelSaveFilter");
+  assert.match(await page.textContent("#intelSaved"), /Мои скидки/);
+  assert.equal(await page.inputValue("#intelFilterName"), "", "the inline screener name clears after saving");
   const downloadPromise = page.waitForEvent("download");
   await page.click("#intelExportJson");
   const download = await downloadPromise;
