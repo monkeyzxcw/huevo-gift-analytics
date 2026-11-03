@@ -1825,3 +1825,25 @@ test("AMNYAM Studio quick filters navigate to the requested market view without 
     await browser.close();
   }
 });
+
+test("AMNYAM Studio settings are partitioned by full huEVO internal user ID", async () => {
+  const { browser, page, problems } = await open(serve(dataV2()));
+  try {
+    await page.waitForSelector("#content:not(.hide)");
+    const userId = "a1b2c3d4-55aa-4c11-8eef-1234567890ab";
+    await page.evaluate(id => window.dispatchEvent(new CustomEvent("amnyam:studio-profile", {
+      detail: { profileKey: id, settings: { order: ["radar", "pulse", "movement", "watchlist", "saved"], hidden: ["saved"], compactMarket: true } }
+    })), userId);
+    const saved = await page.evaluate(id => localStorage.getItem("amnyam.studio.v1." + id), userId);
+    assert.ok(saved, "UUID-backed profile gets its own settings key");
+    assert.deepEqual(JSON.parse(saved), {
+      order: ["radar", "pulse", "movement", "watchlist", "saved"],
+      hidden: ["saved"],
+      compactMarket: true
+    });
+    assert.equal(await page.locator("body.market-compact").count(), 1);
+    assert.deepEqual(problems, []);
+  } finally {
+    await browser.close();
+  }
+});
