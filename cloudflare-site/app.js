@@ -1214,15 +1214,31 @@
     return rules;
   }
 
+  function sellerProfileIdFromUrl(value) {
+    if (typeof value !== "string" || !value.trim() || value.length > 500) return "";
+    let url;
+    try { url = new URL(value); } catch (_) { return ""; }
+    const host = url.hostname.toLocaleLowerCase("en");
+    if (url.protocol !== "https:" || url.username || url.password || url.port ||
+        (host !== "huevo.su" && host !== "huevo.departament.site")) return "";
+    const match = url.pathname.match(/^\/profile\/(\d{1,20})\/?$/);
+    return match ? match[1] : "";
+  }
+
   function lotSellerIdentity(lot) {
     const instance = lot && lot.gift_instance && typeof lot.gift_instance === "object" ? lot.gift_instance : {};
     const rawName = lot && (lot.seller || lot.seller_username) || instance.current_owner || "";
-    const rawId = lot && lot.seller_user_id || instance.current_owner_id || "";
+    const rawIds = [
+      lot && lot.seller_user_id,
+      instance.current_owner_id,
+      sellerProfileIdFromUrl(lot && lot.seller_url)
+    ];
     const username = String(rawName).trim().replace(/^@+/, "");
-    const userId = String(rawId).trim();
+    const userId = rawIds.map(value => String(value == null ? "" : value).trim())
+      .find(value => /^\d{1,20}$/.test(value)) || "";
     return {
       username: /^[a-z0-9_]{1,32}$/i.test(username) ? username.toLocaleLowerCase("en") : "",
-      userId: /^\d{1,20}$/.test(userId) ? userId : ""
+      userId
     };
   }
 
