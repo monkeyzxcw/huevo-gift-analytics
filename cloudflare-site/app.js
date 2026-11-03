@@ -2232,7 +2232,7 @@
       ]);
       actions.querySelector("button").addEventListener("click",()=>toggleFavorite(lot.lot_id));
       const row=lotItem(lot,actions,"#"+lot.lot_id+(lot.rarity?" · "+lot.rarity:""));row.classList.add("deal-row");
-      const input=h("input",{class:"input target-input",type:"number",min:"1",step:"1",inputmode:"numeric",placeholder:"Цена-цель","aria-label":"Целевая цена для "+(lot.title||lot.lot_id)});
+      const input=h("input",{class:"input target-input",type:"number",min:"1",max:String(TARGET_PRICE_MAX),step:"1",inputmode:"numeric",placeholder:"Цена-цель","aria-label":"Целевая цена для "+(lot.title||lot.lot_id)});
       input.value=target?String(target):"";
       const save=h("button",{class:"btn secondary target-save",type:"button",text:target?"Обновить цель":"Задать цель"});
       save.addEventListener("click",()=>saveTarget(lot.lot_id,input.value));
