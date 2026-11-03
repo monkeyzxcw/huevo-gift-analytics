@@ -5,7 +5,7 @@
   const PAGE = 50;
   const STALE_HOURS = 24;
   const HUEVO_HOSTS = /^https:\/\/(huevo\.su|huevo\.departament\.site)\//i;
-  const TARGET_PRICE_MAX = 1e15;
+  const TARGET_PRICE_MAX = 100000;
 
   function unregisterLegacyServiceWorker() {
     if (!("serviceWorker" in navigator)) return;
