@@ -1634,3 +1634,19 @@ test("username workspace imports real rows, calculates peer signals and keeps gi
     await browser.close();
   }
 });
+
+test("support quick access and custom amount input are available", async () => {
+  const { browser, page, problems } = await open(serve(dataV2()));
+  await page.waitForSelector("#content:not(.hide)");
+  const cta = page.locator('#mainNav [data-go-view="support"]');
+  assert.equal(await cta.count(), 1, "support CTA is visible in the primary navigation");
+  assert.match(await cta.textContent(), /Поддержать автора/);
+  await cta.click();
+  assert.equal(await page.locator("#supportPanel.view-hidden").count(), 0, "CTA opens the support page directly");
+  assert.equal(await page.locator("#supportCustomAmount").getAttribute("min"), "5000");
+  assert.equal(await page.locator("#supportCustomAmount").getAttribute("max"), "100000");
+  assert.equal(await page.locator("#supportCustomAmount").getAttribute("step"), "1");
+  assert.ok(await page.locator("#supportCustomSubmit").isVisible());
+  assert.deepEqual(problems, []);
+  await browser.close();
+});
