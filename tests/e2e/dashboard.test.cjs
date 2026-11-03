@@ -714,10 +714,14 @@ test("new catalogue, market events, date range, portfolio and Sniper rule profil
     await page.fill("#portfolioRarity", "Редкий");
     await page.fill("#portfolioQuantity", "2");
     await page.fill("#portfolioCost", "300");
+    await page.fill("#portfolioPurchaseDate", "2026-10-30");
+    await page.fill("#portfolioNotes", "Серийный номер проверен");
     await page.click('#portfolioForm button[type="submit"]');
     assert.equal(await page.locator("#portfolioList .portfolio-row").count(), 1);
     assert.match(await page.textContent("#portfolioList"), /подтверждённые продажи/);
     assert.match(await page.textContent("#portfolioList"), /900/);
+    assert.match(await page.textContent("#portfolioList"), /2026-10-30/);
+    assert.match(await page.textContent("#portfolioList"), /Серийный номер проверен/);
     const portfolioDownload = page.waitForEvent("download");
     await page.click("#exportPortfolioCsv");
     assert.match((await portfolioDownload).suggestedFilename(), /amnyam-portfolio/);
