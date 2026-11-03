@@ -182,3 +182,54 @@ test("server aborts a stalled huEVO Apps API request and returns a stable timeou
   }
 });
 
+
+
+test("custom contribution accepts arbitrary whole amounts in the configured range", async () => {
+  const db = mockD1();
+  const originalFetch = globalThis.fetch;
+  const providerCalls = [];
+  globalThis.fetch = async (url, options = {}) => {
+    providerCalls.push({ path: new URL(String(url)).pathname, body: options.body ? JSON.parse(options.body) : null });
+    return new Response(JSON.stringify({ ok: true, intent_id: "pi_custom_amount_1" }), {
+      status: 200, headers: { "Content-Type": "application/json" }
+    });
+  };
+  try {
+    const result = await invokeIntent(
+      { DB: db, HU_CLIENT_ID: CLIENT_ID, HU_SECRET: SECRET },
+      signedQuery(),
+      55555
+    );
+    assert.equal(result.status, 200);
+    assert.equal(result.body.ok, true);
+    assert.equal(result.body.amount, 55555);
+    assert.equal(providerCalls.length, 1);
+    assert.equal(providerCalls[0].body.amount, 55555);
+    assert.equal(db.state.payment.amount, 55555);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("custom contribution rejects amounts outside the inclusive 5000-100000 range", async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error("must not call provider for invalid amount");
+  };
+  try {
+    for (const amount of [4999, 100001, 5000.5, NaN]) {
+      const result = await invokeIntent(
+        { DB: mockD1(), HU_CLIENT_ID: CLIENT_ID, HU_SECRET: SECRET },
+        signedQuery(),
+        amount
+      );
+      assert.equal(result.status, 400, String(amount));
+      assert.match(result.body.detail, /5000.*100000/);
+    }
+    assert.equal(providerCalls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

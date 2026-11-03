@@ -1,0 +1,54 @@
+--- a/HuevoDualScan_app.py
++++ b/HuevoDualScan_app.py
+@@ -670,11 +670,10 @@
+         current.append(lot)
+     current_ids = {str(lot["lot_id"]) for lot in current}
+     old_active = [lot for lot in old_lots if isinstance(lot, dict) and lot.get("lot_id") is not None and lot.get("active", True)]
+-    previous_active_ids = {str(lot.get("lot_id")) for lot in old_active}
+-    seen_previous = len(previous_active_ids & current_ids)
+-    missing_previous = previous_active_ids - current_ids
+-    if len(missing_previous) >= 20 and seen_previous < (seen_previous + len(missing_previous)) * 0.5:
+-        raise RuntimeError(f"Неполный проход: найдено только {seen_previous} из {len(previous_active_ids)} прежних активных лотов; старый снимок сохранён.")
++    # Do not compare the current full catalogue with the previous active-lot count.
++    # A completed sequential pagination pass is authoritative: old listings can be
++    # bought, cancelled, or expired between scans. Pagination completeness is
++    # validated by _collect_full_snapshot before this builder is called.
+     changes = _compare_lots(old_active, current) if old_active else None
+     gone_by_id = {}
+     for lot in (previous.get("gone_lots") or []):
+--- a/test_details_parser.py
++++ b/test_details_parser.py
+@@ -1205,3 +1205,33 @@
+     assert lot["seller_url"] == "https://huevo.su/profile/14188", lot
+ 
+ 
++
++
++def test_full_snapshot_accepts_smaller_catalog_after_confirmed_full_pass():
++    from datetime import datetime, timezone
++
++    now = datetime.now(timezone.utc).isoformat()
++    previous = {
++        "schema_version": 3,
++        "generated_at": now,
++        "lots": [
++            {"lot_id": str(i), "title": f"Gift {i}", "price": 100 + i,
++             "active": True, "first_seen": now, "last_seen": now,
++             "history": [{"observed_at": now, "price": 100 + i}]}
++            for i in range(1, 392)
++        ],
++        "gone_lots": [], "catalog_events": [], "snapshots": []
++    }
++    current_rows = [
++        {"lot_id": str(i), "title": f"Gift {i}", "price": 90 + i}
++        for i in range(1, 65)
++    ]
++
++    snapshot = module._build_full_snapshot(current_rows, previous, 13)
++
++    assert len([lot for lot in snapshot["lots"] if lot.get("active")]) == 64
++    assert len(snapshot["gone_lots"]) == 327
++    first = next(lot for lot in snapshot["lots"] if lot["lot_id"] == "1")
++    assert first["history"][0] == {"observed_at": now, "price": 101}
++    assert first["history"][-1]["price"] == 91
++    assert all(not lot.get("active", True) for lot in snapshot["gone_lots"])
