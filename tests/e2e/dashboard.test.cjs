@@ -1519,6 +1519,16 @@ test("AMNYAM Intelligence Lab filters market lots and exports safe analytics", a
   assert.ok(await page.locator("#intelKpis .intel-kpi").count() >= 8, "market KPI cards should render");
   assert.ok(await page.locator("#intelRows tr").count() > 0, "analytics table should render market rows");
 
+  await page.selectOption("#intelPeriod", "24h");
+  await page.waitForTimeout(80);
+  assert.match(await page.textContent("#intelKpis"), /за 24 часа/);
+  assert.equal(await page.locator("#intelPeriod").inputValue(), "24h");
+  await page.selectOption("#intelPeriod", "30d");
+  await page.waitForTimeout(80);
+  assert.match(await page.textContent("#intelKpis"), /за 30 дней/);
+  await page.selectOption("#intelPeriod", "7d");
+  await page.waitForTimeout(80);
+
   await page.fill("#intelQuery", "Подарок 1");
   await page.waitForTimeout(100);
   const filteredCount = await page.locator("#intelRows tr").count();
