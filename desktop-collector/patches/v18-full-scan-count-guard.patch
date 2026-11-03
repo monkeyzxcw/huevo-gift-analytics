@@ -1,6 +1,9 @@
 --- a/HuevoDualScan_app.py
 +++ b/HuevoDualScan_app.py
-@@
+@@ -670,11 +670,10 @@
+         current.append(lot)
+     current_ids = {str(lot["lot_id"]) for lot in current}
+     old_active = [lot for lot in old_lots if isinstance(lot, dict) and lot.get("lot_id") is not None and lot.get("active", True)]
 -    previous_active_ids = {str(lot.get("lot_id")) for lot in old_active}
 -    seen_previous = len(previous_active_ids & current_ids)
 -    missing_previous = previous_active_ids - current_ids
@@ -10,9 +13,17 @@
 +    # A completed sequential pagination pass is authoritative: old listings can be
 +    # bought, cancelled, or expired between scans. Pagination completeness is
 +    # validated by _collect_full_snapshot before this builder is called.
+     changes = _compare_lots(old_active, current) if old_active else None
+     gone_by_id = {}
+     for lot in (previous.get("gone_lots") or []):
 --- a/test_details_parser.py
 +++ b/test_details_parser.py
-@@
+@@ -1205,3 +1205,33 @@
+     assert lot["seller_url"] == "https://huevo.su/profile/14188", lot
+ 
+ 
++
++
 +def test_full_snapshot_accepts_smaller_catalog_after_confirmed_full_pass():
 +    from datetime import datetime, timezone
 +
