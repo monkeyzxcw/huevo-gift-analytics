@@ -182,12 +182,18 @@ export function sanitiseProfile(value) {
       const purchasePrice = Number(item.purchase_price);
       if (!title || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 1000 ||
           !Number.isSafeInteger(purchasePrice) || purchasePrice < 1 || purchasePrice > 1e15) return null;
+      const purchaseDate = cleanString(item.purchase_date, 10);
+      const validPurchaseDate = /^\\d{4}-\\d{2}-\\d{2}$/.test(purchaseDate) &&
+        Number.isFinite(Date.parse(purchaseDate + "T00:00:00Z")) &&
+        new Date(purchaseDate + "T00:00:00Z").toISOString().slice(0, 10) === purchaseDate;
       return {
         id: cleanString(item.id, 80) || "portfolio-" + index,
         title,
         rarity: cleanString(item.rarity, 80),
         quantity,
         purchase_price: purchasePrice,
+        purchase_date: validPurchaseDate ? purchaseDate : "",
+        notes: cleanString(item.notes, 300).replace(/[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F]/g, ""),
         added_at: cleanString(item.added_at, 40)
       };
     }).filter(Boolean);
