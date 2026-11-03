@@ -9,6 +9,7 @@
   const allowedViews = ["overview", "market", "sniper", "deals", "analytics", "favorites", "data", "settings"];
   let profileKey = "guest";
   let audioContext = null;
+  const usernameCompareKeys = new Set();
 
   const blankState = () => ({
     items: [], favorites: [], targets: {}, alertedTargets: {},
@@ -416,7 +417,15 @@
     const change = delta == null ? "—" : (delta > 0 ? "+" : "") + fmt(delta) + " ◉";
     const changeEl = el("span", { class: delta == null ? "muted" : delta < 0 ? "good" : "bad", text: change });
     const status = el("span", { class: "chip", text: item.status || "Не указан" });
+    const compare = el("input", {
+      type: "checkbox", class: "username-compare-check",
+      "aria-label": "Добавить @" + item.username + " в сравнение"
+    });
+    compare.checked = usernameCompareKeys.has(item.key);
+    compare.disabled = !compare.checked && usernameCompareKeys.size >= 4;
+    compare.addEventListener("change", () => toggleUsernameCompare(item.key));
     const actions = el("div", { class: "username-row-actions" }, [
+      compare,
       iconButton(favourite ? "★" : "☆", () => toggleFavorite(item.key), "username-icon-btn"),
       iconButton("ЦЕЛЬ", () => openTarget(item.key), "username-icon-btn"),
       iconButton("ОТКРЫТЬ ↗", () => openExternal(item), "username-icon-btn")
@@ -468,6 +477,7 @@
       maxField.setCustomValidity(message);
       $("usernameMarketCount").textContent = "Некорректный диапазон цен";
       body.append(el("tr", {}, el("td", { colspan: "6" }, empty(message + " Исправь фильтры или сбрось их."))));
+      updateUsernameCompareUi();
       return;
     }
     const rows = getFilteredItems();
@@ -476,9 +486,105 @@
       body.append(el("tr", {}, el("td", { colspan: "6" }, empty(state.items.length ?
         "По выбранным фильтрам объявлений нет. Ослабь фильтры или сбрось их." :
         "База юзернеймов пока пуста. Загрузи JSON/CSV из раздела «Данные» или открой оригинальный Huevo Market."))));
+      updateUsernameCompareUi();
       return;
     }
     rows.forEach(item => body.append(createUsernameRow(item)));
+    updateUsernameCompareUi();
+  }
+
+  function updateUsernameCompareUi() {
+    const count = $("usernameCompareCount"), compare = $("usernameCompareSelected"), clearButton = $("usernameCompareClear");
+    if (count) count.textContent = "Выбрано: " + usernameCompareKeys.size + "/4";
+    if (compare) compare.disabled = usernameCompareKeys.size < 2;
+    if (clearButton) clearButton.disabled = usernameCompareKeys.size === 0;
+  }
+  function toggleUsernameCompare(key) {
+    if (usernameCompareKeys.has(key)) usernameCompareKeys.delete(key);
+    else if (usernameCompareKeys.size < 4) usernameCompareKeys.add(key);
+    else announce("Для сравнения можно выбрать не более четырёх юзернеймов.", "error");
+    updateUsernameCompareUi();
+    renderMarket();
+  }
+  function openUsernameComparison() {
+    const items = [...usernameCompareKeys].map(key => state.items.find(item => item.key === key)).filter(Boolean);
+    if (items.length < 2) return;
+    const body = $("usernameCompareBody");
+    body.replaceChildren();
+    const table = el("table", { class: "username-compare-table" });
+    const head = el("thead"), header = el("tr");
+    header.append(el("th", { scope: "col", text: "Параметр" }));
+    items.forEach(item => header.append(el("th", { scope: "col", text: "@" + item.username })));
+    head.append(header);
+    const tbody = el("tbody");
+    const metrics = [
+      ["Цена объявления", item => price(item.price)],
+      ["Длина", item => item.length + " символов"],
+      ["Тип строки", item => ({ letters: "Буквы", digits: "Цифры", mixed: "Буквы и цифры", underscore: "Подчёркивание" })[item.kind] || item.kind],
+      ["Изменение последнего импорта", item => {
+        if (item.history.length < 2) return "Нет истории";
+        const previous = item.history[item.history.length - 2].price, current = item.history[item.history.length - 1].price;
+        return (current > previous ? "+" : "") + fmt(current - previous) + " ◉";
+      }],
+      ["Целевая цена", item => state.targets[item.key] ? price(state.targets[item.key]) : "Не задана"],
+      ["Статус", item => item.status || "Не указан"],
+      ["Аналоги той же длины и типа", item => {
+        const peers = state.items.filter(peer => peer.key !== item.key && peer.length === item.length && peer.kind === item.kind && Number.isSafeInteger(peer.price));
+        return peers.length + (peers.length >= 5 ? " · медиана " + price(median(peers.map(peer => peer.price))) : " · мало аналогов");
+      }]
+    ];
+    metrics.forEach(([label, get]) => tbody.append(el("tr", {}, [
+      el("th", { scope: "row", text: label }),
+      ...items.map(item => el("td", { text: get(item) }))
+    ])));
+    table.append(head, tbody);
+    body.append(el("div", { class: "table-wrap" }, table));
+    const actions = el("div", { class: "username-compare-actions" });
+    items.forEach(item => actions.append(iconButton("Открыть @" + item.username + " ↗", () => openExternal(item))));
+    body.append(actions);
+    const dialog = $("usernameCompareDialog");
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.setAttribute("open", "");
+  }
+  function levenshtein(left, right) {
+    const a = left.slice(0, 32), b = right.slice(0, 32);
+    let previous = Array.from({ length: b.length + 1 }, (_, i) => i);
+    for (let i = 1; i <= a.length; i++) {
+      const current = [i];
+      for (let j = 1; j <= b.length; j++) {
+        current[j] = Math.min(current[j - 1] + 1, previous[j] + 1, previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      }
+      previous = current;
+    }
+    return previous[b.length];
+  }
+  function runSimilarUsernames() {
+    const query = safeText($("usernameSimilarQuery").value, 32).replace(/^@+/, "").toLowerCase();
+    const root = $("usernameSimilarResults");
+    root.replaceChildren();
+    if (!/^[a-z0-9_]{1,32}$/.test(query)) {
+      root.append(empty("Введи имя от 1 до 32 латинских букв, цифр или подчёркиваний."));
+      return;
+    }
+    const wide = $("usernameSimilarMode").value === "wide";
+    const threshold = wide ? 2 : query.length >= 8 ? 2 : 1;
+    const results = state.items.map(item => ({ item, distance: levenshtein(query, item.normalized) }))
+      .filter(result => result.item.normalized !== query && result.distance <= threshold)
+      .sort((a, b) => a.distance - b.distance || (a.item.price ?? Infinity) - (b.item.price ?? Infinity) || a.item.username.localeCompare(b.item.username, "en"))
+      .slice(0, 12);
+    if (!results.length) {
+      root.append(empty("В текущей базе нет достаточно похожих имён. Проверь другой вариант или загрузи более свежую выгрузку."));
+      return;
+    }
+    results.forEach(({ item, distance }) => {
+      const row = el("article", { class: "username-similar-item" }, [
+        el("div", {}, [el("b", { text: "@" + item.username }), el("small", { text: distance === 1 ? "Отличается на 1 символ" : "Отличается на " + distance + " символа" })]),
+        el("strong", { text: price(item.price) }),
+        iconButton("☆", () => toggleFavorite(item.key), "btn secondary")
+      ]);
+      root.append(row);
+    });
+    announce("Найдено похожих имён: " + results.length + ". Это варианты из текущей базы, не проверка доступности.", "success");
   }
 
   function renderEvents() {
@@ -796,6 +902,12 @@
       $("usernameSort").value = "price_asc";
       renderMarket();
     });
+    $("usernameCompareSelected").addEventListener("click", openUsernameComparison);
+    $("usernameCompareClear").addEventListener("click", () => { usernameCompareKeys.clear(); renderMarket(); updateUsernameCompareUi(); });
+    $("usernameCompareClose").addEventListener("click", () => $("usernameCompareDialog").close());
+    $("usernameCompareDialog").addEventListener("click", event => { if (event.target === $("usernameCompareDialog")) $("usernameCompareDialog").close(); });
+    $("usernameSimilarRun").addEventListener("click", runSimilarUsernames);
+    $("usernameSimilarQuery").addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); runSimilarUsernames(); } });
     $("usernameImportFile").addEventListener("change", event => importFile(event.target.files && event.target.files[0]));
     $("usernameExportCsv").addEventListener("click", exportCsv);
     $("usernameDownloadTemplate").addEventListener("click", downloadTemplate);
@@ -816,6 +928,7 @@
       if (!window.confirm("Удалить импортированные объявления, историю и события юзернеймов для текущего профиля браузера?")) return;
       state.items = []; state.events = []; state.snapshots = []; state.importedAt = null;
       state.favorites = []; state.targets = {}; state.alertedTargets = {};
+      usernameCompareKeys.clear(); updateUsernameCompareUi();
       persist(); renderAll(); announce("Локальная база юзернеймов очищена.", "success");
     });
   }
