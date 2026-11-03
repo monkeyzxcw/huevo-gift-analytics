@@ -46,7 +46,7 @@ test("Market Intelligence Lab is shared user-facing analytics, not collector con
   const app = await read("cloudflare-site/app.js");
   const intel = await read("cloudflare-site/intel-lab.js");
   assert.match(html, /id="intelLab" data-view-section="analytics"/);
-  assert.match(html, /intel-lab\.js\?v=amnyam-intel-v2/);
+  assert.match(html, /intel-lab\.js\?v=amnyam-intel-v3/);
   assert.match(intel, /amnyam:market/);
   assert.match(intel, /intelExportCsv/);
   assert.match(intel, /intelExportJson/);
@@ -92,6 +92,13 @@ test("AMNYAM Aurora visual system remains decorative, responsive and reduced-mot
   assert.doesNotMatch(app, /(?:window\.)?location\.reload\s*\(/);
 });
 
+test("AMNYAM 2.0 deploy busts cached app, styles, Intel and username assets", async () => {
+  const html = await read("cloudflare-site/index.html");
+  assert.match(html, /styles\.css\?v=amnyam-studio-v2/);
+  assert.match(html, /app\.js\?v=amnyam-studio-v2/);
+  assert.match(html, /intel-lab\.js\?v=amnyam-intel-v3/);
+  assert.match(html, /usernames\.js\?v=amnyam-usernames-v4/);
+});
 test("AMNYAM Studio dashboard, natural search and per-user layout preferences are wired end to end", async () => {
   const html = await read("cloudflare-site/index.html");
   const app = await read("cloudflare-site/app.js");
