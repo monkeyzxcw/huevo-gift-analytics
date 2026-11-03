@@ -1232,10 +1232,16 @@ test("target prices reject fractions and values above the safe limit; blank inpu
   assert.match(await page.textContent("#dBody .target-error"), /целую целевую цену/);
   assert.equal(await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem("amnyam.targets") || "{}")).length), 0);
 
-  await input.fill("1000000000000001");
+  assert.equal(await input.getAttribute("max"), "100000");
+
+  await input.fill("100001");
   await save.click();
   assert.match(await page.textContent("#dBody .target-error"), /целую целевую цену/);
   assert.equal(await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem("amnyam.targets") || "{}")).length), 0);
+
+  await input.fill("100000");
+  await save.click();
+  assert.equal(await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem("amnyam.targets") || "{}")).includes(100000)), true);
 
   await input.fill("1000");
   await save.click();
