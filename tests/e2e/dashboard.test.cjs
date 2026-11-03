@@ -273,7 +273,8 @@ test("signed Huevo user can identify and filter own market listings", async () =
   await page.waitForSelector("#content:not(.hide)");
   await page.click('#mainNav [data-view="market"]');
   await page.waitForFunction(() => !document.querySelector("#ownLotsOnly").disabled);
-  assert.equal(await page.locator("#rows .own-lot-badge").count(), 3, "Huevo user ID, safe username fallback and trusted profile URL are marked");
+  assert.equal(await page.locator("#rows .own-lot-badge").count(), 0, "market rows never display an own-lot badge");
+  assert.doesNotMatch(await page.textContent("#rows"), /МОЙ ЛОТ|МОИ ЛОТЫ/i, "no own-lot marking is shown");
   await page.check("#ownLotsOnly");
   assert.match(await page.textContent("#rowCount"), /Найдено лотов: 3 из 7/);
   assert.match(await page.textContent("#rows"), /Мой подарок по ID/);
