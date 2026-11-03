@@ -683,7 +683,7 @@ function isSameOriginMutation(request) {
 }
 
 
-const SUPPORT_AMOUNTS = [5000, 10000, 25000, 50000, 100000];
+const SUPPORT_AMOUNTS = [5, 50, 100, 10000, 50000, 100000];
 const SUPPORT_FINAL_STATUSES = new Set(["succeeded", "failed", "cancelled", "expired"]);
 const HUEVO_APPS_API = "https://huevo.su/api/apps/v1";
 const HUEVO_APPS_SDK = "https://huevo.su/static/js/huevo-apps-v1.js";
@@ -781,8 +781,8 @@ async function createSupportIntent(request, env) {
     return jsonResponse(request, env, { ok: false, detail: "Ожидается JSON-объект." }, 400);
   }
   const amount = payload.amount;
-  if (!Number.isSafeInteger(amount) || amount < 5000 || amount > 100000) {
-    return jsonResponse(request, env, { ok: false, detail: "Сумма должна быть целым числом от 5000 до 100000." }, 400);
+  if (!Number.isSafeInteger(amount) || amount < 5 || amount > 100000) {
+    return jsonResponse(request, env, { ok: false, detail: "Сумма должна быть целым числом от 5 до 100000 монет." }, 400);
   }
   const launch = await verifyHuevoLaunch(String(payload.launch_query || "").slice(0, 8192), credentials.clientSecret, 86400);
   if (!launch || !/^\d{1,20}$/.test(String(launch.hu_user_id || "")) || !Number.isSafeInteger(Number(launch.hu_user_id))) {
