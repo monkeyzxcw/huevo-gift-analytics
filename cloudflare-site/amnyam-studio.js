@@ -56,12 +56,21 @@ function parseNaturalQuery(raw){
     const index=rest.toLocaleLowerCase("ru").indexOf(String(value).toLocaleLowerCase("ru"));
     if(index>=0)rest=rest.slice(0,index)+" "+rest.slice(index+String(value).length);
   };
+  const findFacet=(options)=>{
+    for(const option of options){
+      const phrases=[option.textContent,option.value].map(value=>String(value||"").toLocaleLowerCase("ru")).filter(Boolean);
+      for(const phrase of phrases)if(lower.includes(phrase))return{option,matched:phrase};
+      const stem=phrases[0]&&phrases[0].split(/\\s+/)[0].slice(0,4);
+      if(stem){const matched=lower.split(/\\s+/).find(word=>word.startsWith(stem));if(matched)return{option,matched};}
+    }
+    return null;
+  };
   const rarityOptions=Array.from(document.querySelectorAll("#rarity option")).filter(option=>option.value);
-  const rarity=rarityOptions.find(option=>lower.includes(option.textContent.toLocaleLowerCase("ru"))||lower.includes(option.value.toLocaleLowerCase("ru")));
-  if(rarity){parts.push('rarity:"'+rarity.value.replace(/"/g,"")+'"');removeText(rarity.textContent);}
+  const rarityMatch=findFacet(rarityOptions);
+  if(rarityMatch){parts.push('rarity:"'+rarityMatch.option.value.replace(/"/g,"")+'"');removeText(rarityMatch.matched);}
   const statusOptions=Array.from(document.querySelectorAll("#status option")).filter(option=>option.value);
-  const status=statusOptions.find(option=>lower.includes(option.textContent.toLocaleLowerCase("ru"))||lower.includes(option.value.toLocaleLowerCase("ru")));
-  if(status){parts.push('status:"'+status.value.replace(/"/g,"")+'"');removeText(status.textContent);}
+  const statusMatch=findFacet(statusOptions);
+  if(statusMatch){parts.push('status:"'+statusMatch.option.value.replace(/"/g,"")+'"');removeText(statusMatch.matched);}
   const ignored=new Set(["найди","покажи","подарки","подарок","лоты","лот","среди","дешевле","меньше","до","дороже","больше","выше","от","не","рынку","цена","ценой","стоимостью","и","с","по","в","на","для","мне","мои","новые"]);
   const terms=rest.toLocaleLowerCase("ru").replace(/[^\p{L}\p{N}_-]+/gu," ").split(/\s+/).filter(word=>word&&!ignored.has(word));
   parts.push(...terms);
