@@ -951,7 +951,9 @@
       const row = h("article", { class: "portfolio-row" }, [
         h("div", {}, [
           h("b", { text: item.title }),
-          h("small", { text: (item.rarity || "Редкость не указана") + " · " + fmt(item.quantity) + " шт." })
+          h("small", { text: (item.rarity || "Редкость не указана") + " · " + fmt(item.quantity) + " шт." }),
+          h("small", { text: "Покупка: " + (item.purchase_date || (item.added_at ? new Date(item.added_at).toLocaleDateString("ru-RU") : "дата не указана")) }),
+          item.notes ? h("small", { class: "portfolio-note", text: item.notes }) : null
         ]),
         h("div", { class: "portfolio-metric" }, [
           h("small", { text: "ВЛОЖЕНО" }), h("b", { text: price(cost) })
@@ -987,6 +989,11 @@
     const rarity = $("portfolioRarity").value.trim();
     const quantity = Number($("portfolioQuantity").value);
     const cost = Number($("portfolioCost").value);
+    const rawPurchaseDate = String($("portfolioPurchaseDate").value || "").trim();
+    const parsedPurchaseDate = rawPurchaseDate ? new Date(rawPurchaseDate + "T00:00:00Z") : null;
+    const purchaseDate = parsedPurchaseDate && Number.isFinite(parsedPurchaseDate.getTime()) &&
+      parsedPurchaseDate.toISOString().slice(0, 10) === rawPurchaseDate ? rawPurchaseDate : new Date().toISOString().slice(0, 10);
+    const notes = String($("portfolioNotes").value || "").trim().slice(0, 300);
     if (!title || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 1000 ||
         !Number.isSafeInteger(cost) || cost < 1 || cost > TARGET_PRICE_MAX) {
       $("portfolioForm").reportValidity();
@@ -995,7 +1002,7 @@
     const id = String(Date.now()) + "-" + Math.random().toString(36).slice(2, 8);
     state.portfolio.unshift({
       id, title: title.slice(0, 120), rarity: rarity.slice(0, 80),
-      quantity, purchase_price: cost, added_at: new Date().toISOString()
+      quantity, purchase_price: cost, purchase_date: purchaseDate, notes, added_at: new Date().toISOString()
     });
     state.portfolio = state.portfolio.slice(0, 100);
     $("portfolioForm").reset();
@@ -1371,6 +1378,8 @@
       ["Подарок", item => item.title], ["Редкость", item => item.rarity],
       ["Количество", item => item.quantity], ["Цена покупки", item => item.purchase_price],
       ["Всего вложено", item => item.quantity * item.purchase_price],
+      ["Дата покупки", item => item.purchase_date || item.added_at],
+      ["Заметка", item => item.notes || ""],
       ["Добавлено", item => item.added_at]
     ], state.portfolio);
     if (!ok) $("portfolioCount").textContent = "Нет позиций для экспорта";
