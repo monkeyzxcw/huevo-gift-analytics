@@ -2492,14 +2492,12 @@
     if (!supportConfig.enabled) return supportMessage("Приём поддержки не настроен. Проверь настройки huEVO Apps.", "error");
     if (!inHuevo || !supportSdkReady || !window.huevo) return supportMessage("Для оплаты открой AMNYAM MODE внутри huEVO как приложение.", "error");
     supportPaymentRunning = true;
-    const buttons = Array.from(document.querySelectorAll("#supportAmounts [data-amount]"));
+    const buttons = Array.from(document.querySelectorAll("#supportPanel [data-amount], #supportCustomSubmit, #supportCustomAmount"));
     buttons.forEach((button) => { button.disabled = true; button.setAttribute("aria-busy", "true"); });
     try {
       const numericAmount = Number(amount);
-      const configuredAmounts = (supportConfig.amounts || []).map(Number);
-      if (!Number.isSafeInteger(numericAmount) || numericAmount < 5000 || numericAmount > 100000 ||
-          (configuredAmounts.length && !configuredAmounts.includes(numericAmount))) {
-        throw new Error("Недопустимая сумма поддержки.");
+      if (!Number.isSafeInteger(numericAmount) || numericAmount < 5000 || numericAmount > 100000) {
+        throw new Error("Сумма должна быть целым числом от 5 000 до 100 000.");
       }
       supportMessage("Создаём запрос на поддержку…");
       const intent = await requestSupportApi("./api/support/intent", {
@@ -3200,6 +3198,8 @@
   $("saveBelowBestTarget").addEventListener("click",()=>{const id=state._belowBestId;if(id)saveTarget(id,$("belowBestTarget").value);});
   $("belowBestMinus10").addEventListener("click",()=>{const id=state._belowBestId,lot=state.lots.find(item=>String(item.lot_id)===String(id));if(lot&&isNum(lot.price)&&lot.price>0){$("belowBestTarget").value=String(Math.max(1,Math.floor(lot.price*.9)));saveTarget(id,$("belowBestTarget").value);}});
   $("supportAmounts").addEventListener("click",event=>{const b=event.target.closest("[data-amount]");if(b&&!b.disabled)makeSupportPayment(b.dataset.amount);});
+  $("supportCustomSubmit").addEventListener("click",()=>makeSupportPayment($("supportCustomAmount").value));
+  $("supportCustomAmount").addEventListener("keydown",event=>{if(event.key==="Enter"){event.preventDefault();makeSupportPayment($("supportCustomAmount").value);}});
   $("supportRetryStatus").addEventListener("click", refreshSupportPaymentStatus);
   document.querySelectorAll("[data-catalog-mode]").forEach(b=>b.addEventListener("click",()=>switchCatalogMode(b.dataset.catalogMode)));
   ["search","pmin","pmax"].forEach(id=>$(id).addEventListener("input",()=>{state.page=0;$("globalSearch").value=$("search").value;applyFilters();}));
