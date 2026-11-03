@@ -1589,6 +1589,22 @@ test("username workspace imports real rows, calculates peer signals and keeps gi
     assert.match(await page.textContent("#usernameKpis"), /7/);
     assert.equal(await page.locator("#usernameRows a[href^='https://huevo.su/']").count(), 0, "market rows use button actions, never arbitrary embedded links");
 
+    await page.locator("#usernameRows .username-compare-check").nth(0).check();
+    await page.locator("#usernameRows .username-compare-check").nth(1).check();
+    assert.match(await page.textContent("#usernameCompareCount"), /2\/4/);
+    assert.equal(await page.locator("#usernameCompareSelected").isEnabled(), true);
+    await page.click("#usernameCompareSelected");
+    assert.equal(await page.locator("#usernameCompareDialog[open]").count(), 1);
+    assert.match(await page.textContent("#usernameCompareBody"), /@alfaee/);
+    assert.match(await page.textContent("#usernameCompareBody"), /@bravoo/);
+    assert.match(await page.textContent("#usernameCompareBody"), /Аналоги той же длины и типа/);
+    await page.click("#usernameCompareClose");
+
+    await page.fill("#usernameSimilarQuery", "alfae");
+    await page.click("#usernameSimilarRun");
+    assert.match(await page.textContent("#usernameSimilarResults"), /@alfaee/);
+    assert.match(await page.textContent("#usernameSimilarResults"), /Отличается на 1 символ/);
+
     await page.fill("#usernameSearch", "alfa");
     assert.equal(await page.locator("#usernameRows tr").count(), 1);
     assert.match(await page.textContent("#usernameRows"), /@alfaee/);
