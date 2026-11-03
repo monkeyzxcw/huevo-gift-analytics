@@ -1769,7 +1769,7 @@
     const watch=h("div",{class:"detail-watch"});
     const fav=h("button",{class:"btn secondary",type:"button",text:state.favorites.includes(String(l.lot_id))?"★ В избранном":"☆ В избранное"});
     fav.addEventListener("click",()=>{toggleFavorite(l.lot_id);fav.textContent=state.favorites.includes(String(l.lot_id))?"★ В избранном":"☆ В избранное";});
-    const target=h("input",{class:"input target-input",type:"number",min:"1",step:"1",inputmode:"numeric",placeholder:"Целевая цена","aria-label":"Целевая цена для "+(l.title||l.lot_id)});
+    const target=h("input",{class:"input target-input",type:"number",min:"1",max:String(TARGET_PRICE_MAX),step:"1",inputmode:"numeric",placeholder:"Целевая цена","aria-label":"Целевая цена для "+(l.title||l.lot_id)});
     target.value=state.targets[String(l.lot_id)]?String(state.targets[String(l.lot_id)]):"";
     const save=h("button",{class:"btn",type:"button",text:"Сохранить цену-цель"});
     const targetError=h("small",{class:"target-error","role":"alert","aria-live":"polite"});
@@ -2111,7 +2111,7 @@
     row.children[1].append(metrics);
     if(lot.suspicious)row.children[1].append(h("p",{class:"deal-warning",text:"Экстремальный дисконт более 80%. Не выбран верхним сигналом: проверь совпадение подарка, редкость, статус и возможную ошибку цены."}));
     if(lot.basis==="sales" && lot.reference_scope==="title")row.children[1].append(h("p",{class:"deal-warning",text:"Исторические сделки пока не связаны с точным каталогом и редкостью. Это широкий ориентир по названию, уверенность снижена."}));
-    const target=h("input",{class:"input target-input deal-target-input",type:"number",min:"1",step:"1",inputmode:"numeric",placeholder:"Желаемая цена","aria-label":"Цена-цель для "+(lot.title||id)});
+    const target=h("input",{class:"input target-input deal-target-input",type:"number",min:"1",max:String(TARGET_PRICE_MAX),step:"1",inputmode:"numeric",placeholder:"Желаемая цена","aria-label":"Цена-цель для "+(lot.title||id)});
     target.value=state.targets[id]?String(state.targets[id]):"";
     const save=h("button",{class:"btn target-save",type:"button",text:state.targets[id]?"Обновить цену-цель":"Задать цену-цель"});
     save.addEventListener("click",()=>{saveTarget(lot.lot_id,target.value);});
