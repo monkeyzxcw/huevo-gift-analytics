@@ -2690,3 +2690,8 @@ body[data-motion="off"] .studio-widget,body.amnyam-calm .studio-widget{animation
 @media(max-width:900px){.studio-widget-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.studio-metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:640px){.studio-heading{align-items:flex-start;flex-direction:column}.studio-heading-actions{width:100%;justify-content:space-between}.studio-customize{grid-template-columns:1fr}.studio-widget-controls{grid-template-columns:1fr}.studio-widgets{grid-template-columns:1fr}.studio-metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.studio-opportunity{grid-template-columns:auto minmax(0,1fr) auto}.studio-opportunity-price{grid-column:2;grid-row:2;text-align:left}.studio-opportunity-price small{text-align:left}.studio-opportunity .studio-open-mini{grid-column:3;grid-row:1 / span 2}.username-similar-results{grid-template-columns:1fr}.username-similar-controls{align-items:stretch}.username-similar-controls label{min-width:100%;flex-basis:100%}}
 
+.intel-save-name{display:flex;align-items:center;min-width:min(220px,100%)}
+.intel-save-name .input{width:100%;min-width:180px;min-height:35px;padding:8px 10px}
+.username-compare-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.username-compare-table{min-width:520px}
+
