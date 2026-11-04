@@ -167,11 +167,11 @@ test("all-gifts catalogue is a first-class workspace and shows evidence-backed e
   assert.match(html, /data-view="giftcatalog"/);
   assert.match(html, /id="giftCatalogPanel" data-view-section="giftcatalog"/);
   assert.match(html, /id="giftCatalogSummary"/);
-  assert.match(app, /function catalogPriceProfiles\\(item\\)/);
-  assert.match(app, /function catalogOfferReference\\(prices\\)/);
+  assert.match(app, /function catalogPriceProfiles\(item\)/);
+  assert.match(app, /function catalogOfferReference\(prices\)/);
   assert.match(app, /Завершённые продажи/);
   assert.match(app, /Активные объявления · медиана/);
   assert.match(app, /gift_catalog_index/);
-  assert.doesNotMatch(app, /filtered\\.slice\\(0,\\s*150\\)/, "the full canonical index must remain browseable");
+  assert.doesNotMatch(app, /filtered\.slice\(0,\s*150\)/, "the full canonical index must remain browseable");
   assert.match(app, /navGiftCatalogCount/);
 });
