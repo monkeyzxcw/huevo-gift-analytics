@@ -102,7 +102,7 @@ test("full v2 data: cards, charts, changes, top, table render with no errors", a
   const { browser, page, problems } = await open(serve(dataV2()));
   await page.waitForSelector("#content:not(.hide)");
   const heroArtwork = await page.locator("#hero").evaluate((el) => getComputedStyle(el).backgroundImage);
-  assert.ok(heroArtwork.includes("amnyam-battlefield.webp"), "fantasy battlefield artwork is attached to the real hero section");
+  assert.ok(/amnyam-battlefield\\.(?:svg|webp)/.test(heroArtwork), "current battlefield artwork is attached to the real hero section");
   const artworkResponse = await page.evaluate(async () => {
     const response = await fetch("/assets/amnyam-battlefield.webp");
     return { status: response.status, contentType: response.headers.get("content-type"), body: await response.text() };
@@ -1366,6 +1366,9 @@ test("workspace navigation supports roving focus and contextual sub-tabs", async
     await page.keyboard.press("ArrowRight");
     assert.equal(await tab("market").getAttribute("aria-selected"), "true");
     assert.equal(await tab("market").evaluate(node => document.activeElement === node), true);
+    await page.keyboard.press("ArrowRight");
+    assert.equal(await tab("giftcatalog").getAttribute("aria-selected"), "true");
+    assert.equal(await tab("giftcatalog").evaluate(node => document.activeElement === node), true);
     await page.keyboard.press("ArrowRight");
     assert.equal(await tab("sniper").getAttribute("aria-selected"), "true");
     await page.keyboard.press("ArrowRight");
