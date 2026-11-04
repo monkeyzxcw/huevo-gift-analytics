@@ -7,7 +7,7 @@ import { dirname, resolve } from "node:path";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const read = (path) => readFile(resolve(root, path), "utf8");
 
-test("gifts and usernames are separate market workspaces with independent eight-tab navigation", async () => {
+test("gifts and usernames are separate market workspaces with independent gift and username navigation", async () => {
   const html = await read("cloudflare-site/index.html");
   assert.match(html, /id="marketTypeNav"/);
   assert.match(html, /id="giftsWorkspace"/);
@@ -16,7 +16,7 @@ test("gifts and usernames are separate market workspaces with independent eight-
   assert.match(html, /data-market-type="usernames"/);
   const giftTabs = html.match(/id="mainNav"[\s\S]*?<\/nav>/)?.[0] || "";
   const usernameTabs = html.match(/id="usernameTabs"[\s\S]*?<\/nav>/)?.[0] || "";
-  assert.equal((giftTabs.match(/role="tab"/g) || []).length, 8, "gift navigation must preserve its eight existing tabs");
+  assert.equal((giftTabs.match(/role="tab"/g) || [] ).length, 9, "gift navigation includes the standalone all-gifts catalogue");
   assert.equal((usernameTabs.match(/data-username-view=/g) || []).length, 8, "username market has its own eight tabs");
   assert.match(html, /https:\/\/huevo\.su\/market/);
   assert.match(html, /usernames\.js\?v=amnyam-usernames-v4/);
@@ -80,7 +80,7 @@ test("username analytics uses CSP-safe CSS bars and JavaScript syntax is checked
   const css = await read("cloudflare-site/styles.css");
   const pkg = await read("package.json");
   assert.match(pkg, /node --check cloudflare-site\/usernames\.js/);
-  assert.match(html, /styles\.css\?v=amnyam-studio-v2/);
+  assert.match(html, /styles\.css\?v=giftrack-catalog-fair-price-v1/);
   assert.match(css, /\.username-bar-w-100\s*\{width:100%\}/);
   assert.match(css, /\.username-bar-h-100\s*\{height:100%\}/);
   assert.doesNotMatch(css.slice(css.indexOf("/* Separate Huevo market workspaces"), css.length), /<style/i);

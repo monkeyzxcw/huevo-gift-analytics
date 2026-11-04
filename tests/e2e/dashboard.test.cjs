@@ -83,7 +83,12 @@ async function open(handler, viewport = { width: 1280, height: 900 }, options = 
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, enabled: false, authenticated: false, subscriptions: 0, amounts: [], supporters: 0, total: 0 }) });
     }
     if (u.pathname === "/data.json") return handler(route);
-    const file = path.join(SITE, u.pathname === "/" ? "index.html" : u.pathname.slice(1));
+    // URL.pathname keeps percent escapes (for example %20 in user-uploaded asset names).
+    // Decode exactly once before resolving a local static file path.
+    let localPath;
+    try { localPath = decodeURIComponent(u.pathname); }
+    catch (_) { return route.fulfill({ status: 400, body: "Bad URL encoding" }); }
+    const file = path.join(SITE, localPath === "/" ? "index.html" : localPath.slice(1));
     if (!file.startsWith(SITE) || !fs.existsSync(file)) return route.fulfill({ status: 404, body: "" });
     return route.fulfill({ status: 200, headers: { "content-type": TYPES[path.extname(file)] || "text/plain", "content-security-policy": CSP }, body: fs.readFileSync(file) });
   });
@@ -97,7 +102,7 @@ test("full v2 data: cards, charts, changes, top, table render with no errors", a
   const { browser, page, problems } = await open(serve(dataV2()));
   await page.waitForSelector("#content:not(.hide)");
   const heroArtwork = await page.locator("#hero").evaluate((el) => getComputedStyle(el).backgroundImage);
-  assert.ok(heroArtwork.includes("amnyam-battlefield.webp"), "fantasy battlefield artwork is attached to the real hero section");
+  assert.ok(heroArtwork.includes("1a8de5ab-c58c-4f63-b838-6ea958cf6561") || /amnyam-battlefield\.(?:svg|webp)/.test(heroArtwork), "current uploaded hero artwork is attached to the real hero section");
   const artworkResponse = await page.evaluate(async () => {
     const response = await fetch("/assets/amnyam-battlefield.webp");
     return { status: response.status, contentType: response.headers.get("content-type"), body: await response.text() };
@@ -678,16 +683,21 @@ test("new catalogue, market events, date range, portfolio and Sniper rule profil
   try {
     await page.waitForSelector("#content:not(.hide)");
 
-    await page.click('#mainNav [data-view="market"]');
-    await page.click('#marketWorkspaceTabs [data-market-tab="catalog"]');
+    await page.click('#mainNav [data-view="giftcatalog"]');
+    await page.waitForSelector("#giftCatalogPanel:not(.view-hidden)");
     assert.equal(await page.locator("#giftCatalogGrid .catalog-index-card").count(), 2);
     assert.match(await page.textContent("#giftCatalogGrid"), /Лунный кот/);
+    const pricedGift = await page.textContent("#giftCatalogGrid");
+    assert.match(pricedGift, /450/);
+    assert.match(pricedGift, /Медиана завершённых продаж/);
+    assert.match(pricedGift, /Нет достоверной цены сделок/);
+    assert.match(await page.textContent("#giftCatalogSummary"), /1/);
     await page.fill("#giftCatalogSearch", "Звезда");
     assert.equal(await page.locator("#giftCatalogGrid .catalog-index-card").count(), 1);
     assert.match(await page.textContent("#giftCatalogGrid"), /Каталог #131/);
     const catalogDownload = page.waitForEvent("download");
     await page.click("#exportGiftCatalogCsv");
-    assert.match((await catalogDownload).suggestedFilename(), /amnyam-gift-catalog/);
+    assert.match((await catalogDownload).suggestedFilename(), /giftrack-gift-catalog/);
 
     await page.fill("#globalSearch", "Звезда");
     assert.ok(await page.locator("#globalSearchSuggestions option").count() > 0);
@@ -861,9 +871,8 @@ test("AMNYAM atmosphere: daily picks wrap, seasonal themes persist, and mascot c
   });
   assert.ok(layout.width > 0 && layout.titleRight <= layout.cardRight + 1, "long title stays inside its card");
   assert.ok(layout.actionsRight <= layout.cardRight + 1, "action controls stay inside their card");
-  const heroTitle = await page.locator("#heroTitle").boundingBox();
-  await page.mouse.move(heroTitle.x + heroTitle.width / 2, heroTitle.y + heroTitle.height / 2);
-  assert.ok((await page.locator("body").getAttribute("class") || "").includes("cursor-glow-active"), "cursor glow appears over decoration");
+  await page.locator(".top .brand").hover();
+  assert.ok((await page.locator("body").getAttribute("class") || "").includes("cursor-glow-active"), "cursor glow appears over header decoration");
   const buyButton = await page.locator("#dayPicks .purchase-confirm").first().boundingBox();
   await page.mouse.move(buyButton.x + buyButton.width / 2, buyButton.y + buyButton.height / 2);
   assert.ok(!(await page.locator("body").getAttribute("class") || "").includes("cursor-glow-active"), "cursor glow stays off interactive purchase controls");
@@ -1357,6 +1366,9 @@ test("workspace navigation supports roving focus and contextual sub-tabs", async
     assert.equal(await tab("market").getAttribute("aria-selected"), "true");
     assert.equal(await tab("market").evaluate(node => document.activeElement === node), true);
     await page.keyboard.press("ArrowRight");
+    assert.equal(await tab("giftcatalog").getAttribute("aria-selected"), "true");
+    assert.equal(await tab("giftcatalog").evaluate(node => document.activeElement === node), true);
+    await page.keyboard.press("ArrowRight");
     assert.equal(await tab("sniper").getAttribute("aria-selected"), "true");
     await page.keyboard.press("ArrowRight");
     assert.equal(await tab("deals").getAttribute("aria-selected"), "true");
@@ -1684,7 +1696,7 @@ test("username workspace imports real rows, calculates peer signals and keeps gi
     assert.equal(await page.locator("#usernameWorkspace.hide").count(), 1);
     assert.equal(await page.locator("#giftsWorkspace.hide").count(), 0);
     assert.equal(await page.locator("#content:not(.hide)").count(), 1);
-    assert.equal(await page.locator("#mainNav [data-view]").count(), 8, "all gift sections remain in the gift workspace");
+    assert.equal(await page.locator("#mainNav [data-view]").count(), 9, "all gift sections include the standalone catalogue workspace");
 
     await page.click('#marketTypeNav [data-market-type="usernames"]');
     assert.equal(await page.locator("#usernameRows tr").count(), 7, "username data survives workspace switching");

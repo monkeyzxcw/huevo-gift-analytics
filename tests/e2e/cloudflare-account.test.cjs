@@ -72,7 +72,10 @@ async function openApp(search = "") {
     if (url.pathname === "/api/live/status") return respond({ enabled: false, fresh: false, items: [] });
     if (url.pathname.startsWith("/api/")) return respond({ ok: true, enabled: false, authenticated: Boolean(state.user), subscriptions: 0, amounts: [], supporters: 0, total: 0 });
     if (url.pathname === "/data.json") return respond(SNAPSHOT);
-    const file = url.pathname === "/" ? "index.html" : url.pathname.replace(/^\//, "");
+    let filePath;
+    try { filePath = decodeURIComponent(url.pathname); }
+    catch (_) { return route.fulfill({ status: 400, body: "Bad URL encoding" }); }
+    const file = filePath === "/" ? "index.html" : filePath.replace(/^\//, "");
     const full = path.resolve(SITE, file);
     if (!full.startsWith(SITE) || !fs.existsSync(full) || !fs.statSync(full).isFile()) return route.fulfill({ status: 404, body: "" });
     return route.fulfill({ status: 200, headers: { "content-type": TYPES[path.extname(full)] || "text/plain", "content-security-policy": CSP }, body: fs.readFileSync(full) });

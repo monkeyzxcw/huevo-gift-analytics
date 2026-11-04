@@ -48,8 +48,8 @@ test("invalid price ranges are reported explicitly and do not leave stale rows v
 test("audited dashboard cache versions and motion preferences are present", async () => {
   const html = await read("cloudflare-site/index.html");
   const css = await read("cloudflare-site/styles.css");
-  assert.match(html, /styles\.css\?v=amnyam-studio-v2/);
-  assert.match(html, /app\.js\?v=amnyam-studio-v2/);
+  assert.match(html, /styles\.css\?v=giftrack-catalog-fair-price-v1/);
+  assert.match(html, /app\.js\?v=giftrack-catalog-fair-price-v1/);
   assert.match(css, /body\.amnyam-compact/);
   assert.match(css, /amnyam-focus \.catalog-panel/);
   assert.doesNotMatch(css, /amnyam-focus \[data-view-section\]/, "focus mode must not hide navigation destinations");

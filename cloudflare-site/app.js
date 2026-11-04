@@ -1066,39 +1066,228 @@
     ])));
   }
 
+  function catalogIdOf(value) {
+    if (!value || typeof value !== "object") return "";
+    const candidates = [value.gift_catalog, value.gift_instance, value.gift_details, value.catalog, value];
+    for (const candidate of candidates) {
+      if (!candidate || typeof candidate !== "object") continue;
+      const id = String(candidate.catalog_id || candidate.gift_catalog_id || "").trim();
+      if (/^\d{1,20}$/.test(id)) return id;
+    }
+    return "";
+  }
+
+  function catalogOfferReference(prices) {
+    const values = (prices || []).filter(value => isNum(value) && value > 0).slice().sort((a, b) => a - b);
+    if (values.length < 3) {
+      return { reference: null, sample_size: values.length, raw_size: values.length,
+        excluded: 0, ambiguous: false, insufficient: true };
+    }
+    // Two populated price clusters are not treated as one market price. A lone extreme
+    // listing, on the other hand, is removed relative to the median of the main cluster.
+    for (let i = 1; i < values.length; i++) {
+      const ratio = values[i - 1] > 0 ? values[i] / values[i - 1] : 0;
+      if (ratio >= 2.5 && i >= 2 && values.length - i >= 2) {
+        return { reference: null, sample_size: values.length, raw_size: values.length,
+          excluded: 0, ambiguous: true, insufficient: false };
+      }
+    }
+    const centre = median(values);
+    const core = values.filter(value => value >= centre / 2.5 && value <= centre * 2.5);
+    if (core.length < 3) {
+      return { reference: null, sample_size: core.length, raw_size: values.length,
+        excluded: values.length - core.length, ambiguous: false, insufficient: true };
+    }
+    const reference = median(core);
+    const p25 = quantile(core, .25), p75 = quantile(core, .75);
+    const dispersion = reference > 0 ? (p75 - p25) / reference : Infinity;
+    if (dispersion > 1) {
+      return { reference: null, sample_size: core.length, raw_size: values.length,
+        excluded: values.length - core.length, p25, p75, dispersion,
+        ambiguous: true, insufficient: false };
+    }
+    return { reference, sample_size: core.length, raw_size: values.length,
+      excluded: values.length - core.length, p25, p75, dispersion,
+      ambiguous: false, insufficient: false };
+  }
+
+  function catalogPriceProfiles(item) {
+    const catalogId = String(item.catalog_id || item.gift_catalog_id || item.id || "").trim();
+    const titleKey = normaliseSaleTitle(item.title || item.name || "");
+    const rarityKey = normaliseSaleRarity(item.rarity || "");
+    const activeLots = state.lots.filter(lot => lot && lot.active !== false &&
+      isNum(lot.price) && lot.price > 0);
+    const byCatalogId = catalogId
+      ? activeLots.filter(lot => catalogIdOf(lot) === catalogId) : [];
+    const matchedLots = (byCatalogId.length ? byCatalogId : activeLots.filter(lot =>
+      normaliseSaleTitle(lot.title) === titleKey))
+      .filter(lot => !rarityKey || normaliseSaleRarity(lot.rarity) === rarityKey);
+
+    const sales = state.data && state.data.sales && typeof state.data.sales === "object"
+      ? state.data.sales : {};
+    const catalogSales = catalogId && Array.isArray(sales.by_catalog_rarity)
+      ? sales.by_catalog_rarity.filter(profile => String(profile.catalog_id || "") === catalogId) : [];
+    const titleSales = titleKey && Array.isArray(sales.by_title_rarity)
+      ? sales.by_title_rarity.filter(profile => normaliseSaleTitle(profile.title) === titleKey) : [];
+    const buckets = new Map();
+    const ensureBucket = rarity => {
+      const key = normaliseSaleRarity(rarity || "Без редкости") || "без редкости";
+      if (!buckets.has(key)) buckets.set(key, { rarity: rarity || "Без редкости", lots: [] });
+      return buckets.get(key);
+    };
+    matchedLots.forEach(lot => ensureBucket(lot.rarity).lots.push(lot));
+    [...catalogSales, ...titleSales].forEach(profile => {
+      const rarity = String(profile.rarity || "Без редкости");
+      if (!rarityKey || normaliseSaleRarity(rarity) === rarityKey) ensureBucket(rarity);
+    });
+    if (rarityKey) ensureBucket(item.rarity);
+    if (!buckets.size) ensureBucket(item.rarity || "Без редкости");
+
+    const profiles = [];
+    for (const bucket of buckets.values()) {
+      const bucketRarity = normaliseSaleRarity(bucket.rarity);
+      const validSale = profile => profile && isNum(profile.median) && profile.median > 0 &&
+        normaliseSaleRarity(profile.rarity || "Без редкости") === bucketRarity;
+      const supportedSale = profile => validSale(profile) && Number(profile.count) >= 3;
+      const exactSale = catalogSales.find(supportedSale) || titleSales.find(supportedSale) || null;
+      const saleCount = exactSale ? Number(exactSale.count) || 0 : 0;
+      if (exactSale && saleCount >= 3) {
+        profiles.push({
+          rarity: bucket.rarity, value: exactSale.median, basis: "Завершённые продажи",
+          sample_size: saleCount, raw_size: saleCount, excluded: 0,
+          active_lots: bucket.lots.length, ambiguous: false
+        });
+        continue;
+      }
+      const offers = catalogOfferReference(bucket.lots.map(lot => lot.price));
+      profiles.push({
+        rarity: bucket.rarity,
+        // Asking prices are not completed sales and must never become the fair-price estimate.
+        value: null,
+        basis: "Нет достаточной истории сделок",
+        sample_size: saleCount,
+        raw_size: saleCount,
+        offer_reference: offers && !offers.ambiguous && !offers.insufficient ? offers.reference : null,
+        offer_sample_size: offers ? offers.sample_size : bucket.lots.length,
+        offer_raw_size: offers ? offers.raw_size : bucket.lots.length,
+        offer_excluded: offers ? offers.excluded : 0,
+        offer_ambiguous: Boolean(offers && offers.ambiguous),
+        active_lots: bucket.lots.length,
+        ambiguous: false,
+        insufficient: true
+      });
+    }
+    return profiles.sort((a, b) => {
+      const evidenceRank = profile => profile.basis === "Завершённые продажи" ? 0 : 1;
+      return evidenceRank(a) - evidenceRank(b) || b.sample_size - a.sample_size ||
+        String(a.rarity).localeCompare(String(b.rarity), "ru");
+    });
+  }
+
+  function primaryCatalogPrice(profiles) {
+    return (profiles || []).filter(profile => isNum(profile.value) && profile.value > 0)
+      .sort((a, b) => {
+        const evidenceRank = profile => profile.basis === "Завершённые продажи" ? 0 : 1;
+        return evidenceRank(a) - evidenceRank(b) || b.sample_size - a.sample_size;
+      })[0] || null;
+  }
+
   function renderGiftCatalogIndex() {
     const grid = $("giftCatalogGrid");
     if (!grid || !state.data) return;
     clear(grid);
     const rows = Array.isArray(state.data.gift_catalog_index) ? state.data.gift_catalog_index : [];
+    const evaluated = rows.filter(item => item && typeof item === "object").map(item => {
+      const profiles = catalogPriceProfiles(item);
+      return { item, profiles, primary: primaryCatalogPrice(profiles) };
+    });
     const search = String($("giftCatalogSearch").value || "").trim().toLocaleLowerCase("ru");
     const sort = $("giftCatalogSort").value;
-    const filtered = rows.filter(item => item && typeof item === "object" &&
-      (!search || [item.title, item.name, item.catalog_id, item.gift_catalog_id].some(value =>
-        String(value || "").toLocaleLowerCase("ru").includes(search))));
-    if (sort === "supply_desc") filtered.sort((a, b) => (Number(b.supply) || 0) - (Number(a.supply) || 0));
-    else if (sort === "supply_asc") filtered.sort((a, b) => (Number(a.supply) || 0) - (Number(b.supply) || 0));
-    else filtered.sort((a, b) => String(a.title || a.name || "").localeCompare(String(b.title || b.name || ""), "ru"));
-    $("giftCatalogCount").textContent = fmt(filtered.length) + " из " + fmt(rows.length) + " карточек";
+    const filtered = evaluated.filter(row => {
+      const item = row.item;
+      return !search || [item.title, item.name, item.catalog_id, item.gift_catalog_id].some(value =>
+        String(value || "").toLocaleLowerCase("ru").includes(search));
+    });
+    if (sort === "supply_desc") filtered.sort((a, b) => (Number(b.item.supply) || 0) - (Number(a.item.supply) || 0));
+    else if (sort === "supply_asc") filtered.sort((a, b) => (Number(a.item.supply) || 0) - (Number(b.item.supply) || 0));
+    else if (sort === "price_desc" || sort === "price_asc") {
+      const direction = sort === "price_desc" ? -1 : 1;
+      filtered.sort((a, b) => {
+        const av = a.primary && isNum(a.primary.value) ? a.primary.value : null;
+        const bv = b.primary && isNum(b.primary.value) ? b.primary.value : null;
+        if (av == null || bv == null) return av == null ? (bv == null ? 0 : 1) : -1;
+        return (av - bv) * direction ||
+          String(a.item.title || a.item.name || "").localeCompare(String(b.item.title || b.item.name || ""), "ru");
+      });
+    } else filtered.sort((a, b) =>
+      String(a.item.title || a.item.name || "").localeCompare(String(b.item.title || b.item.name || ""), "ru"));
+
+    const pricedCount = evaluated.filter(row => row.primary).length;
+    $("giftCatalogCount").textContent = fmt(filtered.length) + " из " + fmt(rows.length) + " подарков";
+    const summary = clear($("giftCatalogSummary"));
+    summary.append(
+      h("div", { class: "gift-catalog-stat" }, [h("small", { text: "ВСЕГО В КАТАЛОГЕ" }), h("strong", { text: fmt(rows.length) })]),
+      h("div", { class: "gift-catalog-stat" }, [h("small", { text: "ЕСТЬ ОЦЕНКА ПО СДЕЛКАМ" }), h("strong", { text: fmt(pricedCount) })]),
+      h("div", { class: "gift-catalog-stat" }, [h("small", { text: "ПОКА НЕТ НАДЁЖНОЙ ЦЕНЫ" }), h("strong", { text: fmt(Math.max(0, evaluated.length - pricedCount)) })])
+    );
     if (!filtered.length) {
-      grid.append(h("div", { class: "empty", text: rows.length ? "Нет совпадений по поиску." : "Индекс /gifts пока не поступил. Он собирается независимо от активных лотов." }));
+      grid.append(h("div", { class: "empty", text: rows.length
+        ? "Нет совпадений по поиску."
+        : "Индекс /gifts ещё не поступил от полного сбора. Каталог появится после публикации gift_catalog_index." }));
       return;
     }
-    filtered.slice(0, 150).forEach(item => {
+    filtered.forEach(row => {
+      const item = row.item;
       const id = String(item.catalog_id || item.gift_catalog_id || item.id || "");
       const imageUrl = typeof item.image_url === "string" && /^https:\/\//i.test(item.image_url) ? item.image_url : "";
-      const image = imageUrl ? h("img", { src: imageUrl, alt: "", loading: "lazy", referrerpolicy: "no-referrer" }) : h("span", { class: "thumb", text: "🎁" });
+      const image = imageUrl ? h("img", { src: imageUrl, alt: "", loading: "lazy", referrerpolicy: "no-referrer" })
+        : h("span", { class: "thumb", text: "🎁" });
       const title = String(item.title || item.name || ("Подарок #" + (id || "—")));
-      const body = h("div", {}, [
+      const body = h("div", { class: "catalog-index-copy" }, [
         h("b", { text: title }),
         h("small", { text: (id ? "Каталог #" + id : "ID не указан") +
           (item.supply ? " · тираж " + fmt(Number(item.supply)) : "") +
           (item.rarity ? " · " + item.rarity : "") })
       ]);
       const node = h("article", { class: "catalog-index-card" }, [image, body]);
+      const priceList = h("div", { class: "catalog-price-list" });
+      if (!row.profiles.length) {
+        priceList.append(h("div", { class: "catalog-price-empty", text: "Нет сопоставимых объявлений или подтверждённых продаж." }));
+      } else {
+        row.profiles.slice(0, 4).forEach(profile => {
+          const valueText = isNum(profile.value) ? price(profile.value)
+            : profile.ambiguous ? "Сильный разброс цен" : "Нет достоверной цены сделок";
+          const meta = isNum(profile.value)
+            ? "Медиана завершённых продаж · выборка " + fmt(profile.sample_size)
+            : "Завершённых продаж в выборке: " + fmt(profile.sample_size) +
+              (profile.active_lots ? " · активных лотов: " + fmt(profile.active_lots) : "");
+          priceList.append(h("div", { class: "catalog-price-line" }, [
+            h("div", { class: "catalog-price-main" }, [
+              h("small", { text: profile.rarity && profile.rarity !== "Без редкости" ? "Редкость: " + profile.rarity : "Оценка по сделкам" }),
+              h("strong", { class: isNum(profile.value) ? "catalog-price-value" : "catalog-price-unavailable", text: valueText })
+            ]),
+            h("small", { class: "catalog-price-meta", text: meta })
+          ]));
+          if (!isNum(profile.value) && isNum(profile.offer_reference)) {
+            priceList.append(h("small", { class: "catalog-price-meta catalog-asking-reference",
+              text: "Медиана активных объявлений: " + price(profile.offer_reference) +
+                " — цены продавцов, не подтверждённые сделки · выборка " + fmt(profile.offer_sample_size) +
+                (profile.offer_excluded ? " · исключено выбросов: " + fmt(profile.offer_excluded) : "")
+            }));
+          } else if (!isNum(profile.value) && profile.offer_ambiguous) {
+            priceList.append(h("small", { class: "catalog-price-meta catalog-asking-reference",
+              text: "Цены активных объявлений сильно расходятся; ориентир не показываем."
+            }));
+          }
+        });
+        if (row.profiles.length > 4) {
+          priceList.append(h("small", { class: "catalog-price-meta", text: "И ещё " + fmt(row.profiles.length - 4) + " ценовых групп." }));
+        }
+      }
+      node.append(priceList);
       if (/^\d{1,20}$/.test(id)) node.append(h("a", {
         class: "btn secondary", href: "https://huevo.su/gifts/" + encodeURIComponent(id),
-        target: "_blank", rel: "noopener noreferrer", text: "Открыть /gifts ↗"
+        target: "_blank", rel: "noopener noreferrer", text: "Открыть подарок ↗"
       }));
       grid.append(node);
     });
@@ -1379,13 +1568,23 @@
 
   function exportGiftCatalogCsv() {
     const rows = Array.isArray(state.data && state.data.gift_catalog_index) ? state.data.gift_catalog_index : [];
-    const ok = downloadCsvFile("amnyam-gift-catalog-" + new Date().toISOString().slice(0, 10) + ".csv", [
-      ["ID каталога", item => item.catalog_id || item.gift_catalog_id || item.id],
-      ["Подарок", item => item.title || item.name],
-      ["Тираж", item => item.supply],
-      ["Редкость", item => item.rarity],
-      ["Ссылка", item => "https://huevo.su/gifts/" + encodeURIComponent(String(item.catalog_id || item.gift_catalog_id || item.id || ""))]
-    ], rows);
+    const exportRows = rows.filter(item => item && typeof item === "object").map(item => ({
+      item, primary: primaryCatalogPrice(catalogPriceProfiles(item))
+    }));
+    const ok = downloadCsvFile("giftrack-gift-catalog-" + new Date().toISOString().slice(0, 10) + ".csv", [
+      ["ID каталога", row => row.item.catalog_id || row.item.gift_catalog_id || row.item.id],
+      ["Подарок", row => row.item.title || row.item.name],
+      ["Тираж", row => row.item.supply],
+      ["Редкость", row => row.item.rarity],
+      ["Оценка по завершённым продажам", row => row.primary ? row.primary.value : ""],
+      ["Источник оценки", row => row.primary ? row.primary.basis : "Нет достаточной истории сделок"],
+      ["Количество сделок", row => row.primary ? row.primary.sample_size : 0],
+      ["Медиана активных объявлений (не сделки)", row => {
+        const profile = catalogPriceProfiles(row.item).find(item => isNum(item.offer_reference));
+        return profile ? profile.offer_reference : "";
+      }],
+      ["Ссылка", row => "https://huevo.su/gifts/" + encodeURIComponent(String(row.item.catalog_id || row.item.gift_catalog_id || row.item.id || ""))]
+    ], exportRows);
     if (!ok) $("giftCatalogCount").textContent = "Нет карточек для экспорта";
   }
 
@@ -1889,7 +2088,7 @@
 
   function mainViewFor(view) {
     const groups = {
-      overview:"overview", market:"market", sniper:"sniper",
+      overview:"overview", market:"market", giftcatalog:"giftcatalog", sniper:"sniper",
       deals:"opportunities", cheap:"opportunities",
       analytics:"analytics", events:"analytics", data:"data", sales:"data",
       favorites:"portfolio", portfolio:"portfolio",
@@ -1898,7 +2097,7 @@
     return groups[view] || "overview";
   }
   function switchView(view, focusSearch) {
-    const allowed = new Set(["overview","market","sniper","deals","cheap","analytics","events","data","sales","favorites","portfolio","support","appearance","help"]);
+    const allowed = new Set(["overview","market","giftcatalog","sniper","deals","cheap","analytics","events","data","sales","favorites","portfolio","support","appearance","help"]);
     state.activeView = allowed.has(view) ? view : "overview";
     const mainView = mainViewFor(state.activeView);
     document.querySelectorAll("[data-view-section]").forEach(section => {
@@ -1916,12 +2115,14 @@
       button.setAttribute("aria-selected", String(button.dataset.view === state.activeView));
     });
     if (focusSearch && state.activeView === "market") $("search").focus({ preventScroll: true });
+    if (state.activeView === "giftcatalog" && state.data) renderGiftCatalogIndex();
     updateViewCounts();
   }
 
   function updateViewCounts() {
     const set = (id, value) => { const el = $(id); if (el) el.textContent = value; };
     set("navMarketCount", fmt(state.lots.length));
+    set("navGiftCatalogCount", fmt(Array.isArray(state.data && state.data.gift_catalog_index) ? state.data.gift_catalog_index.length : 0));
     set("navDealsCount", fmt(buildDealSignals().length));
     set("navCheapCount", fmt(state.lots.filter((lot) => isNum(lot.price) && lot.price > 0).length));
     set("navFavoritesCount", fmt(state.favorites.length));
@@ -3251,7 +3452,7 @@
     }
     if (!typing && window.__amnyamGoPending && Date.now() - window.__amnyamGoPending < 750) {
       const key = event.key.toLowerCase();
-      const views = { h: "overview", m: "market", s: "sniper", d: "deals", c: "cheap", a: "analytics", f: "favorites", i: "help" };
+      const views = { h: "overview", m: "market", v: "giftcatalog", s: "sniper", d: "deals", c: "cheap", a: "analytics", f: "favorites", i: "help" };
       if (views[key]) { event.preventDefault(); switchView(views[key], true); }
       window.__amnyamGoPending = 0;
     }
@@ -3287,15 +3488,6 @@
   $("dealSort").addEventListener("change",renderDeals);
   $("exportCsv").addEventListener("click",exportMarketCsv);
   $("portfolioForm").addEventListener("submit",event=>{event.preventDefault();addPortfolioItem();});
-  $("marketWorkspaceTabs").addEventListener("click",event=>{
-    const button=event.target.closest("[data-market-tab]");
-    if(!button)return;
-    const catalog=button.dataset.marketTab==="catalog";
-    $("catalog").classList.toggle("hide",catalog);
-    $("giftCatalogPanel").classList.toggle("hide",!catalog);
-    document.querySelectorAll("[data-market-tab]").forEach(tab=>tab.setAttribute("aria-selected",String(tab===button)));
-    if(catalog)renderGiftCatalogIndex();
-  });
   $("giftCatalogSearch").addEventListener("input",renderGiftCatalogIndex);
   $("giftCatalogSort").addEventListener("change",renderGiftCatalogIndex);
   $("exportGiftCatalogCsv").addEventListener("click",exportGiftCatalogCsv);
