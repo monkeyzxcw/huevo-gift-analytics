@@ -1072,7 +1072,7 @@
     for (const candidate of candidates) {
       if (!candidate || typeof candidate !== "object") continue;
       const id = String(candidate.catalog_id || candidate.gift_catalog_id || "").trim();
-      if (/^\\d{1,20}$/.test(id)) return id;
+      if (/^\d{1,20}$/.test(id)) return id;
     }
     return "";
   }
@@ -1171,15 +1171,19 @@
         insufficient: !offers || Boolean(offers.insufficient)
       });
     }
-    return profiles.sort((a, b) => b.sample_size - a.sample_size ||
-      (a.basis === "Завершённые продажи" ? -1 : 1) ||
-      String(a.rarity).localeCompare(String(b.rarity), "ru"));
+    return profiles.sort((a, b) => {
+      const evidenceRank = profile => profile.basis === "Завершённые продажи" ? 0 : 1;
+      return b.sample_size - a.sample_size || evidenceRank(a) - evidenceRank(b) ||
+        String(a.rarity).localeCompare(String(b.rarity), "ru");
+    });
   }
 
   function primaryCatalogPrice(profiles) {
     return (profiles || []).filter(profile => isNum(profile.value) && profile.value > 0)
-      .sort((a, b) => b.sample_size - a.sample_size ||
-        (a.basis === "Завершённые продажи" ? -1 : 1))[0] || null;
+      .sort((a, b) => {
+        const evidenceRank = profile => profile.basis === "Завершённые продажи" ? 0 : 1;
+        return b.sample_size - a.sample_size || evidenceRank(a) - evidenceRank(b);
+      })[0] || null;
   }
 
   function renderGiftCatalogIndex() {
@@ -1264,7 +1268,7 @@
         }
       }
       node.append(priceList);
-      if (/^\\d{1,20}$/.test(id)) node.append(h("a", {
+      if (/^\d{1,20}$/.test(id)) node.append(h("a", {
         class: "btn secondary", href: "https://huevo.su/gifts/" + encodeURIComponent(id),
         target: "_blank", rel: "noopener noreferrer", text: "Открыть подарок ↗"
       }));
