@@ -2841,3 +2841,5 @@ body[data-motion="off"] .studio-widget,body.amnyam-calm .studio-widget{animation
   .catalog-index-card>img,.catalog-index-card>.thumb{width:46px;height:46px}
 }
 @media(prefers-reduced-motion:reduce){.catalog-index-card{transition:none}.catalog-index-card:hover{transform:none}}
+
+.catalog-asking-reference{color:#c5a77b!important;border-left:2px solid rgba(197,167,123,.3);padding-left:8px;margin-top:2px}
