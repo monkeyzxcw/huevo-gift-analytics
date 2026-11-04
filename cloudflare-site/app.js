@@ -1173,7 +1173,7 @@
     }
     return profiles.sort((a, b) => {
       const evidenceRank = profile => profile.basis === "Завершённые продажи" ? 0 : 1;
-      return b.sample_size - a.sample_size || evidenceRank(a) - evidenceRank(b) ||
+      return evidenceRank(a) - evidenceRank(b) || b.sample_size - a.sample_size ||
         String(a.rarity).localeCompare(String(b.rarity), "ru");
     });
   }
@@ -1182,7 +1182,7 @@
     return (profiles || []).filter(profile => isNum(profile.value) && profile.value > 0)
       .sort((a, b) => {
         const evidenceRank = profile => profile.basis === "Завершённые продажи" ? 0 : 1;
-        return b.sample_size - a.sample_size || evidenceRank(a) - evidenceRank(b);
+        return evidenceRank(a) - evidenceRank(b) || b.sample_size - a.sample_size;
       })[0] || null;
   }
 
