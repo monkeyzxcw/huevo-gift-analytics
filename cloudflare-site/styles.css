@@ -2762,3 +2762,25 @@ body[data-motion="off"] .studio-widget,body.amnyam-calm .studio-widget{animation
 @keyframes gtUploadedAmnyamFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
 @media(max-width:760px){.hero-amnyam{right:-12px!important;bottom:-10px!important;width:190px!important;opacity:.42!important}.hero>div:first-child{max-width:100%!important}}
 @media(prefers-reduced-motion:reduce){.hero-amnyam{animation:none!important}}
+
+/* Use the uploaded full artwork as a full-bleed image, not a thumbnail card. */
+.gt-intro{
+ background:
+  linear-gradient(180deg,rgba(5,9,4,.28),rgba(5,9,4,.78)),
+  url("./assets/1a8de5ab-c58c-4f63-b838-6ea958cf6561%20(1).png") center/cover no-repeat,
+  #070b05!important;
+}
+.gt-intro-mascot{display:none!important}
+.gt-intro:before,.gt-intro:after{z-index:0;pointer-events:none}
+.gt-intro-orbit{z-index:0;pointer-events:none}
+.gt-intro-word,.gt-intro-sub,.gt-intro-loader,.gt-intro small{z-index:2;text-shadow:0 3px 18px #000}
+.gt-intro-word{margin-top:0;padding:8px 18px;background:rgba(5,9,4,.24);backdrop-filter:blur(2px);border-radius:12px}
+.gt-intro-sub{background:rgba(5,9,4,.32);padding:5px 10px;border-radius:6px}
+.hero{
+ background:
+  linear-gradient(90deg,rgba(5,9,4,.94) 0%,rgba(5,9,4,.72) 38%,rgba(5,9,4,.12) 100%),
+  url("./assets/1a8de5ab-c58c-4f63-b838-6ea958cf6561%20(1).png") center/cover no-repeat!important;
+}
+.hero-amnyam{display:none!important}
+.hero{min-height:390px}
+@media(max-width:760px){.hero{min-height:460px;background-position:58% center!important}.gt-intro{background-position:58% center!important}}
