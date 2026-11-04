@@ -2709,7 +2709,7 @@ body[data-motion="off"] .studio-widget,body.amnyam-calm .studio-widget{animation
 
 
 /* GIFTRACK cinematic launch */
-.gt-intro{position:fixed;inset:0;z-index:99999;display:grid;place-content:center;justify-items:center;gap:15px;overflow:hidden;background:radial-gradient(ellipse at 50% 48%,#20320d 0%,#0b1008 48%,#050705 100%);color:#efffe0;transition:opacity .65s ease,visibility .65s}
+.gt-intro{position:fixed;inset:0;z-index:99999;display:grid;place-content:center;justify-items:center;gap:15px;overflow:hidden;background:radial-gradient(ellipse at 50% 48%,#20320d 0%,#0b1008 48%,#050705 100%);color:#efffe0;transition:opacity .65s ease,visibility .65s;pointer-events:none}
 .gt-intro:before,.gt-intro:after{content:"";position:absolute;width:70vmin;height:70vmin;border:1px solid #9bff3440;border-radius:50%;box-shadow:0 0 70px #7cff2012,inset 0 0 70px #7cff2010;animation:gtOrbit 9s linear infinite}
 .gt-intro:after{width:95vmin;height:95vmin;border-color:#d4ff2418;animation-direction:reverse;animation-duration:15s}
 .gt-intro-orbit{position:absolute;width:45vmin;height:45vmin;border:1px dashed #b6ff2d40;border-radius:50%;animation:gtOrbit 5s linear infinite}
