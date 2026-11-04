@@ -70,7 +70,8 @@ test("catalogue does not price from only two offers left after removing an extre
 
 test("confirmed completed-sale median is preferred and rarity profiles remain isolated", async () => {
   const source = await readFile(resolve(root, "cloudflare-site/app.js"), "utf8");
-  assert.match(source, /const exactSale = catalogSales\.find\(validSale\) \|\| titleSales\.find\(validSale\)/);
+  assert.match(source, /const supportedSale = profile => validSale\(profile\) && Number\(profile.count\) >= 3/);
+  assert.match(source, /catalogSales\.find\(supportedSale\) \|\| titleSales\.find\(supportedSale\)/);
   assert.match(source, /Number\(profile.count\) >= 3/);
   assert.match(source, /normaliseSaleRarity\(profile\.rarity \|\| "Без редкости"\) === bucketRarity/);
   assert.match(source, /\.filter\(lot => !rarityKey \|\| normaliseSaleRarity\(lot\.rarity\) === rarityKey\)/);
