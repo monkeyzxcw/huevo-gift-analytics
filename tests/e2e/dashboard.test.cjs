@@ -678,16 +678,21 @@ test("new catalogue, market events, date range, portfolio and Sniper rule profil
   try {
     await page.waitForSelector("#content:not(.hide)");
 
-    await page.click('#mainNav [data-view="market"]');
-    await page.click('#marketWorkspaceTabs [data-market-tab="catalog"]');
+    await page.click('#mainNav [data-view="giftcatalog"]');
+    await page.waitForSelector("#giftCatalogPanel:not(.view-hidden)");
     assert.equal(await page.locator("#giftCatalogGrid .catalog-index-card").count(), 2);
     assert.match(await page.textContent("#giftCatalogGrid"), /Лунный кот/);
+    const pricedGift = await page.textContent("#giftCatalogGrid");
+    assert.match(pricedGift, /450/);
+    assert.match(pricedGift, /Завершённые продажи/);
+    assert.match(pricedGift, /Недостаточно данных/);
+    assert.match(await page.textContent("#giftCatalogSummary"), /1/);
     await page.fill("#giftCatalogSearch", "Звезда");
     assert.equal(await page.locator("#giftCatalogGrid .catalog-index-card").count(), 1);
     assert.match(await page.textContent("#giftCatalogGrid"), /Каталог #131/);
     const catalogDownload = page.waitForEvent("download");
     await page.click("#exportGiftCatalogCsv");
-    assert.match((await catalogDownload).suggestedFilename(), /amnyam-gift-catalog/);
+    assert.match((await catalogDownload).suggestedFilename(), /giftrack-gift-catalog/);
 
     await page.fill("#globalSearch", "Звезда");
     assert.ok(await page.locator("#globalSearchSuggestions option").count() > 0);
@@ -1684,7 +1689,7 @@ test("username workspace imports real rows, calculates peer signals and keeps gi
     assert.equal(await page.locator("#usernameWorkspace.hide").count(), 1);
     assert.equal(await page.locator("#giftsWorkspace.hide").count(), 0);
     assert.equal(await page.locator("#content:not(.hide)").count(), 1);
-    assert.equal(await page.locator("#mainNav [data-view]").count(), 8, "all gift sections remain in the gift workspace");
+    assert.equal(await page.locator("#mainNav [data-view]").count(), 9, "all gift sections include the standalone catalogue workspace");
 
     await page.click('#marketTypeNav [data-market-type="usernames"]');
     assert.equal(await page.locator("#usernameRows tr").count(), 7, "username data survives workspace switching");
