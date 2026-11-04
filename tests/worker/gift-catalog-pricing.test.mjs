@@ -76,3 +76,12 @@ test("confirmed completed-sale median is preferred and rarity profiles remain is
   assert.match(source, /normaliseSaleRarity\(profile\.rarity \|\| "Без редкости"\) === bucketRarity/);
   assert.match(source, /\.filter\(lot => !rarityKey \|\| normaliseSaleRarity\(lot\.rarity\) === rarityKey\)/);
 });
+
+
+test("active asking prices are reported separately and never become the fair-price value", async () => {
+  const source = await readFile(resolve(root, "cloudflare-site/app.js"), "utf8");
+  assert.match(source, /value: null,[\s\S]{0,180}basis: "Нет достаточной истории сделок"/);
+  assert.match(source, /offer_reference: offers && !offers\.ambiguous && !offers\.insufficient \? offers\.reference : null/);
+  assert.match(source, /Медиана активных объявлений:[\s\S]{0,160}цены продавцов, не подтверждённые сделки/);
+  assert.match(source, /Оценка по завершённым продажам/);
+});
