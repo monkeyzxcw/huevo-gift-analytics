@@ -2745,3 +2745,20 @@ body[data-motion="off"] .studio-widget,body.amnyam-calm .studio-widget{animation
 .gt-intro-mascot svg{display:none}
 .hero-amnyam{display:block;object-fit:contain;height:auto;max-height:90%;filter:drop-shadow(0 0 24px #9cff3d45)}
 .hero-amnyam:after{display:none}
+
+/* Replace the baked-in cat battlefield artwork with the uploaded AMNYAM render. */
+.hero{
+ background-image:linear-gradient(90deg,rgba(8,12,7,.97) 0%,rgba(8,12,7,.82) 42%,rgba(8,12,7,.18) 100%)!important;
+}
+.hero::before{display:none!important}
+.hero-amnyam{
+ position:absolute!important;right:clamp(125px,18vw,290px)!important;bottom:-28px!important;
+ width:clamp(260px,31vw,470px)!important;height:auto!important;max-height:115%!important;
+ object-fit:contain!important;opacity:1!important;z-index:0!important;
+ filter:drop-shadow(0 0 26px rgba(133,255,43,.55))!important;
+ animation:gtUploadedAmnyamFloat 4.8s ease-in-out infinite!important;
+}
+.hero>div:first-child{max-width:min(58%,720px)!important}
+@keyframes gtUploadedAmnyamFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+@media(max-width:760px){.hero-amnyam{right:-12px!important;bottom:-10px!important;width:190px!important;opacity:.42!important}.hero>div:first-child{max-width:100%!important}}
+@media(prefers-reduced-motion:reduce){.hero-amnyam{animation:none!important}}
