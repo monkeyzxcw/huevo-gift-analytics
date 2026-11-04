@@ -2784,3 +2784,14 @@ body[data-motion="off"] .studio-widget,body.amnyam-calm .studio-widget{animation
 .hero-amnyam{display:none!important}
 .hero{min-height:390px}
 @media(max-width:760px){.hero{min-height:460px;background-position:58% center!important}.gt-intro{background-position:58% center!important}}
+
+/* Use the user's actual AMNYAM PNG in the compact header mascot slot */
+.mascot-dock .mascot-svg{
+ display:block;width:43px;height:43px;flex:0 0 43px;object-fit:contain;
+ overflow:visible;background:transparent;border:0;border-radius:0;padding:0;
+ filter:drop-shadow(0 2px 7px rgba(145,255,67,.28));
+}
+.mascot-dock[data-mood="happy"] .mascot-svg{animation:mascot-cheer .48s ease-in-out 5}
+.mascot-dock[data-mood="sad"] .mascot-svg{filter:grayscale(.28) drop-shadow(0 0 7px #8da0a0)}
+@media(max-width:620px){.mascot-dock .mascot-svg{width:37px;height:37px;flex-basis:37px}}
+@media(prefers-reduced-motion:reduce){.mascot-dock .mascot-svg{animation:none!important}}
