@@ -60,10 +60,18 @@ test("catalogue does not invent a price from fewer than three comparable offers"
   assert.equal(result.insufficient, true);
 });
 
+test("catalogue does not price from only two offers left after removing an extreme listing", async () => {
+  const reference = await loadCatalogOfferReference();
+  const result = reference([30000, 35000, 1000000]);
+  assert.equal(result.reference, null);
+  assert.equal(result.sample_size, 2);
+  assert.equal(result.insufficient, true);
+});
+
 test("confirmed completed-sale median is preferred and rarity profiles remain isolated", async () => {
   const source = await readFile(resolve(root, "cloudflare-site/app.js"), "utf8");
   assert.match(source, /const exactSale = catalogSales\.find\(validSale\) \|\| titleSales\.find\(validSale\)/);
-  assert.match(source, /saleCount >= 3/);
+  assert.match(source, /Number\(profile.count\) >= 3/);
   assert.match(source, /normaliseSaleRarity\(profile\.rarity \|\| "Без редкости"\) === bucketRarity/);
   assert.match(source, /\.filter\(lot => !rarityKey \|\| normaliseSaleRarity\(lot\.rarity\) === rarityKey\)/);
 });
