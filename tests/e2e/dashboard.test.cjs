@@ -689,7 +689,7 @@ test("new catalogue, market events, date range, portfolio and Sniper rule profil
     assert.match(await page.textContent("#giftCatalogGrid"), /Лунный кот/);
     const pricedGift = await page.textContent("#giftCatalogGrid");
     assert.match(pricedGift, /450/);
-    assert.match(pricedGift, /Завершённые продажи/);
+    assert.match(pricedGift, /Медиана завершённых продаж/);
     assert.match(pricedGift, /Нет достоверной цены сделок/);
     assert.match(await page.textContent("#giftCatalogSummary"), /1/);
     await page.fill("#giftCatalogSearch", "Звезда");
