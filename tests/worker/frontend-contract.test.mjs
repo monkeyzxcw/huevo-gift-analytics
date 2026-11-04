@@ -170,7 +170,8 @@ test("all-gifts catalogue is a first-class workspace and shows evidence-backed e
   assert.match(app, /function catalogPriceProfiles\(item\)/);
   assert.match(app, /function catalogOfferReference\(prices\)/);
   assert.match(app, /Завершённые продажи/);
-  assert.match(app, /Активные объявления · медиана/);
+  assert.match(app, /Медиана активных объявлений/);
+  assert.match(app, /цены продавцов, не подтверждённые сделки/);
   assert.match(app, /gift_catalog_index/);
   assert.doesNotMatch(app, /filtered\.slice\(0,\s*150\)/, "the full canonical index must remain browseable");
   assert.match(app, /navGiftCatalogCount/);
