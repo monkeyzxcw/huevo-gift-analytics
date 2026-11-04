@@ -1162,14 +1162,19 @@
       const offers = catalogOfferReference(bucket.lots.map(lot => lot.price));
       profiles.push({
         rarity: bucket.rarity,
-        value: offers && !offers.ambiguous && !offers.insufficient ? offers.reference : null,
-        basis: "Активные объявления · медиана",
-        sample_size: offers ? offers.sample_size : bucket.lots.length,
-        raw_size: offers ? offers.raw_size : bucket.lots.length,
-        excluded: offers ? offers.excluded : 0,
+        // Asking prices are not completed sales and must never become the fair-price estimate.
+        value: null,
+        basis: "Нет достаточной истории сделок",
+        sample_size: saleCount,
+        raw_size: saleCount,
+        offer_reference: offers && !offers.ambiguous && !offers.insufficient ? offers.reference : null,
+        offer_sample_size: offers ? offers.sample_size : bucket.lots.length,
+        offer_raw_size: offers ? offers.raw_size : bucket.lots.length,
+        offer_excluded: offers ? offers.excluded : 0,
+        offer_ambiguous: Boolean(offers && offers.ambiguous),
         active_lots: bucket.lots.length,
-        ambiguous: Boolean(offers && offers.ambiguous),
-        insufficient: !offers || Boolean(offers.insufficient)
+        ambiguous: false,
+        insufficient: true
       });
     }
     return profiles.sort((a, b) => {
@@ -1222,7 +1227,7 @@
     const summary = clear($("giftCatalogSummary"));
     summary.append(
       h("div", { class: "gift-catalog-stat" }, [h("small", { text: "ВСЕГО В КАТАЛОГЕ" }), h("strong", { text: fmt(rows.length) })]),
-      h("div", { class: "gift-catalog-stat" }, [h("small", { text: "ЕСТЬ РЫНОЧНАЯ ОЦЕНКА" }), h("strong", { text: fmt(pricedCount) })]),
+      h("div", { class: "gift-catalog-stat" }, [h("small", { text: "ЕСТЬ ОЦЕНКА ПО СДЕЛКАМ" }), h("strong", { text: fmt(pricedCount) })]),
       h("div", { class: "gift-catalog-stat" }, [h("small", { text: "ПОКА НЕТ НАДЁЖНОЙ ЦЕНЫ" }), h("strong", { text: fmt(Math.max(0, evaluated.length - pricedCount)) })])
     );
     if (!filtered.length) {
@@ -1251,18 +1256,29 @@
       } else {
         row.profiles.slice(0, 4).forEach(profile => {
           const valueText = isNum(profile.value) ? price(profile.value)
-            : profile.ambiguous ? "Сильный разброс цен" : "Недостаточно данных";
-          const meta = profile.basis + " · выборка " + fmt(profile.sample_size) +
-            (profile.raw_size !== profile.sample_size ? " из " + fmt(profile.raw_size) : "") +
-            (profile.excluded ? " · выбросов исключено: " + fmt(profile.excluded) : "") +
-            (profile.active_lots ? " · активных лотов: " + fmt(profile.active_lots) : "");
+            : profile.ambiguous ? "Сильный разброс цен" : "Нет достоверной цены сделок";
+          const meta = isNum(profile.value)
+            ? "Медиана завершённых продаж · выборка " + fmt(profile.sample_size)
+            : "Завершённых продаж в выборке: " + fmt(profile.sample_size) +
+              (profile.active_lots ? " · активных лотов: " + fmt(profile.active_lots) : "");
           priceList.append(h("div", { class: "catalog-price-line" }, [
             h("div", { class: "catalog-price-main" }, [
-              h("small", { text: profile.rarity && profile.rarity !== "Без редкости" ? "Редкость: " + profile.rarity : "Рыночная оценка" }),
+              h("small", { text: profile.rarity && profile.rarity !== "Без редкости" ? "Редкость: " + profile.rarity : "Оценка по сделкам" }),
               h("strong", { class: isNum(profile.value) ? "catalog-price-value" : "catalog-price-unavailable", text: valueText })
             ]),
             h("small", { class: "catalog-price-meta", text: meta })
           ]));
+          if (!isNum(profile.value) && isNum(profile.offer_reference)) {
+            priceList.append(h("small", { class: "catalog-price-meta catalog-asking-reference",
+              text: "Медиана активных объявлений: " + price(profile.offer_reference) +
+                " — цены продавцов, не подтверждённые сделки · выборка " + fmt(profile.offer_sample_size) +
+                (profile.offer_excluded ? " · исключено выбросов: " + fmt(profile.offer_excluded) : "")
+            }));
+          } else if (!isNum(profile.value) && profile.offer_ambiguous) {
+            priceList.append(h("small", { class: "catalog-price-meta catalog-asking-reference",
+              text: "Цены активных объявлений сильно расходятся; ориентир не показываем."
+            }));
+          }
         });
         if (row.profiles.length > 4) {
           priceList.append(h("small", { class: "catalog-price-meta", text: "И ещё " + fmt(row.profiles.length - 4) + " ценовых групп." }));
@@ -1560,10 +1576,13 @@
       ["Подарок", row => row.item.title || row.item.name],
       ["Тираж", row => row.item.supply],
       ["Редкость", row => row.item.rarity],
-      ["Рыночная оценка", row => row.primary ? row.primary.value : ""],
-      ["Источник оценки", row => row.primary ? row.primary.basis : "Недостаточно данных"],
-      ["Выборка", row => row.primary ? row.primary.sample_size : 0],
-      ["Исключено выбросов", row => row.primary ? row.primary.excluded : 0],
+      ["Оценка по завершённым продажам", row => row.primary ? row.primary.value : ""],
+      ["Источник оценки", row => row.primary ? row.primary.basis : "Нет достаточной истории сделок"],
+      ["Количество сделок", row => row.primary ? row.primary.sample_size : 0],
+      ["Медиана активных объявлений (не сделки)", row => {
+        const profile = catalogPriceProfiles(row.item).find(item => isNum(item.offer_reference));
+        return profile ? profile.offer_reference : "";
+      }],
       ["Ссылка", row => "https://huevo.su/gifts/" + encodeURIComponent(String(row.item.catalog_id || row.item.gift_catalog_id || row.item.id || ""))]
     ], exportRows);
     if (!ok) $("giftCatalogCount").textContent = "Нет карточек для экспорта";
