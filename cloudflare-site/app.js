@@ -1094,9 +1094,9 @@
     }
     const centre = median(values);
     const core = values.filter(value => value >= centre / 2.5 && value <= centre * 2.5);
-    if (core.length < 2) {
+    if (core.length < 3) {
       return { reference: null, sample_size: core.length, raw_size: values.length,
-        excluded: values.length - core.length, ambiguous: true, insufficient: false };
+        excluded: values.length - core.length, ambiguous: false, insufficient: true };
     }
     const reference = median(core);
     const p25 = quantile(core, .25), p75 = quantile(core, .75);
@@ -1148,7 +1148,8 @@
       const bucketRarity = normaliseSaleRarity(bucket.rarity);
       const validSale = profile => profile && isNum(profile.median) && profile.median > 0 &&
         normaliseSaleRarity(profile.rarity || "Без редкости") === bucketRarity;
-      const exactSale = catalogSales.find(validSale) || titleSales.find(validSale) || null;
+      const supportedSale = profile => validSale(profile) && Number(profile.count) >= 3;
+      const exactSale = catalogSales.find(supportedSale) || titleSales.find(supportedSale) || null;
       const saleCount = exactSale ? Number(exactSale.count) || 0 : 0;
       if (exactSale && saleCount >= 3) {
         profiles.push({
