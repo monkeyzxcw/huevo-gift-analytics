@@ -94,8 +94,8 @@ test("AMNYAM Aurora visual system remains decorative, responsive and reduced-mot
 
 test("AMNYAM 2.0 deploy busts cached app, styles, Intel and username assets", async () => {
   const html = await read("cloudflare-site/index.html");
-  assert.match(html, /styles\.css\?v=amnyam-studio-v2/);
-  assert.match(html, /app\.js\?v=amnyam-studio-v2/);
+  assert.match(html, /styles\.css\?v=giftrack-catalog-fair-price-v1/);
+  assert.match(html, /app\.js\?v=giftrack-catalog-fair-price-v1/);
   assert.match(html, /intel-lab\.js\?v=amnyam-intel-v3/);
   assert.match(html, /usernames\.js\?v=amnyam-usernames-v4/);
 });
@@ -158,4 +158,20 @@ test("Intelligence Lab saves screeners inline without blocking browser prompts",
   assert.match(html, /id="intelFilterName"/);
   assert.match(intel, /\$\("intelFilterName"\)/);
   assert.doesNotMatch(intel, /prompt\(/, "screeners use inline controls rather than a system prompt");
+});
+
+
+test("all-gifts catalogue is a first-class workspace and shows evidence-backed estimates", async () => {
+  const html = await read("cloudflare-site/index.html");
+  const app = await read("cloudflare-site/app.js");
+  assert.match(html, /data-view="giftcatalog"/);
+  assert.match(html, /id="giftCatalogPanel" data-view-section="giftcatalog"/);
+  assert.match(html, /id="giftCatalogSummary"/);
+  assert.match(app, /function catalogPriceProfiles\\(item\\)/);
+  assert.match(app, /function catalogOfferReference\\(prices\\)/);
+  assert.match(app, /Завершённые продажи/);
+  assert.match(app, /Активные объявления · медиана/);
+  assert.match(app, /gift_catalog_index/);
+  assert.doesNotMatch(app, /filtered\\.slice\\(0,\\s*150\\)/, "the full canonical index must remain browseable");
+  assert.match(app, /navGiftCatalogCount/);
 });
