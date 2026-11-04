@@ -83,7 +83,12 @@ async function open(handler, viewport = { width: 1280, height: 900 }, options = 
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, enabled: false, authenticated: false, subscriptions: 0, amounts: [], supporters: 0, total: 0 }) });
     }
     if (u.pathname === "/data.json") return handler(route);
-    const file = path.join(SITE, u.pathname === "/" ? "index.html" : u.pathname.slice(1));
+    // URL.pathname keeps percent escapes (for example %20 in user-uploaded asset names).
+    // Decode exactly once before resolving a local static file path.
+    let localPath;
+    try { localPath = decodeURIComponent(u.pathname); }
+    catch (_) { return route.fulfill({ status: 400, body: "Bad URL encoding" }); }
+    const file = path.join(SITE, localPath === "/" ? "index.html" : localPath.slice(1));
     if (!file.startsWith(SITE) || !fs.existsSync(file)) return route.fulfill({ status: 404, body: "" });
     return route.fulfill({ status: 200, headers: { "content-type": TYPES[path.extname(file)] || "text/plain", "content-security-policy": CSP }, body: fs.readFileSync(file) });
   });
