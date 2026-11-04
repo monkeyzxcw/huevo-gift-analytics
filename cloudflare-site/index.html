@@ -588,7 +588,7 @@
 
 <section class="panel gift-catalog-index-panel view-hidden" id="giftCatalogPanel" data-view-section="giftcatalog" aria-labelledby="giftCatalogTitle">
   <div class="section-heading">
-    <div><span class="section-index">/ CANONICAL GIFT INDEX</span><h2 id="giftCatalogTitle">Все подарки huEVO</h2><p>Полный каталог со страницы /gifts — даже если подарок сейчас никто не выставил. Рыночная оценка строится по сопоставимым продажам или центральным ценам активных лотов, а не по случайному объявлению за миллион.</p></div>
+    <div><span class="section-index">/ CANONICAL GIFT INDEX</span><h2 id="giftCatalogTitle">Все подарки huEVO</h2><p>Полный каталог со страницы /gifts — даже если подарок сейчас никто не выставил. Основная оценка строится по медиане завершённых продаж. Цены активных объявлений показываются отдельно и не выдаются за реальные сделки.</p></div>
     <span class="view-stat" id="giftCatalogCount">— карточек</span>
   </div>
   <div class="gift-catalog-summary" id="giftCatalogSummary" aria-live="polite"></div>
@@ -598,7 +598,7 @@
     <label class="f"><span>Сортировка</span><select class="select" id="giftCatalogSort"><option value="title">Название: А → Я</option><option value="price_asc">Оценка: дешевле</option><option value="price_desc">Оценка: дороже</option><option value="supply_desc">Тираж: больше</option><option value="supply_asc">Тираж: меньше</option></select></label>
   </div>
   <div class="catalog-index-grid" id="giftCatalogGrid" aria-live="polite"></div>
-  <p class="muted foot">Оценка — это медиана сопоставимых данных, а не среднее арифметическое: одиночные ценовые выбросы отсекаются. Разные редкости не смешиваются. При малой выборке или сильном разбросе цена не выдумывается. Источник цены и количество учтённых данных показаны в каждой карточке.</p>
+  <p class="muted foot">Рыночная оценка — медиана завершённых продаж по подарку и редкости. Активные объявления не считаются подтверждёнными покупками: их медиана показана отдельно как справочная цена продавцов. Одиночные выбросы исключаются, разные редкости не смешиваются. Если реальных сделок недостаточно, оценка не выдумывается.</p>
 </section>
 </div>
 </div>
